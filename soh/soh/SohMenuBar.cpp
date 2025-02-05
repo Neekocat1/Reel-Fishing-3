@@ -43,6 +43,7 @@
 #include "Enhancements/enemyrandomizer.h"
 #include "Enhancements/timesplits/TimeSplits.h"
 #include "Enhancements/randomizer/Plandomizer.h"
+#include "Enhancements/randomizer/archipelago.h"
 #include "Enhancements/TimeDisplay/TimeDisplay.h"
 #include "AboutWindow.h"
 
@@ -2134,6 +2135,7 @@ void DrawRemoteControlMenu() {
 
 extern std::shared_ptr<RandomizerSettingsWindow> mRandomizerSettingsWindow;
 extern std::shared_ptr<PlandomizerWindow> mPlandomizerWindow;
+extern std::shared_ptr<ArchipelagoWindow> mArchipelagoWindow;
 extern std::shared_ptr<ItemTrackerWindow> mItemTrackerWindow;
 extern std::shared_ptr<ItemTrackerSettingsWindow> mItemTrackerSettingsWindow;
 extern std::shared_ptr<EntranceTrackerWindow> mEntranceTrackerWindow;
@@ -2172,6 +2174,14 @@ void DrawRandomizerMenu() {
         if (mPlandomizerWindow) {
             if (ImGui::Button(GetWindowButtonText("Plandomizer Editor", CVarGetInteger(CVAR_WINDOW("PlandomizerWindow"), 0)).c_str(), buttonSize)) {
                 mPlandomizerWindow->ToggleVisibility();
+            }
+        }
+
+        UIWidgets::Spacer(0);
+        
+        if (mArchipelagoWindow) {
+            if (ImGui::Button(GetWindowButtonText("Archipelago", CVarGetInteger(CVAR_WINDOW("ArchipelagoWindow"), 0)).c_str(), buttonSize)) {
+                mArchipelagoWindow->ToggleVisibility();
             }
         }
 

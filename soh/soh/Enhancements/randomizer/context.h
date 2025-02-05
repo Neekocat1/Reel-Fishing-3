@@ -14,6 +14,9 @@
 #include <map>
 #include <nlohmann/json.hpp>
 
+// forward declarations
+struct AP_NetworkItem;
+
 /**
  * @brief Singleton for storing and accessing dynamic Randomizer-related data
  *
@@ -119,6 +122,9 @@ class Context {
     bool playthroughBeatable = false;
     bool allLocationsReachable = false;
     RandomizerArea GetAreaFromString(std::string str);
+
+    void ParseArchipelago();
+    void ParseArchipelagoItemsLocations(const std::vector<AP_NetworkItem>);
 
     /**
      * @brief Get the hash for the current seed.

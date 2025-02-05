@@ -129,6 +129,7 @@ namespace SohGui {
     std::shared_ptr<ItemTrackerWindow> mItemTrackerWindow;
     std::shared_ptr<TimeSplitWindow> mTimeSplitWindow;
     std::shared_ptr<PlandomizerWindow> mPlandomizerWindow;
+    std::shared_ptr<ArchipelagoWindow> mArchipelagoWindow;
     std::shared_ptr<RandomizerSettingsWindow> mRandomizerSettingsWindow;
     std::shared_ptr<AdvancedResolutionSettings::AdvancedResolutionSettingsWindow> mAdvancedResolutionSettingsWindow;
     std::shared_ptr<SohModalWindow> mModalWindow;
@@ -212,6 +213,8 @@ namespace SohGui {
         gui->AddGuiWindow(mTimeSplitWindow);
         mPlandomizerWindow = std::make_shared<PlandomizerWindow>(CVAR_WINDOW("PlandomizerWindow"), "Plandomizer Editor", ImVec2(850, 760));
         gui->AddGuiWindow(mPlandomizerWindow);
+        mArchipelagoWindow = std::make_shared<ArchipelagoWindow>(CVAR_WINDOW("ArchipelagoWindow"), "Archipelago", ImVec2(850, 760));
+        gui->AddGuiWindow(mArchipelagoWindow);
         mAdvancedResolutionSettingsWindow = std::make_shared<AdvancedResolutionSettings::AdvancedResolutionSettingsWindow>(CVAR_WINDOW("AdvancedResolutionEditor"), "Advanced Resolution Settings", ImVec2(497, 599));
         gui->AddGuiWindow(mAdvancedResolutionSettingsWindow);
         mModalWindow = std::make_shared<SohModalWindow>(CVAR_WINDOW("ModalWindow"), "Modal Window");
@@ -259,6 +262,7 @@ namespace SohGui {
         mInputViewerSettings = nullptr;
         mTimeSplitWindow = nullptr;
         mPlandomizerWindow = nullptr;
+        mArchipelagoWindow = nullptr;
         mTimeDisplayWindow = nullptr;
         mAboutWindow = nullptr;
     }

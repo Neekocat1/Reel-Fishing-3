@@ -1,6 +1,7 @@
 #include <unordered_map>
 #include "static_data.h"
 #include <spdlog/spdlog.h>
+#include "archipelago_mappings.h"
 
 namespace Rando {
 
@@ -302,4 +303,34 @@ std::unordered_map<u32, RandomizerHint> StaticData::grottoChestParamsToHint{
 };
 
 std::array<HintText, RHT_MAX> StaticData::hintTextTable = {};
+
+const std::unordered_map<std::string_view, RandomizerGet>generate_APitemToSoh_mapping() {
+    std::unordered_map<std::string_view, RandomizerGet> mapping;
+    for(const auto& pairing : ap_item_mapping_pairs) {
+        mapping[pairing.first] = pairing.second;
+    }
+    return mapping;
+}
+
+const std::unordered_map<std::string_view, RandomizerCheck>generate_APcheckToSoh_mapping() {
+    std::unordered_map<std::string_view, RandomizerCheck> mapping;
+    for(const auto& pairing : ap_check_mapping_pairs) {
+        mapping[pairing.first] = pairing.second;
+    }
+    return mapping;
+}
+
+const std::unordered_map<RandomizerCheck, std::string_view>generate_SohcheckToAP_mapping() {
+    std::unordered_map<RandomizerCheck, std::string_view> mapping;
+    for(const auto& pairing : ap_check_mapping_pairs) {
+        mapping[pairing.second] = pairing.first;
+    }
+    return mapping;
+}
+
+std::unordered_map<std::string_view, RandomizerGet> StaticData::APitemToSoh = generate_APitemToSoh_mapping();
+std::unordered_map<std::string_view, RandomizerCheck> StaticData::APcheckToSoh = generate_APcheckToSoh_mapping();
+std::unordered_map<RandomizerCheck, std::string_view> StaticData::SohCheckToAP = generate_SohcheckToAP_mapping();
+
+
 }

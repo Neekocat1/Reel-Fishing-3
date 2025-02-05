@@ -3392,6 +3392,7 @@ typedef enum {
     RG_BACK_TOWER_KEY,
     RG_HYLIA_LAB_KEY,
     RG_FISHING_HOLE_KEY,
+    RG_ARCHIPELAGO_ITEM,
     // Logic Only
     RG_DISTANT_SCARECROW,
     RG_STICKS,

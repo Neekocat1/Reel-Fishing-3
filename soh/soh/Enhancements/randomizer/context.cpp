@@ -12,6 +12,8 @@
 #include "macros.h"
 #include "3drando/hints.hpp"
 #include "../kaleido.h"
+#include "archipelago.h"
+#include "Archipelago.h"
 
 #include <fstream>
 #include <spdlog/spdlog.h>
@@ -335,6 +337,18 @@ void Context::ParseSpoiler(const char* spoilerFileName) {
     }
 }
 
+void Context::ParseArchipelago() {
+    mSeedGenerated = false;
+    mSpoilerLoaded = false;
+
+    ArchipelagoClient& ap_client = ArchipelagoClient::getInstance();
+    ParseArchipelagoItemsLocations(ap_client.get_scouted_items());
+
+    // lets see if counting AP_loaded as spoiler loaded does the trick
+    mSpoilerLoaded = true;
+    mSeedGenerated = false;
+}
+
 void Context::ParseHashIconIndexesJson(nlohmann::json spoilerFileJson) {
     nlohmann::json hashJson = spoilerFileJson["file_hash"];
     int index = 0;
@@ -363,6 +377,25 @@ void Context::ParseItemLocationsJson(nlohmann::json spoilerFileJson) {
             }
         } else {
             itemLocationTable[rc].SetPlacedItem(StaticData::itemNameToEnum[it.value().get<std::string>()]);
+        }
+    }
+}
+
+void Context::ParseArchipelagoItemsLocations(std::vector<AP_NetworkItem> scouted_items) {
+    int playerId = AP_GetPlayerID();    // todo change me when the client is developed further
+    for(const AP_NetworkItem& ap_item: scouted_items) {
+        const RandomizerCheck rc = StaticData::APcheckToSoh.find(ap_item.locationName)->second;
+        if(playerId == ap_item.player) {
+            // our item
+            SPDLOG_TRACE("Populated item {} at location {}", ap_item.itemName, ap_item.locationName);
+            const RandomizerGet item = StaticData::APitemToSoh.find(ap_item.itemName)->second;
+            itemLocationTable[rc].SetPlacedItem(item);
+        } else {
+            // other player item
+            itemLocationTable[rc].SetPlacedItem(RG_RECOVERY_HEART); // Ap item doesn't work yet
+            //overrides[rc] = ItemOverride(rc, RG_ZELDAS_LETTER);
+            //std::string getText = ap_item.playerName + "'s " + ap_item.itemName;
+            //overrides[rc].SetTrickName(Text(getText, getText, getText));
         }
     }
 }

@@ -1,6 +1,15 @@
 ![Ship of Harkinian](docs/shiptitle.darkmode.png#gh-dark-mode-only)
 ![Ship of Harkinian](docs/shiptitle.lightmode.png#gh-light-mode-only)
 
+## Fork Overview
+
+Currently playing around trying to see if we're able to hook the existing Archipelago Ocarina of time randomizer into Ship of Harkinian.
+You can currently connect to the multiworld server, scout the items.
+If you have no randomizer genereted (the `Randomizer` folder is empty) and press the `Link up` button, you'll be able to start a randomizer save file
+with the items populated with the location from the server.
+
+Sending and recieving is not implemented yet, Multiworld items are currently just recovery hearts
+
 ## Website
 
 Official Website: https://www.shipofharkinian.com/
