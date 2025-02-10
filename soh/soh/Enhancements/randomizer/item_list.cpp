@@ -393,7 +393,7 @@ void Rando::StaticData::InitItemTable() {
     itemTable[RG_TRIFORCE_PIECE] =                      Item(RG_TRIFORCE_PIECE,                   Text{ "Triforce Piece", "Triforce Piece", "Triforce-Fragment" },                                                                     ITEMTYPE_ITEM,              0xDF,                 true,  LOGIC_TRIFORCE_PIECES,              RHT_TRIFORCE_PIECE,                    RG_TRIFORCE_PIECE,                    OBJECT_GI_BOMB_2,       GID_TRIFORCE_PIECE,   TEXT_RANDOMIZER_CUSTOM_ITEM, 0x80, CHEST_ANIM_LONG,  ITEM_CATEGORY_MAJOR,  MOD_RANDOMIZER);
 
     // Archipelago
-    itemTable[RG_ARCHIPELAGO_ITEM] = /* doesn't work :P*/ Item(RG_ARCHIPELAGO_ITEM,               Text{"AP Item", "AP Item", "AP_Item"},                                                                                                 ITEMTYPE_ITEM,          GI_RUPEE_GREEN,     false,      LOGIC_NONE,                         RHT_NONE,                              RG_ARCHIPELAGO_ITEM,                 OBJECT_GI_LETTER,        GID_LETTER_ZELDA,      TEXT_RANDOMIZER_CUSTOM_ITEM, 0, CHEST_ANIM_SHORT, ITEM_CATEGORY_JUNK, MOD_NONE);
+    itemTable[RG_ARCHIPELAGO_ITEM] =                    Item(RG_ARCHIPELAGO_ITEM,                 Text{"AP Item", "AP Item", "AP Item"},                                                                                                 ITEMTYPE_EVENT,          GI_RUPEE_GREEN,     false,      LOGIC_NONE,                         RHT_NONE,                              RG_ARCHIPELAGO_ITEM,                 OBJECT_GI_LETTER,        GID_LETTER_ZELDA,      TEXT_RANDOMIZER_CUSTOM_ITEM, 0, CHEST_ANIM_SHORT, ITEM_CATEGORY_JUNK, MOD_RANDOMIZER);
 
     // Init itemNameToEnum
     for (auto& item : itemTable) {

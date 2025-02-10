@@ -8,6 +8,8 @@
 #include <iostream>
 
 #include "fixed_string.hpp"
+#include "randomizerTypes.h"
+#include "static_data.h"
 
 //extern "C" {
 //    #include "include/z64item.h"
@@ -33,6 +35,8 @@ auto SubscribeToSlotData() {
 }
 
 ArchipelagoClient::ArchipelagoClient() {
+    ItemRecievedCallback = nullptr;
+
     namespace apc = AP_Client_consts;
     CVarSetInteger("archipelago_connected", 0);
     strncpy(server_address, CVarGetString(apc::SETTING_ADDRESS, apc::DEFAULT_SERVER_NAME), apc::MAX_ADDRESS_LENGTH);
@@ -183,6 +187,30 @@ void ArchipelagoClient::save_data() {
     CVarSetString(AP_Client_consts::SETTING_NAME, slot_name);
 }
 
+bool ArchipelagoClient::isConnected() {
+    return AP_GetConnectionStatus() == AP_ConnectionStatus::Authenticated;
+}
+
+void ArchipelagoClient::check_location(RandomizerCheck SoH_check_id) {
+    std::string_view ap_name = Rando::StaticData::SohCheckToAP[SoH_check_id];
+    int64_t ap_item_id = CheckNameToId(std::string(ap_name));
+    SPDLOG_TRACE("Checked: {}({}), sending to AP server", ap_name, ap_item_id);
+
+// currently not sending, because i only get so many real chances
+    if(!isConnected()) {
+        return;
+    }
+    AP_SendItem(ap_item_id);
+}
+
+void ArchipelagoClient::addItemRecievedCallback(std::function<void(const std::string&)> callback) {
+    ItemRecievedCallback = callback;
+}
+
+void ArchipelagoClient::removeItemRecievedCallback(std::function<void(const std::string&)> old_callback) {
+    ItemRecievedCallback = nullptr;
+}
+
 void ArchipelagoClient::on_connected() {
     // todo implement me
     SPDLOG_TRACE("AP Connected!!");
@@ -197,7 +225,14 @@ void ArchipelagoClient::on_clear_items() {
 }
 
 void ArchipelagoClient::on_item_recieved(int64_t recieved_item_id, bool notify_player) {
-    // todo implement me
+    // call each callback
+    SPDLOG_TRACE("Trying to give rupie...");
+    std::string item_name = getAPitemName(recieved_item_id);
+    ArchipelagoClient& ap_client = ArchipelagoClient::getInstance();
+    if(ap_client.ItemRecievedCallback) {
+        SPDLOG_TRACE("Giving Rupie! {}", item_name);
+        ap_client.ItemRecievedCallback.operator()(item_name);   // somehow passing it through the itemname breaks it????
+    }
 }
 
 void ArchipelagoClient::on_location_checked(int64_t location_id) {
@@ -237,21 +272,23 @@ void ArchipelagoWindow::ArchipelagoDrawConnectPage() {
     ImGui::InputText("Slot Name", AP_client.get_slot_name_buff(), AP_Client_consts::MAX_PLAYER_NAME_LENGHT);
     ImGui::InputText("Password (leave blank for no password)", AP_client.get_password_buff(), AP_Client_consts::MAX_PASSWORD_LENGTH, ImGuiInputTextFlags_Password);
 
-    char connected_text[25] = "Disconnected";
+    static char connected_text[25] = "Disconnected";
     if(ImGui::Button("Connect")) {
         bool success = AP_client.start_client();
-        if(success) {
-            strncpy(connected_text, "Connected!", 25);
-            SPDLOG_TRACE("Connected!!");
-        }
-        else {
-            strncpy(connected_text, "Connection failed!", 25);
-            SPDLOG_TRACE("Connection failed :(");
-        }
     }
         
     ImGui::SameLine();
     ImGui::Text(connected_text);
+    AP_ConnectionStatus con_status = AP_GetConnectionStatus();
+    if(con_status == AP_ConnectionStatus::Connected) {
+        strncpy(connected_text, "Connected!", 25);
+    } else if(con_status == AP_ConnectionStatus::Authenticated) {
+        strncpy(connected_text, "Authenticated!", 25);
+    }
+    else {
+        strncpy(connected_text, "Not Connected", 25);
+    }
+    
     if(ImGui::Button("scout")) {
         AP_client.start_location_scouts();
     }
@@ -265,4 +302,8 @@ void ArchipelagoWindow::ArchipelagoDrawConnectPage() {
 void ArchipelagoWindow::DrawElement() {
     ArchipelagoDrawConnectPage();
     UIWidgets::PaddedSeparator();
+    
+    if(ImGui::Button("give blue ruppie")) {
+        ArchipelagoClient::getInstance().on_item_recieved(66077, true);
+    }
 };

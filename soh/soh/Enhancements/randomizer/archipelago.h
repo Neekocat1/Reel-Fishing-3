@@ -3,6 +3,11 @@
 
 #include "fixed_string.hpp"
 
+#include "randomizerTypes.h"
+#include "static_data.h"
+#include <vector>
+
+
 namespace AP_Client_consts {
     static constexpr int MAX_ADDRESS_LENGTH = 64;
     static constexpr int MAX_PLAYER_NAME_LENGHT = 17;
@@ -30,6 +35,19 @@ class ArchipelagoClient {
         const std::vector<AP_NetworkItem>& get_scouted_items();
 
         void add_slot_data(std::string_view key, int id);
+        
+        //void add_slot_data(std::string_view key, int id);
+
+        bool isConnected();
+        void check_location(RandomizerCheck SoH_check_id);
+
+        // callback slots
+        void addItemRecievedCallback(std::function<void(const std::string&)> callback);
+        void removeItemRecievedCallback(std::function<void(const std::string&)> old_callback);
+
+
+        // todo move me back down when done testing
+        static void on_item_recieved(int64_t recieved_item_id, bool notify_player);
 
     protected:
         ArchipelagoClient();
@@ -56,12 +74,13 @@ class ArchipelagoClient {
         static void on_connected();
         static void on_couldntConnect(AP_ConnectionStatus connection_status);
         static void on_clear_items();
-        static void on_item_recieved(int64_t recieved_item_id, bool notify_player);
+        
         static void on_location_checked(int64_t location_id);
         static void on_deathlink_recieved() { }; // TODO: implement me
         static void on_location_scouted(std::vector<AP_NetworkItem> network_items);
 
         // callbacks
+        std::function<void(const std::string&)> ItemRecievedCallback;
         
 };
 

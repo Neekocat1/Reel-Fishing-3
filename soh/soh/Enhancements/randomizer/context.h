@@ -107,6 +107,8 @@ class Context {
      */
     RandoOptionLACSCondition LACSCondition() const;
     GetItemEntry GetFinalGIEntry(RandomizerCheck rc, bool checkObtainability = true, GetItemID ogItemId = GI_NONE);
+    void AddRecievedArchipelagoItem(const std::string& ap_item_id);
+    GetItemEntry GetArchipelagoGIEntry();
     void ParseSpoiler(const char* spoilerFileName);
     void ParseHashIconIndexesJson(nlohmann::json spoilerFileJson);
     void ParseItemLocationsJson(nlohmann::json spoilerFileJson);
@@ -186,5 +188,6 @@ class Context {
     std::string mHash;
     std::string mSeedString;
     uint32_t mFinalSeed = 0;
+    std::queue<std::string> mAPrecieveQueue = {};
 };
 } // namespace Rando

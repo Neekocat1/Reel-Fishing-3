@@ -271,6 +271,30 @@ void Context::SetSpoilerLoaded(const bool spoilerLoaded) {
     mSpoilerLoaded = spoilerLoaded;
 }
 
+void Context::AddRecievedArchipelagoItem(const std::string& ap_item_id) {
+    mAPrecieveQueue.emplace(ap_item_id);
+    SPDLOG_TRACE("Item Pushed {}", ap_item_id);
+}
+
+GetItemEntry Context::GetArchipelagoGIEntry() {
+    SPDLOG_TRACE("Trying to get Item Entry");
+    if(mAPrecieveQueue.empty()) {
+        // something must have gone wrong here, just give a rupee
+        return ItemTableManager::Instance->RetrieveItemEntry(MOD_NONE, GI_HEART);
+    }
+
+    // get the first item from the archipelago queue
+    std::string_view recieved_ap_item = mAPrecieveQueue.front();
+    RandomizerGet item_id = StaticData::APitemToSoh[recieved_ap_item];
+    assert(item_id != RG_NONE);
+
+    Item& item = StaticData::RetrieveItem(item_id);
+    SPDLOG_TRACE("Found item! {}, {}", recieved_ap_item, (int)item_id);
+    GetItemEntry item_entry = item.GetGIEntry_Copy();
+    mAPrecieveQueue.pop();
+    return item_entry;      // todo: add custom text maybe?
+}
+
 GetItemEntry Context::GetFinalGIEntry(const RandomizerCheck rc, const bool checkObtainability, const GetItemID ogItemId) {
     const auto itemLoc = GetItemLocation(rc);
     if (itemLoc->GetPlacedRandomizerGet() == RG_NONE) {
@@ -392,8 +416,9 @@ void Context::ParseArchipelagoItemsLocations(std::vector<AP_NetworkItem> scouted
             itemLocationTable[rc].SetPlacedItem(item);
         } else {
             // other player item
-            itemLocationTable[rc].SetPlacedItem(RG_RECOVERY_HEART); // Ap item doesn't work yet
-            //overrides[rc] = ItemOverride(rc, RG_ZELDAS_LETTER);
+            itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM); 
+            // i'll have to figure out custom names at some point, this currently does nothing
+            //overrides[rc] = ItemOverride(rc, RG_DEKU_NUTS_5);
             //std::string getText = ap_item.playerName + "'s " + ap_item.itemName;
             //overrides[rc].SetTrickName(Text(getText, getText, getText));
         }

@@ -13,7 +13,8 @@
 // which doesn't exist yet.
 typedef enum {
     MOD_NONE,
-    MOD_RANDOMIZER
+    MOD_RANDOMIZER,
+    MOD_ARCHIPELAGO // no actually used yet i think
 } ModIndex;
 typedef enum {
     TABLE_VANILLA = MOD_NONE,
@@ -2848,6 +2849,7 @@ typedef enum {
     RC_SHADOW_TEMPLE_MQ_WIND_HINT_SUN_FAIRY,
     RC_BOTTOM_OF_THE_WELL_MQ_CELL_SUN_FAIRY,
     RC_BOTTOM_OF_THE_WELL_MQ_BASEMENT_SUN_FAIRY,
+    RC_ARCHIPELAGO_RECIEVED_ITEM,
     RC_MAX
 } RandomizerCheck;
 
