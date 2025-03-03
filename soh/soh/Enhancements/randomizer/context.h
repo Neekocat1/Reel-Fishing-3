@@ -126,7 +126,8 @@ class Context {
     RandomizerArea GetAreaFromString(std::string str);
 
     void ParseArchipelago();
-    void ParseArchipelagoItemsLocations(const std::vector<AP_NetworkItem>);
+    void ParseArchipelagoSettings(const std::map<std::string, int>& slot_data);
+    void ParseArchipelagoItemsLocations(const std::vector<AP_NetworkItem>& slot_data);
 
     /**
      * @brief Get the hash for the current seed.

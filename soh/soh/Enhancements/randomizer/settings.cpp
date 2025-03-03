@@ -2226,6 +2226,96 @@ void Settings::ParseJson(nlohmann::json spoilerFileJson) {
     }
 }
 
+void Settings::ParseArchipelago(const std::map<std::string, int>& slot_data) {
+    for(const auto& slot_it : slot_data) {
+        const std::string& APname = slot_it.first;
+        int value = slot_it.second;
+        
+        // remap value if needed
+        if(APname == "open_forest") {
+            if(value == 0) {    // open and closed options swapped
+                value = 2;
+            } else if (value == 2) {
+                value = 0;
+            }
+        }
+        if(APname == "open_kakoriko") {
+            if(value == 2) {  
+                value = 0;  // closed
+            } else {
+                value = 1;  // count the "zelda" option as open
+            }
+        }
+        else if(APname == "open_door_of_time") {
+            if(value == 1) {
+                value = 2;   // AP doesn't have the song only option
+            }
+        }
+        else if(APname == "zora_fountain") {
+            if(value == 0) {    // open and closed options swapped
+                value = 2;
+            } else if (value == 2) {
+                value = 0;
+            }
+        }
+        else if(APname == "bridge") {
+            if(value == 0) {    // always open and vanilla are swapped
+                value = 1;
+            } else if (value == 1) {
+                value = 0;
+            } else if (value == 6) { // no support for ap hearts option
+                value = 1; // revert to always open so its at least beatable
+            } else if (value == 5) {
+                value++;    // Token option is one over, because AP doesn't have dungeon blue warp count as option
+            }
+        }
+        else if(APname == "shopsanity_prices") {
+            value = 1;   // default shopsanity to cheap ballanced for now
+        }
+        else if(APname == "start_with_consumables") {   // just setting this shouldn't magically work I think
+            if(value == 1) {
+                const RandomizerSettingKey stick_index = StaticData::optionNameToEnum["Start with Stick Ammo"];
+                mContext->GetOption(stick_index).Set(mOptions[stick_index].GetValueFromText("Yes"));
+                const RandomizerSettingKey nut_index = StaticData::optionNameToEnum["Start with Stick Ammo"];
+                mContext->GetOption(nut_index).Set(mOptions[nut_index].GetValueFromText("Yes"));
+            } else {
+                const RandomizerSettingKey stick_index = StaticData::optionNameToEnum["Start with Stick Ammo"];
+                mContext->GetOption(stick_index).Set(mOptions[stick_index].GetValueFromText("No"));
+                const RandomizerSettingKey nut_index = StaticData::optionNameToEnum["Start with Stick Ammo"];
+                mContext->GetOption(nut_index).Set(mOptions[nut_index].GetValueFromText("No"));
+            }
+        }
+        const std::string& setting_name = std::string(StaticData::APsettingToHoSsetting[APname]);
+        const RandomizerSettingKey index = StaticData::optionNameToEnum[setting_name];
+        mContext->GetOption(index).Set(value);
+        SPDLOG_INFO("Parsed Setting {}: ({}, {})", APname, (int)index, value);
+    }
+
+    // maybe we have to set a couple of settings manually, if ap doesn't set them
+    {
+        //const RandomizerSettingKey index = StaticData::optionNameToEnum["Starting Age"];
+        //mContext->GetOption(index).Set(mOptions[index].GetValueFromText("Random"));
+    }
+    {
+        const RandomizerSettingKey index = StaticData::optionNameToEnum["Ganon's Trials"];
+        mContext->GetOption(index).Set(mOptions[index].GetValueFromText("Set Number"));
+    }
+    {
+        const RandomizerSettingKey index = StaticData::optionNameToEnum["Logic"];
+        mContext->GetOption(index).Set(mOptions[index].GetValueFromText("Glitchless"));
+    }
+    {
+        const RandomizerSettingKey index = StaticData::optionNameToEnum["Starting Hearts"];
+        mContext->GetOption(index).Set(2);
+    }
+    {
+        const RandomizerSettingKey index = StaticData::optionNameToEnum["Token Shuffle"];
+        mContext->GetOption(index).Set(mOptions[index].GetValueFromText("Off"));
+    }
+    //const RandomizerSettingKey index = StaticData::optionNameToEnum["Sleeping Waterfall"];
+    //mContext->GetOption(index).Set(0);
+}
+
 void Settings::ReloadOptions() {
     for (int i = 0; i < RSK_MAX; i++) {
         mOptions[i].SetFromCVar();

@@ -49,6 +49,8 @@ class ArchipelagoClient {
         // todo move me back down when done testing
         static void on_item_recieved(int64_t recieved_item_id, bool notify_player);
 
+        void send_game_won();
+
     protected:
         ArchipelagoClient();
 
@@ -61,6 +63,8 @@ class ArchipelagoClient {
         char server_address[AP_Client_consts::MAX_ADDRESS_LENGTH];
         char slot_name[AP_Client_consts::MAX_PLAYER_NAME_LENGHT];
         char password[AP_Client_consts::MAX_PLAYER_NAME_LENGHT];
+
+        bool game_won;
 
         std::map<std::string, int> slot_data;
         std::set<int64_t> locations;

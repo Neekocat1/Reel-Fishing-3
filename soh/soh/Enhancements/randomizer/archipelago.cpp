@@ -36,6 +36,7 @@ auto SubscribeToSlotData() {
 
 ArchipelagoClient::ArchipelagoClient() {
     ItemRecievedCallback = nullptr;
+    game_won = false;
 
     namespace apc = AP_Client_consts;
     CVarSetInteger("archipelago_connected", 0);
@@ -64,71 +65,71 @@ void registerSlotCallbacks() {
     SubscribeToSlotData<"bridge_medallions">();
     SubscribeToSlotData<"bridge_rewards">();
     SubscribeToSlotData<"bridge_tokens">();
-    SubscribeToSlotData<"bridge_hearts">();
+//    SubscribeToSlotData<"bridge_hearts">();
     SubscribeToSlotData<"shuffle_ganon_bosskey">();
     SubscribeToSlotData<"ganon_bosskey_medallions">();
     SubscribeToSlotData<"ganon_bosskey_stones">();
     SubscribeToSlotData<"ganon_bosskey_rewards">();
     SubscribeToSlotData<"ganon_bosskey_tokens">();
-    SubscribeToSlotData<"ganon_bosskey_hearts">();
+//    SubscribeToSlotData<"ganon_bosskey_hearts">();
     SubscribeToSlotData<"trials">();
     SubscribeToSlotData<"triforce_hunt">();
     SubscribeToSlotData<"triforce_goal">();
-    SubscribeToSlotData<"extra_triforce_percentage">();
-    SubscribeToSlotData<"shopsanity">();
-    SubscribeToSlotData<"shop_slots">();
+//    SubscribeToSlotData<"extra_triforce_percentage">();
+//    SubscribeToSlotData<"shopsanity">();
+//    SubscribeToSlotData<"shop_slots">();
     SubscribeToSlotData<"shopsanity_prices">();
-    SubscribeToSlotData<"tokensanity">();
-    SubscribeToSlotData<"dungeon_shortcuts">();
-    SubscribeToSlotData<"mq_dungeons_mode">();
-    SubscribeToSlotData<"mq_dungeons_count">();
-    SubscribeToSlotData<"shuffle_interior_entrances">();
-    SubscribeToSlotData<"shuffle_grotto_entrances">();
-    SubscribeToSlotData<"shuffle_dungeon_entrances">();
-    SubscribeToSlotData<"shuffle_overworld_entrances">();
-    SubscribeToSlotData<"shuffle_bosses">();
-    SubscribeToSlotData<"key_rings">();
-    SubscribeToSlotData<"enhance_map_compass">();
-    SubscribeToSlotData<"shuffle_mapcompass">();
-    SubscribeToSlotData<"shuffle_smallkeys">();
-    SubscribeToSlotData<"shuffle_hideoutkeys">();
-    SubscribeToSlotData<"shuffle_bosskeys">();
-    SubscribeToSlotData<"logic_rules">();
-    SubscribeToSlotData<"logic_no_night_tokens_without_suns_song">();
-    SubscribeToSlotData<"warp_songs">();
-    SubscribeToSlotData<"shuffle_song_items">();
-    SubscribeToSlotData<"shuffle_medigoron_carpet_salesman">();
-    SubscribeToSlotData<"shuffle_frog_song_rupees">();
-    SubscribeToSlotData<"shuffle_scrubs">();
-    SubscribeToSlotData<"shuffle_child_trade">();
-    SubscribeToSlotData<"shuffle_freestanding_items">();
-    SubscribeToSlotData<"shuffle_pots">();
-    SubscribeToSlotData<"shuffle_crates">();
-    SubscribeToSlotData<"shuffle_cows">();
-    SubscribeToSlotData<"shuffle_beehives">();
-    SubscribeToSlotData<"shuffle_kokiri_sword">();
-    SubscribeToSlotData<"shuffle_ocarinas">();
-    SubscribeToSlotData<"shuffle_gerudo_card">();
-    SubscribeToSlotData<"shuffle_beans">();
+//    SubscribeToSlotData<"tokensanity">();
+//    SubscribeToSlotData<"dungeon_shortcuts">();
+//    SubscribeToSlotData<"mq_dungeons_mode">();
+//    SubscribeToSlotData<"mq_dungeons_count">();
+//    SubscribeToSlotData<"shuffle_interior_entrances">();
+//    SubscribeToSlotData<"shuffle_grotto_entrances">();
+//    SubscribeToSlotData<"shuffle_dungeon_entrances">();
+//    SubscribeToSlotData<"shuffle_overworld_entrances">();
+//    SubscribeToSlotData<"shuffle_bosses">();
+//    SubscribeToSlotData<"key_rings">();
+//    SubscribeToSlotData<"enhance_map_compass">();
+//    SubscribeToSlotData<"shuffle_mapcompass">();
+//    SubscribeToSlotData<"shuffle_smallkeys">();
+//    SubscribeToSlotData<"shuffle_hideoutkeys">();
+//    SubscribeToSlotData<"shuffle_bosskeys">();
+//    SubscribeToSlotData<"logic_rules">();
+//    SubscribeToSlotData<"logic_no_night_tokens_without_suns_song">();
+//    SubscribeToSlotData<"warp_songs">();
+//    SubscribeToSlotData<"shuffle_song_items">();
+//    SubscribeToSlotData<"shuffle_medigoron_carpet_salesman">();
+//    SubscribeToSlotData<"shuffle_frog_song_rupees">();
+//    SubscribeToSlotData<"shuffle_scrubs">();
+//    SubscribeToSlotData<"shuffle_child_trade">();
+//    SubscribeToSlotData<"shuffle_freestanding_items">();
+//    SubscribeToSlotData<"shuffle_pots">();
+//    SubscribeToSlotData<"shuffle_crates">();
+//    SubscribeToSlotData<"shuffle_cows">();
+//    SubscribeToSlotData<"shuffle_beehives">();
+//    SubscribeToSlotData<"shuffle_kokiri_sword">();
+//    SubscribeToSlotData<"shuffle_ocarinas">();
+//    SubscribeToSlotData<"shuffle_gerudo_card">();
+//    SubscribeToSlotData<"shuffle_beans">();
     SubscribeToSlotData<"starting_age">();
-    SubscribeToSlotData<"bombchus_in_logic">();
-    SubscribeToSlotData<"spawn_positions">();
-    SubscribeToSlotData<"owl_drops">();
+//    SubscribeToSlotData<"bombchus_in_logic">();
+//    SubscribeToSlotData<"spawn_positions">();
+//    SubscribeToSlotData<"owl_drops">();
     SubscribeToSlotData<"no_epona_race">();
-    SubscribeToSlotData<"skip_some_minigame_phases">();
+//    SubscribeToSlotData<"skip_some_minigame_phases">();
     SubscribeToSlotData<"complete_mask_quest">();
     SubscribeToSlotData<"free_scarecrow">();
-    SubscribeToSlotData<"plant_beans">();
+//    SubscribeToSlotData<"plant_beans">();
     SubscribeToSlotData<"chicken_count">();
     SubscribeToSlotData<"big_poe_count">();
-    SubscribeToSlotData<"fae_torch_count">();
+//    SubscribeToSlotData<"fae_torch_count">();
     SubscribeToSlotData<"blue_fire_arrows">();
     SubscribeToSlotData<"damage_multiplier">();
-    SubscribeToSlotData<"deadly_bonks">();
-    SubscribeToSlotData<"starting_tod">();
-    SubscribeToSlotData<"junk_ice_traps">();
+//    SubscribeToSlotData<"deadly_bonks">();
+//    SubscribeToSlotData<"starting_tod">();
+//    SubscribeToSlotData<"junk_ice_traps">();
     SubscribeToSlotData<"start_with_consumables">();
-    SubscribeToSlotData<"adult_trade_start">();
+//    SubscribeToSlotData<"adult_trade_start">();
 }
 
 bool ArchipelagoClient::start_client() {
@@ -193,6 +194,9 @@ bool ArchipelagoClient::isConnected() {
 
 void ArchipelagoClient::check_location(RandomizerCheck SoH_check_id) {
     std::string_view ap_name = Rando::StaticData::SohCheckToAP[SoH_check_id];
+    if(ap_name.empty()) {
+        return;
+    }
     int64_t ap_item_id = CheckNameToId(std::string(ap_name));
     SPDLOG_TRACE("Checked: {}({}), sending to AP server", ap_name, ap_item_id);
 
@@ -226,11 +230,10 @@ void ArchipelagoClient::on_clear_items() {
 
 void ArchipelagoClient::on_item_recieved(int64_t recieved_item_id, bool notify_player) {
     // call each callback
-    SPDLOG_TRACE("Trying to give rupie...");
     std::string item_name = getAPitemName(recieved_item_id);
     ArchipelagoClient& ap_client = ArchipelagoClient::getInstance();
     if(ap_client.ItemRecievedCallback) {
-        SPDLOG_TRACE("Giving Rupie! {}", item_name);
+        SPDLOG_TRACE("item recieved: {}, notify: {}", item_name, notify_player);
         ap_client.ItemRecievedCallback.operator()(item_name);   // somehow passing it through the itemname breaks it????
     }
 }
@@ -244,6 +247,13 @@ void ArchipelagoClient::on_location_scouted(std::vector<AP_NetworkItem> network_
         SPDLOG_TRACE("Location scouted: {} for {} in location {}", item.itemName, item.playerName, item.locationName);
     }
     getInstance().scouted_items = network_items;
+}
+
+void ArchipelagoClient::send_game_won() {
+    if(!game_won) {
+        AP_StoryComplete();
+        game_won = true;
+    }
 }
 
 char* ArchipelagoClient::get_server_address_buff() {

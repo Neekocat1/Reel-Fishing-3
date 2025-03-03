@@ -366,6 +366,7 @@ void Context::ParseArchipelago() {
     mSpoilerLoaded = false;
 
     ArchipelagoClient& ap_client = ArchipelagoClient::getInstance();
+    Rando::Settings::GetInstance()->ParseArchipelago(ap_client.get_slot_data());
     ParseArchipelagoItemsLocations(ap_client.get_scouted_items());
 
     // lets see if counting AP_loaded as spoiler loaded does the trick
@@ -383,6 +384,7 @@ void Context::ParseHashIconIndexesJson(nlohmann::json spoilerFileJson) {
 }
 
 void Context::ParseItemLocationsJson(nlohmann::json spoilerFileJson) {
+    // first fill all the items with their vanilla location
     nlohmann::json locationsJson = spoilerFileJson["locations"];
     for (auto it = locationsJson.begin(); it != locationsJson.end(); ++it) {
         RandomizerCheck rc = StaticData::locationNameToEnum[it.key()];
@@ -405,10 +407,21 @@ void Context::ParseItemLocationsJson(nlohmann::json spoilerFileJson) {
     }
 }
 
-void Context::ParseArchipelagoItemsLocations(std::vector<AP_NetworkItem> scouted_items) {
+void Context::ParseArchipelagoItemsLocations(const std::vector<AP_NetworkItem>& scouted_items) {
     int playerId = AP_GetPlayerID();    // todo change me when the client is developed further
+    
+    // init the item table with regular items first
+    for(int rc = 1; rc <= RC_MAX; rc++) {
+        itemLocationTable[rc].SetPlacedItem(StaticData::GetLocation(static_cast<RandomizerCheck>(rc))->GetVanillaItem());
+    }
+
     for(const AP_NetworkItem& ap_item: scouted_items) {
         const RandomizerCheck rc = StaticData::APcheckToSoh.find(ap_item.locationName)->second;
+        
+        if(rc == RC_KF_MIDOS_TOP_RIGHT_CHEST) {
+            continue;
+        }
+
         if(playerId == ap_item.player) {
             // our item
             SPDLOG_TRACE("Populated item {} at location {}", ap_item.itemName, ap_item.locationName);
