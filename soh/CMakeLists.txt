@@ -300,6 +300,23 @@ else()
     message("Boost found in " ${Boost_INCLUDE_DIRS})
     set(BOOST-INCLUDE ${Boost_INCLUDE_DIRS})
 endif()
+
+################################################################################
+# apclientpp + dependencies
+################################################################################
+add_compile_definitions(ASIO_STANDALONE)
+
+# TEMPORARY
+add_compile_definitions(WSWRAP_NO_SSL)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/asio/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/websocketpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/wswrap/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/valijson/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/apclientpp
+)
+
 ################################################################################
 # Compile definitions
 ################################################################################
