@@ -278,7 +278,6 @@ endif()
 # apclientpp + dependencies
 ################################################################################
 add_compile_definitions(ASIO_STANDALONE)
-add_compile_definitions(ASIO_DISABLE_STD_INVOKE_RESULT)
 
 # TEMPORARY
 add_compile_definitions(WSWRAP_NO_SSL)
