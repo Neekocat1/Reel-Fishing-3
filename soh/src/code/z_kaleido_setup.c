@@ -13,9 +13,10 @@ void KaleidoSetup_Update(PlayState* play) {
     Input* input = &play->state.input[0];
 
     if (pauseCtx->state == 0 && pauseCtx->debugState == 0 && play->gameOverCtx.state == GAMEOVER_INACTIVE &&
-        play->transitionTrigger == TRANS_TRIGGER_OFF && play->transitionMode == TRANS_MODE_OFF && gSaveContext.cutsceneIndex < 0xFFF0 &&
-        gSaveContext.nextCutsceneIndex < 0xFFF0 && !Play_InCsMode(play) &&
-        play->shootingGalleryStatus <= 1 && gSaveContext.magicState != MAGIC_STATE_STEP_CAPACITY && gSaveContext.magicState != MAGIC_STATE_FILL &&
+        play->transitionTrigger == TRANS_TRIGGER_OFF && play->transitionMode == TRANS_MODE_OFF &&
+        gSaveContext.cutsceneIndex < 0xFFF0 && gSaveContext.nextCutsceneIndex < 0xFFF0 && !Play_InCsMode(play) &&
+        play->shootingGalleryStatus <= 1 && gSaveContext.magicState != MAGIC_STATE_STEP_CAPACITY &&
+        gSaveContext.magicState != MAGIC_STATE_FILL &&
         (play->sceneNum != SCENE_BOMBCHU_BOWLING_ALLEY || !Flags_GetSwitch(play, 0x38))) {
 
         if (CHECK_BTN_ALL(input->cur.button, BTN_L) && CHECK_BTN_ALL(input->press.button, BTN_CUP)) {
@@ -27,10 +28,9 @@ void KaleidoSetup_Update(PlayState* play) {
             gSaveContext.unk_13EE = gSaveContext.unk_13EA;
 
             if (CHECK_BTN_ALL(input->cur.button, BTN_L))
-                CVarSetInteger(CVAR_GENERAL("PauseTriforce"), 1);
+                CVarSetInteger(CVAR_GENERAL("PauseMenuAnimatedLinkTriforce"), 1);
             else
-                CVarSetInteger(CVAR_GENERAL("PauseTriforce"), 0);
-
+                CVarSetInteger(CVAR_GENERAL("PauseMenuAnimatedLinkTriforce"), 0);
 
             WREG(16) = -175;
             WREG(17) = 155;

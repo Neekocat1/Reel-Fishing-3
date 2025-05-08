@@ -279,31 +279,22 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	set_target_properties(${PROJECT_NAME} PROPERTIES MSVC_RUNTIME_LIBRARY ${MSVC_RUNTIME_LIBRARY_STR})
 endif()
 ################################################################################
-# Find/download Boost
+# apclientpp + dependencies
 ################################################################################
-include(FetchContent)
-FetchContent_Declare(
-    Boost
-    URL      https://archives.boost.io/release/1.81.0/source/boost_1_81_0.tar.gz
-    URL_HASH SHA256=205666dea9f6a7cfed87c7a6dfbeb52a2c1b9de55712c9c1a87735d7181452b6
-    SOURCE_SUBDIR "null" # Set to a nonexistent directory so boost is not built (we don't need to build it)
-    DOWNLOAD_EXTRACT_TIMESTAMP false # supress timestamp warning, not needed since the url wont change
+add_compile_definitions(ASIO_STANDALONE)
+add_compile_definitions(ASIO_DISABLE_STD_INVOKE_RESULT)
+
+# TEMPORARY
+add_compile_definitions(WSWRAP_NO_SSL)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/asio/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/websocketpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/wswrap/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/valijson/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/apclientpp
 )
 
-set(Boost_NO_BOOST_CMAKE false)
-set(BOOST_INCLUDEDIR ${FETCHCONTENT_BASE_DIR}/boost-src) # Location where FetchContent stores the source
-message("Searching for Boost installation")
-find_package(Boost)
-
-if (NOT ${Boost_FOUND})
-    message("Boost not found. Downloading now...")
-    FetchContent_MakeAvailable(Boost)
-    message("Boost downloaded to " ${FETCHCONTENT_BASE_DIR}/boost-src)
-    set(BOOST-INCLUDE ${FETCHCONTENT_BASE_DIR}/boost-src)
-else()
-    message("Boost found in " ${Boost_INCLUDE_DIRS})
-    set(BOOST-INCLUDE ${Boost_INCLUDE_DIRS})
-endif()
 ################################################################################
 # Compile definitions
 ################################################################################
@@ -352,7 +343,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE assets
     ${CMAKE_CURRENT_SOURCE_DIR}/../ZAPDTR/ZAPD/resource/type
 	${SDL2-INCLUDE}
     ${SDL2-NET-INCLUDE}
-    ${BOOST-INCLUDE}
 	${CMAKE_CURRENT_SOURCE_DIR}/assets/
     ${CMAKE_CURRENT_SOURCE_DIR}/../APCpp
 	.
@@ -434,6 +424,7 @@ endif()
 # Compile and link options
 ################################################################################
 if(MSVC)
+    target_compile_options(${PROJECT_NAME} PUBLIC "/Zc:__cplusplus")
     if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
         target_compile_options(${PROJECT_NAME} PRIVATE
             $<$<CONFIG:Debug>:
@@ -445,6 +436,7 @@ if(MSVC)
                 /Gy;
                 /W3
             >
+            /bigobj;
             /sdl-;
             /permissive-;
             /MP;
@@ -713,7 +705,7 @@ else()
 	)
 endif()
 
-if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
+if(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin|NintendoSwitch|CafeOS")
 INSTALL(TARGETS soh DESTINATION . COMPONENT ship)
 endif()
 
@@ -731,7 +723,7 @@ execute_process(COMMAND ${CURL} -sSfL https://raw.githubusercontent.com/gabomdq/
 
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
 configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/macosx/Info.plist.in ${CMAKE_BINARY_DIR}/macosx/Info.plist @ONLY)
-configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/macosx/soh-macos.sh.in ${CMAKE_BINARY_DIR}/macosx/soh-macos.sh @ONLY)
+INSTALL(TARGETS soh DESTINATION ../MacOS COMPONENT ship)
 INSTALL(FILES ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt DESTINATION ../MacOS COMPONENT ship)
 INSTALL(FILES ${CMAKE_BINARY_DIR}/soh/soh.otr DESTINATION ../Resources COMPONENT ship)
 elseif(NOT "${CMAKE_SYSTEM_NAME}" MATCHES "NintendoSwitch|CafeOS")
