@@ -13,7 +13,6 @@
 #include "3drando/hints.hpp"
 #include "../kaleido.h"
 #include "archipelago.h"
-#include "Archipelago.h"
 
 #include <fstream>
 #include <spdlog/spdlog.h>
@@ -481,22 +480,22 @@ void Context::ParseItemLocationsJson(nlohmann::json spoilerFileJson) {
     }
 }
 
-void Context::ParseArchipelagoItemsLocations(const std::vector<AP_NetworkItem>& scouted_items) {
-    int playerId = AP_GetPlayerID();    // todo change me when the client is developed further
+void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient::ApItem>& scouted_items) {
+    const std::string SlotName = ArchipelagoClient::getInstance().get_slot_name();
     
     // init the item table with regular items first
     for(int rc = 1; rc <= RC_MAX; rc++) {
         itemLocationTable[rc].SetPlacedItem(StaticData::GetLocation(static_cast<RandomizerCheck>(rc))->GetVanillaItem());
     }
 
-    for(const AP_NetworkItem& ap_item: scouted_items) {
+    for(const ArchipelagoClient::ApItem& ap_item: scouted_items) {
         const RandomizerCheck rc = StaticData::APcheckToSoh.find(ap_item.locationName)->second;
         
         if(rc == RC_KF_MIDOS_TOP_RIGHT_CHEST) {
             continue;
         }
 
-        if(playerId == ap_item.player) {
+        if(SlotName == ap_item.playerName) {
             // our item
             SPDLOG_TRACE("Populated item {} at location {}", ap_item.itemName, ap_item.locationName);
             const RandomizerGet item = StaticData::APitemToSoh.find(ap_item.itemName)->second;

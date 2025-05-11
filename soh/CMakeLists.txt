@@ -96,10 +96,6 @@ if (NOT TARGET ZAPDLib)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../ZAPDTR/ZAPD ${CMAKE_BINARY_DIR}/ZAPD)
 endif()
 
-if (NOT TARGET APCpp)
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../APCpp ${CMAKE_BINARY_DIR}/APCpp)
-endif()
-
 set(PROJECT_NAME soh)
 
 ################################################################################
@@ -344,7 +340,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE assets
 	${SDL2-INCLUDE}
     ${SDL2-NET-INCLUDE}
 	${CMAKE_CURRENT_SOURCE_DIR}/assets/
-    ${CMAKE_CURRENT_SOURCE_DIR}/../APCpp
 	.
 )
 
@@ -628,9 +623,6 @@ endif()
 add_dependencies(${PROJECT_NAME}
     libultraship
 )
-add_dependencies(${PROJECT_NAME}
-    APCpp
-)
 if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
 add_dependencies(${PROJECT_NAME}
     ZAPDLib
@@ -643,7 +635,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
 		set(ADDITIONAL_LIBRARY_DEPENDENCIES
 			"libultraship;"
 			"ZAPDLib;"
-            "APCpp;"
 			"glu32;"
 			"SDL2::SDL2;"
 			"SDL2::SDL2main;"
@@ -658,7 +649,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
 		set(ADDITIONAL_LIBRARY_DEPENDENCIES
 			"libultraship;"
 			"ZAPDLib;"
-            "APCpp;"
 			"glu32;"
 			"SDL2::SDL2;"
 			"SDL2::SDL2main;"
@@ -697,7 +687,6 @@ else()
  	set(ADDITIONAL_LIBRARY_DEPENDENCIES
         "libultraship;"
 		"ZAPDLib;"
-        "APCpp"
 		SDL2::SDL2
         "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:SDL2_net::SDL2_net>"
 		${CMAKE_DL_LIBS}

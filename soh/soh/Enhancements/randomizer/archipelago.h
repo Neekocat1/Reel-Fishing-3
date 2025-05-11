@@ -1,5 +1,7 @@
+#pragma once
 #include "archipelago_settings_window.h"
-#include "../../../../APCpp/Archipelago.h"
+
+#include <apclient.hpp>
 
 #include "fixed_string.hpp"
 
@@ -16,10 +18,20 @@ namespace AP_Client_consts {
 
     static constexpr char const* SETTING_ADDRESS = "AP_server_address";
     static constexpr char const* SETTING_NAME = "AP_slot_name";
-};
 
-class ArchipelagoClient {
+    static constexpr char const* AP_GAME_NAME = "Ocarina of Time";
+}
+
+class ArchipelagoClient{
     public:
+        struct ApItem {
+            std::string itemName;
+            std::string locationName;
+            std::string playerName;
+            unsigned int flags;
+            int index;
+        };
+
         static ArchipelagoClient& getInstance();
 
         bool start_client();
@@ -28,11 +40,13 @@ class ArchipelagoClient {
         void start_location_scouts();
 
         // getters
+        const std::string& get_slot_name() const;
+
         char* get_server_address_buff();
         char* get_slot_name_buff();
         char* get_password_buff();
         const std::map<std::string, int>& get_slot_data();
-        const std::vector<AP_NetworkItem>& get_scouted_items();
+        const std::vector<ApItem>& get_scouted_items();
 
         void add_slot_data(std::string_view key, int id);
         
@@ -47,7 +61,7 @@ class ArchipelagoClient {
 
 
         // todo move me back down when done testing
-        static void on_item_recieved(int64_t recieved_item_id, bool notify_player);
+        void on_item_recieved(int64_t recieved_item_id, bool notify_player);
 
         void send_game_won();
 
@@ -57,7 +71,10 @@ class ArchipelagoClient {
     private:
         ArchipelagoClient(ArchipelagoClient &) = delete;
         void operator=(const ArchipelagoClient &) = delete;
-        static std::shared_ptr<ArchipelagoClient> instance;
+        std::string uuid;
+        std::unique_ptr<APClient> apclient;
+
+        static std::shared_ptr<ArchipelagoClient> instance; // is this even used?
         static bool initialized;
 
         char server_address[AP_Client_consts::MAX_ADDRESS_LENGTH];
@@ -68,20 +85,19 @@ class ArchipelagoClient {
 
         std::map<std::string, int> slot_data;
         std::set<int64_t> locations;
-        std::vector<AP_NetworkItem> scouted_items;
+        std::vector<ApItem> scouted_items;
 
         //void registerSlotCallbacks();
         
         void save_data();
 
         // callback functions
-        static void on_connected();
-        static void on_couldntConnect(AP_ConnectionStatus connection_status);
-        static void on_clear_items();
+        void on_connected();
+        //void on_couldntConnect(AP_ConnectionStatus connection_status);
         
-        static void on_location_checked(int64_t location_id);
-        static void on_deathlink_recieved() { }; // TODO: implement me
-        static void on_location_scouted(std::vector<AP_NetworkItem> network_items);
+        void on_location_checked(int64_t location_id);
+        void on_deathlink_recieved() { }; // TODO: implement me
+        void on_location_scouted(const std::list<APClient::NetworkItem>& network_items);
 
         // callbacks
         std::function<void(const std::string&)> ItemRecievedCallback;

@@ -222,10 +222,10 @@ static std::queue<RandomizerCheck> randomizerQueuedChecks;
 static RandomizerCheck randomizerQueuedCheck = RC_UNKNOWN_CHECK;
 static GetItemEntry randomizerQueuedItemEntry = GET_ITEM_NONE;
 
-void ArchipelagoOnRecieveItem(const std::string& ap_item_id) {
-    SPDLOG_TRACE("Recieve item handler called! {}", ap_item_id);
+void ArchipelagoOnRecieveItem(const std::string& ap_item_name) {
+    SPDLOG_TRACE("Recieve item handler called! {}", ap_item_name);
     randomizerQueuedChecks.push(RC_ARCHIPELAGO_RECIEVED_ITEM);
-    Rando::Context::GetInstance()->AddRecievedArchipelagoItem(ap_item_id);
+    Rando::Context::GetInstance()->AddRecievedArchipelagoItem(ap_item_name);
 }
 
 void RandomizerOnFlagSetHandler(int16_t flagType, int16_t flag) {

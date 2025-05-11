@@ -8,14 +8,13 @@
 #include "hint.h"
 #include "fishsanity.h"
 #include "trial.h"
+#include "archipelago.h"
 
 #include <memory>
 #include <array>
 #include <map>
 #include <nlohmann/json.hpp>
 
-// forward declarations
-struct AP_NetworkItem;
 
 /**
  * @brief Singleton for storing and accessing dynamic Randomizer-related data
@@ -128,7 +127,7 @@ class Context {
 
     void ParseArchipelago();
     void ParseArchipelagoSettings(const std::map<std::string, int>& slot_data);
-    void ParseArchipelagoItemsLocations(const std::vector<AP_NetworkItem>& slot_data);
+    void ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient::ApItem>& slot_data);
 
     /**
      * @brief Get the hash for the current seed.
