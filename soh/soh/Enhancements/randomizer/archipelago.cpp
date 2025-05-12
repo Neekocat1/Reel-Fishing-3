@@ -214,12 +214,16 @@ bool ArchipelagoClient::start_client() {
 }
 
 void ArchipelagoClient::start_location_scouts() {
-    std::set<int64_t> location_set = apclient->get_missing_locations();
-    std::list<int64_t> missing_location_list;
-    for(const int64_t loc_id : location_set) {
-        missing_location_list.emplace_back(loc_id);
+    std::set<int64_t> missing_loc_set = apclient->get_missing_locations();
+    std::set<int64_t> found_loc_set = apclient->get_checked_locations();
+    std::list<int64_t> location_list;
+    for(const int64_t loc_id : missing_loc_set) {
+        location_list.emplace_back(loc_id);
     }
-    apclient->LocationScouts(missing_location_list);
+    for(const int64_t loc_id : found_loc_set) {
+        location_list.emplace_back(loc_id);
+    }
+    apclient->LocationScouts(location_list);
 }
 
 void ArchipelagoClient::save_data() {
