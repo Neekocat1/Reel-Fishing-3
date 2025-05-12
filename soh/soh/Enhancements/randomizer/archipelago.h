@@ -1,13 +1,14 @@
 #pragma once
 #include "archipelago_settings_window.h"
 
-#include <apclient.hpp>
-
 #include "fixed_string.hpp"
 
 #include "randomizerTypes.h"
 #include "static_data.h"
 #include <vector>
+
+// forward declerations
+class APClient;
 
 
 namespace AP_Client_consts {
@@ -65,6 +66,10 @@ class ArchipelagoClient{
 
         void send_game_won();
 
+        void poll();
+
+        std::unique_ptr<APClient> apclient;
+
     protected:
         ArchipelagoClient();
 
@@ -72,7 +77,6 @@ class ArchipelagoClient{
         ArchipelagoClient(ArchipelagoClient &) = delete;
         void operator=(const ArchipelagoClient &) = delete;
         std::string uuid;
-        std::unique_ptr<APClient> apclient;
 
         static std::shared_ptr<ArchipelagoClient> instance; // is this even used?
         static bool initialized;
@@ -97,7 +101,7 @@ class ArchipelagoClient{
         
         void on_location_checked(int64_t location_id);
         void on_deathlink_recieved() { }; // TODO: implement me
-        void on_location_scouted(const std::list<APClient::NetworkItem>& network_items);
+        //void on_location_scouted(const std::list<APClient::NetworkItem>& network_items);
 
         // callbacks
         std::function<void(const std::string&)> ItemRecievedCallback;

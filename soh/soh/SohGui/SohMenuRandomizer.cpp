@@ -106,7 +106,7 @@ void SohMenu::AddMenuRandomizer() {
     AddWidget(path, "Popout Archipelago Development Window", WIDGET_WINDOW_BUTTON)
         .CVar(CVAR_WINDOW("ArchipelagoWindow"))
         .RaceDisable(false)
-        .WindowName("Archipelago Development")
+        .WindowName("Archipelago")
         .Options(WindowButtonOptions().Tooltip("Enables the Archipelago development Window."));
 
     // Item Tracker

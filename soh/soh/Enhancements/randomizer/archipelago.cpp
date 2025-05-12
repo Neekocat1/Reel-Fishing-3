@@ -12,6 +12,7 @@
 #include "fixed_string.hpp"
 #include "randomizerTypes.h"
 #include "static_data.h"
+#include "../game-interactor/GameInteractor.h"
 
 //extern "C" {
 //    #include "include/z64item.h"
@@ -46,6 +47,9 @@ ArchipelagoClient::ArchipelagoClient() {
     CVarSetInteger("archipelago_connected", 0);
     strncpy(server_address, CVarGetString(apc::SETTING_ADDRESS, apc::DEFAULT_SERVER_NAME), apc::MAX_ADDRESS_LENGTH);
     strncpy(slot_name, CVarGetString(apc::SETTING_NAME, ""), apc::MAX_PLAYER_NAME_LENGHT);
+
+    // call poll every frame
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([](){ArchipelagoClient::getInstance().poll();});
 }
 
 ArchipelagoClient& ArchipelagoClient::getInstance() {
@@ -275,9 +279,17 @@ void ArchipelagoClient::send_game_won() {
     }
 }
 
+void ArchipelagoClient::poll() {
+    if(apclient == nullptr) {
+        return;
+    }
+    
+    apclient->poll();
+}
+
 const std::string& ArchipelagoClient::get_slot_name() const {
     if(apclient == NULL) {
-        return;
+        return "";
     }
 
     return apclient->get_slot();
@@ -316,16 +328,36 @@ void ArchipelagoWindow::ArchipelagoDrawConnectPage() {
         
     ImGui::SameLine();
     ImGui::Text(connected_text);
-    //ArchipelagoDrawConnectPageAP_ConnectionStatus con_status = AP_GetConnectionStatus();
-    //if(con_status == AP_ConnectionStatus::Connected) {
-    //    strncpy(connected_text, "Connected!", 25);
-    //} else if(con_status == AP_ConnectionStatus::Authenticated) {
-    //    strncpy(connected_text, "Authenticated!", 25);
-    //}
-    //else {
-    //    strncpy(connected_text, "Not Connected", 25);
-    //}
     
+    APClient::State con_state = APClient::State::DISCONNECTED;
+
+    if(AP_client.apclient) {
+        con_state = AP_client.apclient->get_state();
+    }
+
+    switch (con_state) {
+        case APClient::State::DISCONNECTED: {
+            strncpy(connected_text, "Disconnected!", 25);
+            break;
+        }
+        case APClient::State::SOCKET_CONNECTING: {
+            strncpy(connected_text, "Socket Connecting!", 25);
+            break;
+        }
+        case APClient::State::SOCKET_CONNECTED: {
+            strncpy(connected_text, "Socket Connected!", 25);
+            break;
+        }
+        case APClient::State::ROOM_INFO: {
+            strncpy(connected_text, "Room info Recieved!", 25);
+            break;
+        }
+        case APClient::State::SLOT_CONNECTED: {
+            strncpy(connected_text, "Slot Connected!", 25);
+            break;
+        }
+    };
+
     if(ImGui::Button("scout")) {
         AP_client.start_location_scouts();
     }
