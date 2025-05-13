@@ -312,8 +312,7 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
     } else {
         RandomizerGet vanillaRandomizerGet = Rando::StaticData::GetLocation(rc)->GetVanillaItem();
         GetItemID vanillaItem = (GetItemID)Rando::StaticData::RetrieveItem(vanillaRandomizerGet).GetItemID();
-        GetItemEntry getItemEntry =
-            Rando::Context::GetInstance()->GetFinalGIEntry(rc, true, (GetItemID)vanillaRandomizerGet);
+        getItemEntry = Rando::Context::GetInstance()->GetFinalGIEntry(rc, true, (GetItemID)vanillaRandomizerGet);
     }
     SPDLOG_TRACE("RC found!");
 

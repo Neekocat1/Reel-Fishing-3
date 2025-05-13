@@ -485,15 +485,13 @@ void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient
     
     // init the item table with regular items first
     for(int rc = 1; rc <= RC_MAX; rc++) {
-        itemLocationTable[rc].SetPlacedItem(StaticData::GetLocation(static_cast<RandomizerCheck>(rc))->GetVanillaItem());
+        // This may not even be needed
+        const RandomizerGet vanillaItem = StaticData::GetLocation(static_cast<RandomizerCheck>(rc))->GetVanillaItem();
+        itemLocationTable[rc].SetPlacedItem(vanillaItem);
     }
 
     for(const ArchipelagoClient::ApItem& ap_item: scouted_items) {
         const RandomizerCheck rc = StaticData::APcheckToSoh.find(ap_item.locationName)->second;
-        
-        if(rc == RC_KF_MIDOS_TOP_RIGHT_CHEST) {
-            continue;
-        }
 
         if(SlotName == ap_item.playerName) {
             // our item
