@@ -1,8 +1,6 @@
 #pragma once
 #include "archipelago_settings_window.h"
 
-#include "fixed_string.hpp"
-
 #include "randomizerTypes.h"
 #include "static_data.h"
 #include <vector>
@@ -20,7 +18,7 @@ namespace AP_Client_consts {
     static constexpr char const* SETTING_ADDRESS = "AP_server_address";
     static constexpr char const* SETTING_NAME = "AP_slot_name";
 
-    static constexpr char const* AP_GAME_NAME = "Ocarina of Time";
+    static constexpr char const* AP_GAME_NAME = "Ocarina of Time (SoH)";
 }
 
 class ArchipelagoClient{
@@ -48,10 +46,6 @@ class ArchipelagoClient{
         char* get_password_buff();
         const std::map<std::string, int>& get_slot_data();
         const std::vector<ApItem>& get_scouted_items();
-
-        void add_slot_data(std::string_view key, int id);
-        
-        //void add_slot_data(std::string_view key, int id);
 
         bool isConnected();
         void check_location(RandomizerCheck SoH_check_id);
@@ -90,18 +84,14 @@ class ArchipelagoClient{
         std::map<std::string, int> slot_data;
         std::set<int64_t> locations;
         std::vector<ApItem> scouted_items;
-
-        //void registerSlotCallbacks();
         
         void save_data();
 
         // callback functions
         void on_connected();
-        //void on_couldntConnect(AP_ConnectionStatus connection_status);
         
         void on_location_checked(int64_t location_id);
         void on_deathlink_recieved() { }; // TODO: implement me
-        //void on_location_scouted(const std::list<APClient::NetworkItem>& network_items);
 
         // callbacks
         std::function<void(const std::string&)> ItemRecievedCallback;

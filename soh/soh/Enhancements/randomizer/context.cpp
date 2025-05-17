@@ -358,8 +358,9 @@ GetItemEntry Context::GetArchipelagoGIEntry() {
     }
 
     // get the first item from the archipelago queue
-    std::string_view recieved_ap_item = mAPrecieveQueue.front();
-    RandomizerGet item_id = StaticData::APitemToSoh[recieved_ap_item];
+    std::string recieved_ap_item = mAPrecieveQueue.front();
+    RandomizerGet item_id = StaticData::itemNameToEnum[recieved_ap_item];
+    //RandomizerGet item_id = StaticData::APitemToSoh[recieved_ap_item];
     assert(item_id != RG_NONE);
 
     Item& item = StaticData::RetrieveItem(item_id);
@@ -491,12 +492,14 @@ void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient
     }
 
     for(const ArchipelagoClient::ApItem& ap_item: scouted_items) {
-        const RandomizerCheck rc = StaticData::APcheckToSoh.find(ap_item.locationName)->second;
+        //const RandomizerCheck rc = StaticData::APcheckToSoh.find(ap_item.locationName)->second;
+        const RandomizerCheck rc = StaticData::locationNameToEnum[ap_item.locationName];
 
         if(SlotName == ap_item.playerName) {
             // our item
             SPDLOG_TRACE("Populated item {} at location {}", ap_item.itemName, ap_item.locationName);
-            const RandomizerGet item = StaticData::APitemToSoh.find(ap_item.itemName)->second;
+            const RandomizerGet item = StaticData::itemNameToEnum[ap_item.itemName];
+            //const RandomizerGet item = StaticData::APitemToSoh.find(ap_item.itemName)->second;
             itemLocationTable[rc].SetPlacedItem(item);
         } else {
             // other player item
