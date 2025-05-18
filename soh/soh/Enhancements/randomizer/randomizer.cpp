@@ -38,7 +38,7 @@
 #include "soh/util.h"
 #include "fishsanity.h"
 #include "randomizerTypes.h"
-#include "archipelago.h"
+#include "soh/Network/Archipelago/Archipelago.h"
 #include "soh/Notification/Notification.h"
 
 extern std::map<RandomizerCheckArea, std::string> rcAreaNames;

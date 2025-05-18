@@ -27,13 +27,13 @@
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/Presets/Presets.h"
 #include "soh/resource/type/Skeleton.h"
-#include "libultraship/libultraship.h"
 
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/cosmetics/authenticGfxPatches.h"
 #include "soh/Enhancements/debugger/MessageViewer.h"
 #include "soh/Notification/Notification.h"
 #include "soh/Enhancements/TimeDisplay/TimeDisplay.h"
+#include "soh/Network/Archipelago/ArchipelagoSettingsWindow.h"
 
 namespace SohGui {
 
@@ -94,7 +94,7 @@ std::shared_ptr<ItemTrackerSettingsWindow> mItemTrackerSettingsWindow;
 std::shared_ptr<ItemTrackerWindow> mItemTrackerWindow;
 std::shared_ptr<TimeSplitWindow> mTimeSplitWindow;
 std::shared_ptr<PlandomizerWindow> mPlandomizerWindow;
-std::shared_ptr<ArchipelagoWindow> mArchipelagoWindow;
+std::shared_ptr<ArchipelagoSettingsWindow> mArchipelagoSettingsWindow;
 std::shared_ptr<RandomizerSettingsWindow> mRandomizerSettingsWindow;
 std::shared_ptr<SohModalWindow> mModalWindow;
 std::shared_ptr<Notification::Window> mNotificationWindow;
@@ -196,9 +196,9 @@ void SetupGuiElements() {
     mPlandomizerWindow =
         std::make_shared<PlandomizerWindow>(CVAR_WINDOW("PlandomizerEditor"), "Plandomizer Editor", ImVec2(850, 760));
     gui->AddGuiWindow(mPlandomizerWindow);
-    mArchipelagoWindow = 
-        std::make_shared<ArchipelagoWindow>(CVAR_WINDOW("ArchipelagoWindow"), "Archipelago", ImVec2(850, 760));
-    gui->AddGuiWindow(mArchipelagoWindow);
+    mArchipelagoSettingsWindow = 
+        std::make_shared<ArchipelagoSettingsWindow>(CVAR_WINDOW("ArchipelagoSettingsWindow"), "Archipelago", ImVec2(850, 760));
+    gui->AddGuiWindow(mArchipelagoSettingsWindow);
     mModalWindow = std::make_shared<SohModalWindow>(CVAR_WINDOW("ModalWindow"), "Modal Window");
     gui->AddGuiWindow(mModalWindow);
     mModalWindow->Show();
@@ -241,7 +241,7 @@ void Destroy() {
     mInputViewerSettings = nullptr;
     mTimeSplitWindow = nullptr;
     mPlandomizerWindow = nullptr;
-    mArchipelagoWindow = nullptr;
+    mArchipelagoSettingsWindow = nullptr;
     mTimeDisplayWindow = nullptr;
 }
 

@@ -15,7 +15,7 @@
 #include "assets/textures/parameter_static/parameter_static.h"
 #include <soh/SohGui/SohGui.hpp>
 #include "soh/SohGui/UIWidgets.hpp"
-#include "soh/Enhancements/randomizer/archipelago.h"
+#include "soh/Network/Archipelago/Archipelago.h"
 
 extern "C" {
 extern SaveContext gSaveContext;

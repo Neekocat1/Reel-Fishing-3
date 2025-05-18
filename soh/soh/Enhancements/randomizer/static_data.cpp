@@ -1,7 +1,7 @@
 #include <unordered_map>
 #include "static_data.h"
 #include <spdlog/spdlog.h>
-#include "archipelago_mappings.h"
+#include "soh/Network/Archipelago/ArchipelagoMappings.h"
 
 namespace Rando {
 

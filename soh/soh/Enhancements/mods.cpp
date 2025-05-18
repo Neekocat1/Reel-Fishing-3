@@ -39,7 +39,7 @@
 #include "objects/object_link_child/object_link_child.h"
 #include "soh_assets.h"
 #include "kaleido.h"
-#include "soh/Enhancements/randomizer/archipelago.h"
+#include "soh/Network/Archipelago/Archipelago.h"
 
 extern "C" {
 #include <z64.h>

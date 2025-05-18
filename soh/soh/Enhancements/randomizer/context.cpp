@@ -12,7 +12,7 @@
 #include "macros.h"
 #include "3drando/hints.hpp"
 #include "../kaleido.h"
-#include "archipelago.h"
+#include "soh/Network/Archipelago/Archipelago.h"
 
 #include <fstream>
 #include <spdlog/spdlog.h>

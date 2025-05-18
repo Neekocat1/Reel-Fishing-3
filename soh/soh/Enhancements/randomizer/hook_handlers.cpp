@@ -16,7 +16,7 @@
 #include "soh/Notification/Notification.h"
 #include "soh/SaveManager.h"
 #include "soh/Enhancements/randomizer/ShuffleFairies.h"
-#include "archipelago.h"
+#include "soh/Network/Archipelago/Archipelago.h"
 
 extern "C" {
 #include "macros.h"

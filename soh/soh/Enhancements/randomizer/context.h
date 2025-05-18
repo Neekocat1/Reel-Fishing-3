@@ -8,7 +8,7 @@
 #include "hint.h"
 #include "fishsanity.h"
 #include "trial.h"
-#include "archipelago.h"
+#include "soh/Network/Archipelago/Archipelago.h"
 
 #include <memory>
 #include <array>

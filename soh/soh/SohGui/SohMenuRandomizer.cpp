@@ -103,11 +103,11 @@ void SohMenu::AddMenuRandomizer() {
     // Archipelago
     path.sidebarName = "Archipelago";
     AddSidebarEntry("Randomizer", path.sidebarName, 1);
-    AddWidget(path, "Popout Archipelago Development Window", WIDGET_WINDOW_BUTTON)
-        .CVar(CVAR_WINDOW("ArchipelagoWindow"))
+    AddWidget(path, "Popout Archipelago Settings Window", WIDGET_WINDOW_BUTTON)
+        .CVar(CVAR_WINDOW("ArchipelagoSettingsWindow"))
         .RaceDisable(false)
-        .WindowName("Archipelago")
-        .Options(WindowButtonOptions().Tooltip("Enables the Archipelago development Window."));
+        .WindowName("Archipelago Settings")
+        .Options(WindowButtonOptions().Tooltip("Enables the Archipelago Settings Window."));
 
     // Item Tracker
     path.sidebarName = "Item Tracker";

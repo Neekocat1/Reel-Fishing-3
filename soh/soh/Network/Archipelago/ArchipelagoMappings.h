@@ -3,7 +3,7 @@
 #include <string_view>
 #include <utility>
 
-#include "randomizerTypes.h"
+#include "soh/Enhancements/randomizer/randomizerTypes.h"
 
 constexpr std::pair<std::string_view, RandomizerGet> ap_item_mapping_pairs[] = {
     { "Bombs (5)", RG_BOMBS_5 },

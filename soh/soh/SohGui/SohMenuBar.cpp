@@ -41,7 +41,6 @@
 #include "soh/Enhancements/enemyrandomizer.h"
 #include "soh/Enhancements/timesplits/TimeSplits.h"
 #include "soh/Enhancements/randomizer/Plandomizer.h"
-#include "soh/Enhancements/randomizer/archipelago.h"
 #include "soh/Enhancements/TimeDisplay/TimeDisplay.h"
 
 // FA icons are kind of wonky, if they worked how I expected them to the "+ 2.0f" wouldn't be needed, but
