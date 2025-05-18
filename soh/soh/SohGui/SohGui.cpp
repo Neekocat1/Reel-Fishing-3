@@ -34,6 +34,7 @@
 #include "soh/Notification/Notification.h"
 #include "soh/Enhancements/TimeDisplay/TimeDisplay.h"
 #include "soh/Network/Archipelago/ArchipelagoSettingsWindow.h"
+#include "soh/Network/Archipelago/ArchipelagoConsoleWindow.h"
 
 namespace SohGui {
 
@@ -95,6 +96,7 @@ std::shared_ptr<ItemTrackerWindow> mItemTrackerWindow;
 std::shared_ptr<TimeSplitWindow> mTimeSplitWindow;
 std::shared_ptr<PlandomizerWindow> mPlandomizerWindow;
 std::shared_ptr<ArchipelagoSettingsWindow> mArchipelagoSettingsWindow;
+std::shared_ptr<ArchipelagoConsoleWindow> mArchipelagoConsoleWindow;
 std::shared_ptr<RandomizerSettingsWindow> mRandomizerSettingsWindow;
 std::shared_ptr<SohModalWindow> mModalWindow;
 std::shared_ptr<Notification::Window> mNotificationWindow;
@@ -199,6 +201,9 @@ void SetupGuiElements() {
     mArchipelagoSettingsWindow = std::make_shared<ArchipelagoSettingsWindow>(CVAR_WINDOW("ArchipelagoSettingsWindow"),
                                                                              "Archipelago Settings", ImVec2(850, 760));
     gui->AddGuiWindow(mArchipelagoSettingsWindow);
+    mArchipelagoConsoleWindow = std::make_shared<ArchipelagoConsoleWindow>(CVAR_WINDOW("ArchipelagoConsoleWindow"),
+                                                                             "Archipelago Console", ImVec2(850, 760));
+    gui->AddGuiWindow(mArchipelagoConsoleWindow);
     mModalWindow = std::make_shared<SohModalWindow>(CVAR_WINDOW("ModalWindow"), "Modal Window");
     gui->AddGuiWindow(mModalWindow);
     mModalWindow->Show();
@@ -242,6 +247,7 @@ void Destroy() {
     mTimeSplitWindow = nullptr;
     mPlandomizerWindow = nullptr;
     mArchipelagoSettingsWindow = nullptr;
+    mArchipelagoConsoleWindow = nullptr;
     mTimeDisplayWindow = nullptr;
 }
 

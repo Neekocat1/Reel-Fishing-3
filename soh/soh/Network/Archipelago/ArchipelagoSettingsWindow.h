@@ -4,8 +4,6 @@
 
 #include <libultraship/libultraship.h>
 
-class ArchipelagoClient;
-
 class ArchipelagoSettingsWindow final : public Ship::GuiWindow {
   public:
     using GuiWindow::GuiWindow;

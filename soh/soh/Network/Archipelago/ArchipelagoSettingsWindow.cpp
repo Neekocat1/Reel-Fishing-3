@@ -3,6 +3,7 @@
 
 #include "soh/SohGui/UIWidgets.hpp"
 #include "soh/SohGui/SohGui.hpp"
+#include "soh/Network/Archipelago/ArchipelagoConsoleWindow.h"
 
 void ArchipelagoSettingsWindow::DrawElement() {
     ArchipelagoClient& AP_client = ArchipelagoClient::getInstance();
@@ -12,9 +13,9 @@ void ArchipelagoSettingsWindow::DrawElement() {
     ImGui::InputText("Password (leave blank for no password)", AP_client.get_password_buff(),
                      AP_Client_consts::MAX_PASSWORD_LENGTH, ImGuiInputTextFlags_Password);
 
-    static char connected_text[25] = "Disconnected";
     if (ImGui::Button("Connect")) {
         bool success = AP_client.start_client();
+        AddToArchipelagoConsole("Trying to connect...");
     }
 
     ImGui::SameLine();
