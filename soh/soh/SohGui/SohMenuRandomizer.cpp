@@ -100,15 +100,6 @@ void SohMenu::AddMenuRandomizer() {
         .WindowName("Plandomizer Editor")
         .Options(WindowButtonOptions().Tooltip("Enables the separate Randomizer Settings Window."));
 
-    // Archipelago
-    path.sidebarName = "Archipelago";
-    AddSidebarEntry("Randomizer", path.sidebarName, 1);
-    AddWidget(path, "Popout Archipelago Settings Window", WIDGET_WINDOW_BUTTON)
-        .CVar(CVAR_WINDOW("ArchipelagoSettings"))
-        .RaceDisable(false)
-        .WindowName("Archipelago Settings")
-        .Options(WindowButtonOptions().Tooltip("Enables the Archipelago Settings Window."));
-
     // Item Tracker
     path.sidebarName = "Item Tracker";
     AddSidebarEntry("Randomizer", path.sidebarName, 1);

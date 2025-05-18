@@ -15,8 +15,17 @@ void SohMenu::AddMenuNetwork() {
     // Add Network Menu
     AddMenuEntry("Network", CVAR_SETTING("Menu.NetworkSidebarSection"));
 
+    // Archipelago
+    WidgetPath path = { "Network", "Archipelago", SECTION_COLUMN_1 };
+    AddSidebarEntry("Network", path.sidebarName, 1);
+    AddWidget(path, "Popout Archipelago Settings Window", WIDGET_WINDOW_BUTTON)
+        .CVar(CVAR_WINDOW("ArchipelagoSettings"))
+        .RaceDisable(false)
+        .WindowName("Archipelago Settings")
+        .Options(WindowButtonOptions().Tooltip("Enables the Archipelago Settings Window."));
+
     // Sail
-    WidgetPath path = { "Network", "Sail", SECTION_COLUMN_1 };
+    path.sidebarName = "Sail";
     AddSidebarEntry("Network", path.sidebarName, 3);
 
     AddWidget(path,

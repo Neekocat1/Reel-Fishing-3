@@ -186,7 +186,7 @@ const std::vector<ArchipelagoClient::ApItem>& ArchipelagoClient::get_scouted_ite
 
 const char* ArchipelagoClient::get_connection_status() {
     if (!apclient) {
-        return "No status available";
+        return "";
     }
 
     APClient::State clientStatus = apclient->get_state();
@@ -194,25 +194,20 @@ const char* ArchipelagoClient::get_connection_status() {
     switch (clientStatus) { 
         case APClient::State::DISCONNECTED: {
             return "Disconnected!";
-            break;
         }
         case APClient::State::SOCKET_CONNECTING: {
             return "Socket Connecting!";
-            break;
         }
         case APClient::State::SOCKET_CONNECTED: {
             return "Socket Connected!";
-            break;
         }
         case APClient::State::ROOM_INFO: {
             return "Room info Recieved!";
-            break;
         }
         case APClient::State::SLOT_CONNECTED: {
             return "Slot Connected!";
-            break;
         }
         default:
-            return "Unknown Status";
+            return "";
     }
 }
