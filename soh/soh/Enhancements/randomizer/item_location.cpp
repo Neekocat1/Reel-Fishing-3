@@ -133,6 +133,8 @@ bool ItemLocation::HasObtained() const {
 }
 
 void ItemLocation::SetCheckStatus(RandomizerCheckStatus status_) {
+    if(rc == RC_ARCHIPELAGO_RECIEVED_ITEM)  // never count the AP recieve trigger as 'collected'
+        return;
     status = status_;
 }
 

@@ -1030,6 +1030,7 @@ void DrawSeedHashSprites(FileChooseContext* this) {
 u8 generating;
 int retries = 0;
 bool fileSelectSpoilerFileLoaded = false;
+bool fileSelectarchipelagoloaded = false;
 
 void FileChoose_UpdateRandomizer() {
     if (CVarGetInteger(CVAR_GENERAL("RandoGenerating"), 0) != 0 && generating == 0) {
@@ -1072,6 +1073,13 @@ void FileChoose_UpdateRandomizer() {
             CVarGetInteger(CVAR_RANDOMIZER_SETTING("DontGenerateSpoiler"), 0)) {
             remove(fileLoc);
         }
+    }
+
+    if (CVarGetInteger("archipelago_connected", 0) != 0
+        && !fileSelectarchipelagoloaded) {
+            parse_archipelago();
+            fileSelectarchipelagoloaded = true;
+            Audio_PlayFanfare(NA_BGM_HORSE_GOAL);
     }
 }
 
@@ -3931,6 +3939,7 @@ void FileChoose_Init(GameState* thisx) {
     this->questType[1] = MIN_QUEST;
     this->questType[2] = MIN_QUEST;
     fileSelectSpoilerFileLoaded = false;
+    fileSelectarchipelagoloaded = false;
     CVarSetInteger(CVAR_GENERAL("OnFileSelectNameEntry"), 0);
 
     SREG(30) = 1;

@@ -94,6 +94,7 @@ std::shared_ptr<ItemTrackerSettingsWindow> mItemTrackerSettingsWindow;
 std::shared_ptr<ItemTrackerWindow> mItemTrackerWindow;
 std::shared_ptr<TimeSplitWindow> mTimeSplitWindow;
 std::shared_ptr<PlandomizerWindow> mPlandomizerWindow;
+std::shared_ptr<ArchipelagoWindow> mArchipelagoWindow;
 std::shared_ptr<RandomizerSettingsWindow> mRandomizerSettingsWindow;
 std::shared_ptr<SohModalWindow> mModalWindow;
 std::shared_ptr<Notification::Window> mNotificationWindow;
@@ -195,6 +196,9 @@ void SetupGuiElements() {
     mPlandomizerWindow =
         std::make_shared<PlandomizerWindow>(CVAR_WINDOW("PlandomizerEditor"), "Plandomizer Editor", ImVec2(850, 760));
     gui->AddGuiWindow(mPlandomizerWindow);
+    mArchipelagoWindow = 
+        std::make_shared<ArchipelagoWindow>(CVAR_WINDOW("ArchipelagoWindow"), "Archipelago", ImVec2(850, 760));
+    gui->AddGuiWindow(mArchipelagoWindow);
     mModalWindow = std::make_shared<SohModalWindow>(CVAR_WINDOW("ModalWindow"), "Modal Window");
     gui->AddGuiWindow(mModalWindow);
     mModalWindow->Show();
@@ -237,6 +241,7 @@ void Destroy() {
     mInputViewerSettings = nullptr;
     mTimeSplitWindow = nullptr;
     mPlandomizerWindow = nullptr;
+    mArchipelagoWindow = nullptr;
     mTimeDisplayWindow = nullptr;
 }
 

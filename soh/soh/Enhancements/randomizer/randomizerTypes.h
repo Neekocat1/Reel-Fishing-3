@@ -14,6 +14,7 @@
 typedef enum {
     MOD_NONE,
     MOD_RANDOMIZER,
+    MOD_ARCHIPELAGO // no actually used yet i think
 } ModIndex;
 typedef enum {
     TABLE_VANILLA = MOD_NONE,
@@ -3472,6 +3473,7 @@ typedef enum {
     RC_DEKU_TREE_QUEEN_GOHMA_GRASS_8,
     // End Grass
 
+    RC_ARCHIPELAGO_RECIEVED_ITEM,
     RC_MAX
 } RandomizerCheck;
 
@@ -4019,6 +4021,7 @@ typedef enum {
     RG_BACK_TOWER_KEY,
     RG_HYLIA_LAB_KEY,
     RG_FISHING_HOLE_KEY,
+    RG_ARCHIPELAGO_ITEM,
     // Logic Only
     RG_DISTANT_SCARECROW,
     RG_STICKS,

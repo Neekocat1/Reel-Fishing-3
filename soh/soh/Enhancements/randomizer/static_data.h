@@ -78,6 +78,10 @@ class StaticData {
     static std::unordered_map<u32, RandomizerHint> grottoChestParamsToHint;
     static std::array<HintText, RHT_MAX> hintTextTable;
 
+    static std::unordered_map<std::string_view, RandomizerGet> APitemToSoh;
+    static std::unordered_map<std::string_view, RandomizerCheck> APcheckToSoh;
+    static std::unordered_map<RandomizerCheck, std::string_view> SohCheckToAP;
+    static std::unordered_map<std::string_view, std::string_view> APsettingToHoSsetting;
     StaticData();
     ~StaticData();
 };

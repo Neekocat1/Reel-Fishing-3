@@ -106,6 +106,8 @@ class Settings {
      * @param spoilerFileJson
      */
     void ParseJson(nlohmann::json spoilerFileJson);
+
+    void ParseArchipelago(const std::map<std::string, int>& slot_data);
     std::map<RandomizerArea, std::vector<RandomizerTrick>> mTricksByArea = {};
 
     /**

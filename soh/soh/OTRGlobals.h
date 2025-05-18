@@ -166,6 +166,7 @@ void CheckTracker_OnMessageClose();
 
 GetItemID RetrieveGetItemIDFromItemID(ItemID itemID);
 RandomizerGet RetrieveRandomizerGetFromItemID(ItemID itemID);
+void parse_archipelago();
 #endif
 
 #ifdef __cplusplus

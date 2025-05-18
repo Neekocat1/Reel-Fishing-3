@@ -16,6 +16,7 @@
 #include "soh/Notification/Notification.h"
 #include "soh/SaveManager.h"
 #include "soh/Enhancements/randomizer/ShuffleFairies.h"
+#include "archipelago.h"
 
 extern "C" {
 #include "macros.h"
@@ -221,6 +222,12 @@ static std::queue<RandomizerCheck> randomizerQueuedChecks;
 static RandomizerCheck randomizerQueuedCheck = RC_UNKNOWN_CHECK;
 static GetItemEntry randomizerQueuedItemEntry = GET_ITEM_NONE;
 
+void ArchipelagoOnRecieveItem(const std::string& ap_item_name) {
+    SPDLOG_TRACE("Recieve item handler called! {}", ap_item_name);
+    randomizerQueuedChecks.push(RC_ARCHIPELAGO_RECIEVED_ITEM);
+    Rando::Context::GetInstance()->AddRecievedArchipelagoItem(ap_item_name);
+}
+
 void RandomizerOnFlagSetHandler(int16_t flagType, int16_t flag) {
     // Consume adult trade items
     if (RAND_GET_OPTION(RSK_SHUFFLE_ADULT_TRADE) && flagType == FLAG_RANDOMIZER_INF) {
@@ -296,12 +303,18 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
         return;
     }
 
+    GetItemEntry getItemEntry;
     RandomizerCheck rc = randomizerQueuedChecks.front();
     auto loc = Rando::Context::GetInstance()->GetItemLocation(rc);
-    RandomizerGet vanillaRandomizerGet = Rando::StaticData::GetLocation(rc)->GetVanillaItem();
-    GetItemID vanillaItem = (GetItemID)Rando::StaticData::RetrieveItem(vanillaRandomizerGet).GetItemID();
-    GetItemEntry getItemEntry =
-        Rando::Context::GetInstance()->GetFinalGIEntry(rc, true, (GetItemID)vanillaRandomizerGet);
+
+    if(rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
+        getItemEntry = Rando::Context::GetInstance()->GetArchipelagoGIEntry();
+    } else {
+        RandomizerGet vanillaRandomizerGet = Rando::StaticData::GetLocation(rc)->GetVanillaItem();
+        GetItemID vanillaItem = (GetItemID)Rando::StaticData::RetrieveItem(vanillaRandomizerGet).GetItemID();
+        getItemEntry = Rando::Context::GetInstance()->GetFinalGIEntry(rc, true, (GetItemID)vanillaRandomizerGet);
+    }
+    SPDLOG_TRACE("RC found!");
 
     if (loc->HasObtained()) {
         SPDLOG_INFO("RC {} already obtained, skipping", static_cast<uint32_t>(rc));
@@ -360,11 +373,21 @@ void RandomizerOnItemReceiveHandler(GetItemEntry receivedItemEntry) {
     if (randomizerQueuedCheck == RC_UNKNOWN_CHECK)
         return;
 
+    SPDLOG_TRACE("Dropped into recieve handler!");
+
     auto loc = Rando::Context::GetInstance()->GetItemLocation(randomizerQueuedCheck);
     if (randomizerQueuedItemEntry.modIndex == receivedItemEntry.modIndex &&
         randomizerQueuedItemEntry.itemId == receivedItemEntry.itemId) {
         SPDLOG_INFO("Item received mod {} item {} from RC {}", receivedItemEntry.modIndex, receivedItemEntry.itemId,
                     static_cast<uint32_t>(randomizerQueuedCheck));
+
+        // todo maybe move to seperate function
+        // let arhipelago know we got this check
+        if(randomizerQueuedCheck != RC_ARCHIPELAGO_RECIEVED_ITEM) {
+            ArchipelagoClient& ap_client = ArchipelagoClient::getInstance();
+            ap_client.check_location(randomizerQueuedCheck);
+        }
+
         loc->SetCheckStatus(RCSHOW_COLLECTED);
         CheckTracker::SpoilAreaFromCheck(randomizerQueuedCheck);
         CheckTracker::RecalculateAllAreaTotals();
@@ -2423,6 +2446,8 @@ void RandomizerRegisterHooks() {
         GameInteractor::Instance->UnregisterGameHook<GameInteractor::OnVanillaBehavior>(
             shuffleFreestandingOnVanillaBehaviorHook);
 
+        ArchipelagoClient::getInstance().removeItemRecievedCallback(ArchipelagoOnRecieveItem);
+
         onFlagSetHook = 0;
         onSceneFlagSetHook = 0;
         onPlayerUpdateForRCQueueHook = 0;
@@ -2537,5 +2562,7 @@ void RandomizerRegisterHooks() {
         if (RAND_GET_OPTION(RSK_SHUFFLE_FAIRIES)) {
             ShuffleFairies_RegisterHooks();
         }
+
+        ArchipelagoClient::getInstance().addItemRecievedCallback(ArchipelagoOnRecieveItem);
     });
 }

@@ -39,6 +39,7 @@
 #include "objects/object_link_child/object_link_child.h"
 #include "soh_assets.h"
 #include "kaleido.h"
+#include "soh/Enhancements/randomizer/archipelago.h"
 
 extern "C" {
 #include <z64.h>
@@ -782,6 +783,7 @@ void RegisterBossDefeatTimestamps() {
             case ACTOR_BOSS_GANON2:
                 gSaveContext.ship.stats.itemTimestamp[TIMESTAMP_DEFEAT_GANON] = GAMEPLAYSTAT_TOTAL_TIME;
                 gSaveContext.ship.stats.gameComplete = true;
+                ArchipelagoClient::getInstance().send_game_won();
                 break;
             case ACTOR_BOSS_GANONDROF:
                 gSaveContext.ship.stats.itemTimestamp[TIMESTAMP_DEFEAT_PHANTOM_GANON] = GAMEPLAYSTAT_TOTAL_TIME;

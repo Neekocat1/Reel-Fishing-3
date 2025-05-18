@@ -1,6 +1,7 @@
 #include <unordered_map>
 #include "static_data.h"
 #include <spdlog/spdlog.h>
+#include "archipelago_mappings.h"
 
 namespace Rando {
 
@@ -304,4 +305,110 @@ std::unordered_map<u32, RandomizerHint> StaticData::grottoChestParamsToHint{
 };
 
 std::array<HintText, RHT_MAX> StaticData::hintTextTable = {};
+
+const std::unordered_map<std::string_view, RandomizerGet>generate_APitemToSoh_mapping() {
+    std::unordered_map<std::string_view, RandomizerGet> mapping;
+    for(const auto& pairing : ap_item_mapping_pairs) {
+        mapping[pairing.first] = pairing.second;
+    }
+    return mapping;
+}
+
+const std::unordered_map<std::string_view, RandomizerCheck>generate_APcheckToSoh_mapping() {
+    std::unordered_map<std::string_view, RandomizerCheck> mapping;
+    for(const auto& pairing : ap_check_mapping_pairs) {
+        mapping[pairing.first] = pairing.second;
+    }
+    return mapping;
+}
+
+const std::unordered_map<RandomizerCheck, std::string_view>generate_SohcheckToAP_mapping() {
+    std::unordered_map<RandomizerCheck, std::string_view> mapping;
+    for(const auto& pairing : ap_check_mapping_pairs) {
+        mapping[pairing.second] = pairing.first;
+    }
+    return mapping;
+}
+
+std::unordered_map<std::string_view, RandomizerGet> StaticData::APitemToSoh = generate_APitemToSoh_mapping();
+std::unordered_map<std::string_view, RandomizerCheck> StaticData::APcheckToSoh = generate_APcheckToSoh_mapping();
+std::unordered_map<RandomizerCheck, std::string_view> StaticData::SohCheckToAP = generate_SohcheckToAP_mapping();
+std::unordered_map<std::string_view, std::string_view> StaticData::APsettingToHoSsetting = {
+  { "open_forest", "Closed Forest" },
+  { "open_kakoriko", "Kakariko Gate" },
+  { "open_door_of_time", "Door of Time" },
+  { "zora_fountain", "Zora's Fountain" },
+  { "gerudo_fortress", "Fortress Carpenters" },
+  { "bridge", "Rainbow Bridge" },    // TODO underlying options may not overlap
+  { "bridge_stones", "Bridge Stone Count" },
+  { "bridge_medallions", "Bridge Medallion Count" },
+  { "bridge_rewards", "Bridge Reward Count" },
+  { "bridge_tokens", "Bridge Token Count" },
+  { "bridge_hearts", "NOT_SUPPORTED" },
+  { "shuffle_ganon_bosskey", "Ganon's Boss Key" },
+  { "ganon_bosskey_medallions", "GCBK Medallion Count" },
+  { "ganon_bosskey_stones", "GCBK Stone Count" },
+  { "ganon_bosskey_rewards", "GCBK Reward Count" },
+  { "ganon_bosskey_tokens", "GCBK Token Count" },
+  { "ganon_bosskey_hearts", "NOT_SUPPORTED" },
+  { "trials", "Ganon's Trials Count" },
+  { "triforce_hunt", "Triforce Hunt" },
+  { "triforce_goal", "Triforce Hunt Required Pieces" },
+  { "extra_triforce_percentage", "CUSTOM_IMPLEMENTATION" },   // TODO calc "Triforce Hunt Required Pieces" from percentage, Actually not really required to make the game run I think
+  { "shopsanity", "Shop Shuffle" },
+  { "shop_slots", "Shops Item Count" },
+  { "shopsanity_prices", "Shops Prices" },    // Item Prizes not in slot data, anything above starting wallet will be lowered to max 99
+  { "tokensanity", "Token Shuffle" },
+  { "dungeon_shortcuts", "NOT_SUPPORTED" },  // TODO could be implemented manually through
+  { "mq_dungeons_mode", "NOT_SUPORTED" },   // Not sure if we can figure this one out
+  { "mq_dungeons_count", "NOT_SUPPORTED" },  // Slot data doesn't expose the master quest dungeons used
+  { "shuffle_interior_entrances", "NOT_SUPPORTED" },   // Mapping not in Slot Data
+  { "shuffle_grotto_entrances", "NOT_SUPPORTED" },     // Mapping not in Slot Data
+  { "shuffle_dungeon_entrances", "NOT_SUPPORTED" },    // Mapping not in Slot Data
+  { "shuffle_overworld_entrances", "NOT_SUPPORTED" },  // Mapping not in Slot Data
+  { "shuffle_bosses", "NOT_SUPPORTED" },               // Mapping not in Slot Data
+  { "key_rings", "Key Rings" },   // slot data not exposed when set to random, however may not matter if you just can just recieve the key ring, may only be needed for logic
+  { "enhance_map_compass", "NOT_SUPPORTED" },  // Can't find it in rando settings, may be a qol setting
+  { "shuffle_mapcompass", "Maps/Compasses" },  // NOT REQUIRED
+  { "shuffle_smallkeys", "Small Key Shuffle"  }, // NOT REQUIRED
+  { "shuffle_hideoutkeys", "Gerudo Fortress Keys"  },  // NOT REQUIRED
+  { "shuffle_bosskeys", "Boss Key Shuffle" },  // NOT REQUIRED
+  { "logic_rules", "Logic" },  // NOT REQUIRED
+  { "logic_no_night_tokens_without_suns_song", "Night Skulltula's Expect Sun's Song" },  // NOT REQUIRED
+  { "warp_songs", "NOT_SUPORTED" },  // slot data not exposed
+  { "shuffle_song_items", "Shuffle Songs" }, // NOT REQUIRED
+  { "shuffle_medigoron_carpet_salesman", "NOT_SUPPORTED" },  // NOT REQURIED, , Should set "Shuffle Merchants" option (This option also sets granny)
+  { "shuffle_frog_song_rupees", "Shuffle Frog Song Rupees" },  // NOT REQUIRED
+  { "shuffle_scrubs", "Scrubs Shuffle" },  // NOT REQUIRED
+  { "shuffle_child_trade", "NOT_SUPPORTED" },  // NOT REQUIRED
+  { "shuffle_freestanding_items", "NOT_SUPPORTED" }, // NOT REQUIRED
+  { "shuffle_pots", "Shuffle Pots" },    // NOT REQUIRED
+  { "shuffle_crates", "MAYBE_SUPPORTED_TODO" }, // Maybe Requred, TODO TEST
+  { "shuffle_cows", "Shuffle Cows" },  // NOT REQUIRED
+  { "shuffle_beehives", "Shuffle Beehives" },  // NOT REQUIRED
+  { "shuffle_kokiri_sword", "Shuffle Kokiri Sword" }, // NOT REQUIRED
+  { "shuffle_ocarinas", "Shuffle Ocarinas" },         // NOT REQUIRED 
+  { "shuffle_gerudo_card", "Shuffle Gerudo Membership Card" },  //NOT REQUIRED
+  { "shuffle_beans", "NOT_SUPPORTED" },  // NOT REQUIRED, Should set "Shuffle Merchants" option (This option also sets granny)
+  { "starting_age", "Selected Starting Age" },    // should this also set "Seelcted Starting Age"
+  { "bombchus_in_logic", "NOT_SUPPORTED" },   // NOT REQUIRED, Probably Implemented as a trick
+  { "spawn_positions", "NOT_SUPPORTED" },  
+  { "owl_drops", "NOT_SUPPORTRED" },
+  { "no_epona_race", "Skip Epona Race" },
+  { "skip_some_minigame_phases", "NOT_IMPLEMENTED" },  // should be under quality of life options
+  { "complete_mask_quest", "Complete Mask Quest" },
+  { "free_scarecrow", "Skip Scarecrow's Song" },
+  { "plant_beans", "NOT_SUPPORTRED" },
+  { "chicken_count", "Cuccos to return" },
+  { "big_poe_count", "Big Poe Target Count" },
+  { "fae_torch_count", "NOT_SUPPORTED" },
+  { "blue_fire_arrows", "Blue Fire Arrows" },
+  { "damage_multiplier", "Damage Multiplier" },
+  { "deadly_bonks", "NOT_SUPPORTED" },
+  { "starting_tod", "NOT_SUPPORTED" },
+  { "junk_ice_traps", "Ice Traps" }, // NOT REQUIRED
+  { "start_with_consumables", "CUSTOM_IMPLEMENTATION" }, // might be able to just set "Start with Stick Ammo" and "Start with Nut Ammo", TODO check starting consumables
+  { "adult_trade_start", "NOT_SUPPORTED" }
+};
+
 } // namespace Rando

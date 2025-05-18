@@ -12,6 +12,7 @@
 #include "macros.h"
 #include "3drando/hints.hpp"
 #include "../kaleido.h"
+#include "archipelago.h"
 
 #include <fstream>
 #include <spdlog/spdlog.h>
@@ -344,6 +345,31 @@ void Context::SetSpoilerLoaded(const bool spoilerLoaded) {
     mSpoilerLoaded = spoilerLoaded;
 }
 
+void Context::AddRecievedArchipelagoItem(const std::string& ap_item_id) {
+    mAPrecieveQueue.emplace(ap_item_id);
+    SPDLOG_TRACE("Item Pushed {}", ap_item_id);
+}
+
+GetItemEntry Context::GetArchipelagoGIEntry() {
+    SPDLOG_TRACE("Trying to get Item Entry");
+    if(mAPrecieveQueue.empty()) {
+        // something must have gone wrong here, just give a rupee
+        return ItemTableManager::Instance->RetrieveItemEntry(MOD_NONE, GI_HEART);
+    }
+
+    // get the first item from the archipelago queue
+    std::string recieved_ap_item = mAPrecieveQueue.front();
+    RandomizerGet item_id = StaticData::itemNameToEnum[recieved_ap_item];
+    //RandomizerGet item_id = StaticData::APitemToSoh[recieved_ap_item];
+    assert(item_id != RG_NONE);
+
+    Item& item = StaticData::RetrieveItem(item_id);
+    SPDLOG_TRACE("Found item! {}, {}", recieved_ap_item, (int)item_id);
+    GetItemEntry item_entry = item.GetGIEntry_Copy();
+    mAPrecieveQueue.pop();
+    return item_entry;      // todo: add custom text maybe?
+}
+
 GetItemEntry Context::GetFinalGIEntry(const RandomizerCheck rc, const bool checkObtainability,
                                       const GetItemID ogItemId) {
     const auto itemLoc = GetItemLocation(rc);
@@ -409,6 +435,19 @@ void Context::ParseSpoiler(const char* spoilerFileName) {
     } catch (...) { LUSLOG_ERROR("Failed to load Spoiler File: %s", spoilerFileName); }
 }
 
+void Context::ParseArchipelago() {
+    mSeedGenerated = false;
+    mSpoilerLoaded = false;
+
+    ArchipelagoClient& ap_client = ArchipelagoClient::getInstance();
+    Rando::Settings::GetInstance()->ParseArchipelago(ap_client.get_slot_data());
+    ParseArchipelagoItemsLocations(ap_client.get_scouted_items());
+
+    // lets see if counting AP_loaded as spoiler loaded does the trick
+    mSpoilerLoaded = true;
+    mSeedGenerated = false;
+}
+
 void Context::ParseHashIconIndexesJson(nlohmann::json spoilerFileJson) {
     nlohmann::json hashJson = spoilerFileJson["file_hash"];
     int index = 0;
@@ -419,6 +458,7 @@ void Context::ParseHashIconIndexesJson(nlohmann::json spoilerFileJson) {
 }
 
 void Context::ParseItemLocationsJson(nlohmann::json spoilerFileJson) {
+    // first fill all the items with their vanilla location
     nlohmann::json locationsJson = spoilerFileJson["locations"];
     for (auto it = locationsJson.begin(); it != locationsJson.end(); ++it) {
         RandomizerCheck rc = StaticData::locationNameToEnum[it.key()];
@@ -437,6 +477,37 @@ void Context::ParseItemLocationsJson(nlohmann::json spoilerFileJson) {
             }
         } else {
             itemLocationTable[rc].SetPlacedItem(StaticData::itemNameToEnum[it.value().get<std::string>()]);
+        }
+    }
+}
+
+void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient::ApItem>& scouted_items) {
+    const std::string SlotName = ArchipelagoClient::getInstance().get_slot_name();
+    
+    // init the item table with regular items first
+    for(int rc = 1; rc <= RC_MAX; rc++) {
+        // This may not even be needed
+        const RandomizerGet vanillaItem = StaticData::GetLocation(static_cast<RandomizerCheck>(rc))->GetVanillaItem();
+        itemLocationTable[rc].SetPlacedItem(vanillaItem);
+    }
+
+    for(const ArchipelagoClient::ApItem& ap_item: scouted_items) {
+        //const RandomizerCheck rc = StaticData::APcheckToSoh.find(ap_item.locationName)->second;
+        const RandomizerCheck rc = StaticData::locationNameToEnum[ap_item.locationName];
+
+        if(SlotName == ap_item.playerName) {
+            // our item
+            SPDLOG_TRACE("Populated item {} at location {}", ap_item.itemName, ap_item.locationName);
+            const RandomizerGet item = StaticData::itemNameToEnum[ap_item.itemName];
+            //const RandomizerGet item = StaticData::APitemToSoh.find(ap_item.itemName)->second;
+            itemLocationTable[rc].SetPlacedItem(item);
+        } else {
+            // other player item
+            itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM); 
+            // i'll have to figure out custom names at some point, this currently does nothing
+            //overrides[rc] = ItemOverride(rc, RG_DEKU_NUTS_5);
+            //std::string getText = ap_item.playerName + "'s " + ap_item.itemName;
+            //overrides[rc].SetTrickName(Text(getText, getText, getText));
         }
     }
 }

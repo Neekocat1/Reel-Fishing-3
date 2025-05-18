@@ -8,11 +8,13 @@
 #include "hint.h"
 #include "fishsanity.h"
 #include "trial.h"
+#include "archipelago.h"
 
 #include <memory>
 #include <array>
 #include <map>
 #include <nlohmann/json.hpp>
+
 
 /**
  * @brief Singleton for storing and accessing dynamic Randomizer-related data
@@ -105,6 +107,8 @@ class Context {
      */
     RandoOptionLACSCondition LACSCondition() const;
     GetItemEntry GetFinalGIEntry(RandomizerCheck rc, bool checkObtainability = true, GetItemID ogItemId = GI_NONE);
+    void AddRecievedArchipelagoItem(const std::string& ap_item_id);
+    GetItemEntry GetArchipelagoGIEntry();
     void ParseSpoiler(const char* spoilerFileName);
     void ParseHashIconIndexesJson(nlohmann::json spoilerFileJson);
     void ParseItemLocationsJson(nlohmann::json spoilerFileJson);
@@ -120,6 +124,10 @@ class Context {
     bool playthroughBeatable = false;
     bool allLocationsReachable = false;
     RandomizerArea GetAreaFromString(std::string str);
+
+    void ParseArchipelago();
+    void ParseArchipelagoSettings(const std::map<std::string, int>& slot_data);
+    void ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient::ApItem>& slot_data);
 
     /**
      * @brief Get the hash for the current seed.
@@ -181,5 +189,6 @@ class Context {
     std::string mHash;
     std::string mSeedString;
     uint32_t mFinalSeed = 0;
+    std::queue<std::string> mAPrecieveQueue = {};
 };
 } // namespace Rando

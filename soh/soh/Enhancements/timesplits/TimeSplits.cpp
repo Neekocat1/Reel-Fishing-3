@@ -15,6 +15,7 @@
 #include "assets/textures/parameter_static/parameter_static.h"
 #include <soh/SohGui/SohGui.hpp>
 #include "soh/SohGui/UIWidgets.hpp"
+#include "soh/Enhancements/randomizer/archipelago.h"
 
 extern "C" {
 extern SaveContext gSaveContext;
@@ -351,6 +352,7 @@ void HandleDragAndDrop(std::vector<SplitObject>& objectList, int targetIndex, co
 void TimeSplitCompleteSplits() {
     gSaveContext.ship.stats.itemTimestamp[TIMESTAMP_DEFEAT_GANON] = GAMEPLAYSTAT_TOTAL_TIME;
     gSaveContext.ship.stats.gameComplete = true;
+    ArchipelagoClient::getInstance().send_game_won();
 }
 
 void TimeSplitsSkipSplit(uint32_t index) {
