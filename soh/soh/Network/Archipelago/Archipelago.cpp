@@ -183,3 +183,36 @@ const std::map<std::string, int>& ArchipelagoClient::get_slot_data() {
 const std::vector<ArchipelagoClient::ApItem>& ArchipelagoClient::get_scouted_items() {
     return scouted_items;
 }
+
+const char* ArchipelagoClient::get_connection_status() {
+    if (!apclient) {
+        return "No status available";
+    }
+
+    APClient::State clientStatus = apclient->get_state();
+
+    switch (clientStatus) { 
+        case APClient::State::DISCONNECTED: {
+            return "Disconnected!";
+            break;
+        }
+        case APClient::State::SOCKET_CONNECTING: {
+            return "Socket Connecting!";
+            break;
+        }
+        case APClient::State::SOCKET_CONNECTED: {
+            return "Socket Connected!";
+            break;
+        }
+        case APClient::State::ROOM_INFO: {
+            return "Room info Recieved!";
+            break;
+        }
+        case APClient::State::SLOT_CONNECTED: {
+            return "Slot Connected!";
+            break;
+        }
+        default:
+            return "Unknown Status";
+    }
+}

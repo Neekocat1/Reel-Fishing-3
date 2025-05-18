@@ -1,7 +1,6 @@
 #include "ArchipelagoSettingsWindow.h"
 #include "Archipelago.h"
 
-#include <apclient.hpp>
 #include "soh/SohGui/UIWidgets.hpp"
 #include "soh/SohGui/SohGui.hpp"
 
@@ -19,36 +18,7 @@ void ArchipelagoSettingsWindow::DrawElement() {
     }
 
     ImGui::SameLine();
-    ImGui::Text(connected_text);
-
-    APClient::State con_state = APClient::State::DISCONNECTED;
-
-    if (AP_client.apclient) {
-        con_state = AP_client.apclient->get_state();
-    }
-
-    switch (con_state) {
-        case APClient::State::DISCONNECTED: {
-            strncpy(connected_text, "Disconnected!", 25);
-            break;
-        }
-        case APClient::State::SOCKET_CONNECTING: {
-            strncpy(connected_text, "Socket Connecting!", 25);
-            break;
-        }
-        case APClient::State::SOCKET_CONNECTED: {
-            strncpy(connected_text, "Socket Connected!", 25);
-            break;
-        }
-        case APClient::State::ROOM_INFO: {
-            strncpy(connected_text, "Room info Recieved!", 25);
-            break;
-        }
-        case APClient::State::SLOT_CONNECTED: {
-            strncpy(connected_text, "Slot Connected!", 25);
-            break;
-        }
-    };
+    ImGui::Text(ArchipelagoClient::getInstance().get_connection_status());
 
     if (ImGui::Button("scout")) {
         AP_client.start_location_scouts();

@@ -104,7 +104,7 @@ void SohMenu::AddMenuRandomizer() {
     path.sidebarName = "Archipelago";
     AddSidebarEntry("Randomizer", path.sidebarName, 1);
     AddWidget(path, "Popout Archipelago Settings Window", WIDGET_WINDOW_BUTTON)
-        .CVar(CVAR_WINDOW("ArchipelagoSettingsWindow"))
+        .CVar(CVAR_WINDOW("ArchipelagoSettings"))
         .RaceDisable(false)
         .WindowName("Archipelago Settings")
         .Options(WindowButtonOptions().Tooltip("Enables the Archipelago Settings Window."));

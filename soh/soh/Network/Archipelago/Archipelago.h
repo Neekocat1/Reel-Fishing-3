@@ -41,6 +41,7 @@ class ArchipelagoClient{
         char* get_server_address_buff();
         char* get_slot_name_buff();
         char* get_password_buff();
+        const char* get_connection_status();
         const std::map<std::string, int>& get_slot_data();
         const std::vector<ApItem>& get_scouted_items();
 

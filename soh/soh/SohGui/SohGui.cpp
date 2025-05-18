@@ -196,8 +196,8 @@ void SetupGuiElements() {
     mPlandomizerWindow =
         std::make_shared<PlandomizerWindow>(CVAR_WINDOW("PlandomizerEditor"), "Plandomizer Editor", ImVec2(850, 760));
     gui->AddGuiWindow(mPlandomizerWindow);
-    mArchipelagoSettingsWindow = 
-        std::make_shared<ArchipelagoSettingsWindow>(CVAR_WINDOW("ArchipelagoSettingsWindow"), "Archipelago", ImVec2(850, 760));
+    mArchipelagoSettingsWindow = std::make_shared<ArchipelagoSettingsWindow>(CVAR_WINDOW("ArchipelagoSettingsWindow"),
+                                                                             "Archipelago Settings", ImVec2(850, 760));
     gui->AddGuiWindow(mArchipelagoSettingsWindow);
     mModalWindow = std::make_shared<SohModalWindow>(CVAR_WINDOW("ModalWindow"), "Modal Window");
     gui->AddGuiWindow(mModalWindow);
