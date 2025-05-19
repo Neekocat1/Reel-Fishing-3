@@ -10,12 +10,8 @@ namespace AP_Client_consts {
     static constexpr int MAX_ADDRESS_LENGTH = 64;
     static constexpr int MAX_PLAYER_NAME_LENGHT = 17;
     static constexpr int MAX_PASSWORD_LENGTH = 32;
-    static constexpr char const* DEFAULT_SERVER_NAME = "archipelago.gg:<port number>";
 
-    static constexpr char const* SETTING_ADDRESS = "AP_server_address";
-    static constexpr char const* SETTING_NAME = "AP_slot_name";
-
-    static constexpr char const* AP_GAME_NAME = "Ocarina of Time (SoH)";
+    static constexpr char const* AP_GAME_NAME = "Ship of Harkinian";
 }
 
 class ArchipelagoClient{
@@ -38,9 +34,6 @@ class ArchipelagoClient{
         // getters
         const std::string& GetSlotName() const;
 
-        char* GetServerAddressBuffer();
-        char* GetSlotNameBuffer();
-        char* GetPasswordBuffer();
         const char* GetConnectionStatus();
         const std::map<std::string, int>& GetSlotData();
         const std::vector<ApItem>& GetScoutedItems();
@@ -72,17 +65,11 @@ class ArchipelagoClient{
         static std::shared_ptr<ArchipelagoClient> instance; // is this even used?
         static bool initialized;
 
-        char serverAddress[AP_Client_consts::MAX_ADDRESS_LENGTH];
-        char slotName[AP_Client_consts::MAX_PLAYER_NAME_LENGHT];
-        char password[AP_Client_consts::MAX_PLAYER_NAME_LENGHT];
-
         bool game_won;
 
         std::map<std::string, int> slotData;
         std::set<int64_t> locations;
         std::vector<ApItem> scoutedItems;
-        
-        void SaveData();
 
         // callback functions
         void OnConnected();

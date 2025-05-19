@@ -14,13 +14,25 @@ void ArchipelagoSettingsWindow::DrawElement() {
     ImGui::PushStyleColor(ImGuiCol_Border, UIWidgets::ColorValues.at(THEME_COLOR));
 
     ImGui::Text("Server Address");
-    ImGui::InputText("##serveraddress", AP_client.GetServerAddressBuffer(), AP_Client_consts::MAX_ADDRESS_LENGTH);
+    UIWidgets::CVarInputString("##ArchipelagoServerAddress", CVAR_REMOTE_ARCHIPELAGO("ServerAddress"),
+                    UIWidgets::InputOptions()
+                        .Color(THEME_COLOR)
+                        .PlaceholderText("archipelago.gg:38281")
+                        .DefaultValue("archipelago.gg:38281")
+                        .Size(ImVec2(ImGui::GetFontSize() * 15, 0))
+                        .LabelPosition(UIWidgets::LabelPositions::None));
     ImGui::Text("Slot Name");
-    ImGui::InputText("##slotname", AP_client.GetSlotNameBuffer(), AP_Client_consts::MAX_PLAYER_NAME_LENGHT);
+    UIWidgets::CVarInputString("##ArchipelagoSlotName", CVAR_REMOTE_ARCHIPELAGO("SlotName"),
+                               UIWidgets::InputOptions()
+                                   .Color(THEME_COLOR)
+                                   .Size(ImVec2(ImGui::GetFontSize() * 15, 0))
+                                   .LabelPosition(UIWidgets::LabelPositions::None));
     ImGui::Text("Password (leave blank for no password)");
-    ImGui::InputText("##password", AP_client.GetPasswordBuffer(),
-                     AP_Client_consts::MAX_PASSWORD_LENGTH, ImGuiInputTextFlags_Password);
-
+    UIWidgets::CVarInputString("##ArchipelagoPassword", CVAR_REMOTE_ARCHIPELAGO("Password"),
+                               UIWidgets::InputOptions()
+                                   .Color(THEME_COLOR)
+                                   .Size(ImVec2(ImGui::GetFontSize() * 15, 0))
+                                   .LabelPosition(UIWidgets::LabelPositions::None));
     ImGui::PopStyleColor();
     UIWidgets::PopStyleCombobox();
 

@@ -20,8 +20,6 @@ ArchipelagoClient::ArchipelagoClient() {
 
     namespace apc = AP_Client_consts;
     CVarSetInteger("ArchipelagoConnected", 0);
-    strncpy(serverAddress, CVarGetString(apc::SETTING_ADDRESS, apc::DEFAULT_SERVER_NAME), apc::MAX_ADDRESS_LENGTH);
-    strncpy(slotName, CVarGetString(apc::SETTING_NAME, ""), apc::MAX_PLAYER_NAME_LENGHT);
 
     // call poll every frame
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([](){ArchipelagoClient::GetInstance().Poll();});
@@ -37,12 +35,15 @@ bool ArchipelagoClient::StartClient() {
         apClient.reset();
     }
 
-    apClient = std::unique_ptr<APClient>(new APClient(uuid, AP_Client_consts::AP_GAME_NAME, serverAddress));
+    apClient = std::unique_ptr<APClient>(
+        new APClient(uuid, AP_Client_consts::AP_GAME_NAME, CVarGetString(CVAR_REMOTE_ARCHIPELAGO("ServerAddress"), "localhost:38281")));
 
     apClient->set_room_info_handler([&]() {
         std::list<std::string> tags;
         // tags.push_back("DeathLink");     // todo, implement deathlink
-        apClient->ConnectSlot(slotName, password, 0b001, tags);
+        apClient->ConnectSlot(CVarGetString(CVAR_REMOTE_ARCHIPELAGO("SlotName"), ""),
+                              CVarGetString(CVAR_REMOTE_ARCHIPELAGO("Password"), ""),
+                              0b001, tags);
     });
 
     apClient->set_items_received_handler([&](const std::list<APClient::NetworkItem>& items) {
@@ -76,7 +77,6 @@ bool ArchipelagoClient::StartClient() {
         // todo implement me
     });
 
-    SaveData();
     return true;
 }
 
@@ -91,11 +91,6 @@ void ArchipelagoClient::StartLocationScouts() {
         location_list.emplace_back(loc_id);
     }
     apClient->LocationScouts(location_list);
-}
-
-void ArchipelagoClient::SaveData() {
-    CVarSetString(AP_Client_consts::SETTING_ADDRESS, serverAddress);
-    CVarSetString(AP_Client_consts::SETTING_NAME, slotName);
 }
 
 bool ArchipelagoClient::IsConnected() {
@@ -167,16 +162,6 @@ const std::string& ArchipelagoClient::GetSlotName() const {
     }
 
     return apClient->get_slot();
-}
-
-char* ArchipelagoClient::GetServerAddressBuffer() {
-    return serverAddress;
-}
-char* ArchipelagoClient::GetSlotNameBuffer() {
-    return slotName;
-}
-char* ArchipelagoClient::GetPasswordBuffer() {
-    return password;
 }
 
 const std::map<std::string, int>& ArchipelagoClient::GetSlotData() {
