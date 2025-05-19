@@ -2,10 +2,12 @@
 
 #include "soh/SohGui/UIWidgets.hpp"
 #include "soh/SohGui/SohGui.hpp"
+#include "soh/OTRGlobals.h"
 
 ImVector<char*> Items;
 bool autoScroll = true;
-bool scrollToBottom = false;
+
+using namespace UIWidgets;
 
 void ArchipelagoConsole_SendMessage(const char* fmt, ...) IM_FMTARGS(2) {
     char buf[1024];
@@ -18,22 +20,17 @@ void ArchipelagoConsole_SendMessage(const char* fmt, ...) IM_FMTARGS(2) {
 }
 
 void ArchipelagoConsoleWindow::DrawElement() {
-    if (ImGui::Button("Add line to log")) {
-        ArchipelagoConsole_SendMessage("[LOG] Hello World");
-        ArchipelagoConsole_SendMessage("[ERROR] Hello World");
-        ArchipelagoConsole_SendMessage("Hello World");
-    }
+    ImGui::SeparatorText("Archipelago Log");
 
-    if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, 400), false,
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f, 12.0f));
+
+    if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, 400), ImGuiChildFlags_AlwaysUseWindowPadding,
                           ImGuiWindowFlags_HorizontalScrollbar)) {
-        
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 1)); // Tighten spacing
 
         for (int i = 0; i < Items.Size; i++) {
             const char* item = Items[i];
-
-            // Normally you would store more information in your item than just a string.
-            // (e.g. make Items[] an array of structure, store color/type etc.)
             ImVec4 color;
             bool hasColor = false;
             if (strstr(item, "[ERROR]")) {
@@ -42,25 +39,32 @@ void ArchipelagoConsoleWindow::DrawElement() {
             } else if (strstr(item, "[LOG]")) {
                 color = ImVec4(0.7f, 0.7f, 1.0f, 1.0f);
                 hasColor = true;
-            } else if (strncmp(item, "# ", 2) == 0) {
-                color = ImVec4(1.0f, 0.8f, 0.6f, 1.0f);
-                hasColor = true;
             }
-            if (hasColor)
+            if (hasColor) {
                 ImGui::PushStyleColor(ImGuiCol_Text, color);
+            }
+
             ImGui::TextUnformatted(item);
-            if (hasColor)
+
+            if (hasColor) {
                 ImGui::PopStyleColor();
+            }
         }
 
         // Keep up at the bottom of the scroll region if we were already at the bottom at the beginning of the frame.
         // Using a scrollbar or mouse-wheel will take away from the bottom edge.
-        if (scrollToBottom || (autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())) {
+        if (autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
             ImGui::SetScrollHereY(1.0f);
-        } 
-        scrollToBottom = false;
-
-        ImGui::PopStyleVar();
+        }
     }
     ImGui::EndChild();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+
+    if (UIWidgets::Button("Add dummy lines to log",
+                          UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
+        ArchipelagoConsole_SendMessage("[LOG] Hello World");
+        ArchipelagoConsole_SendMessage("[ERROR] Hello World");
+        ArchipelagoConsole_SendMessage("Hello World");
+    }
 };

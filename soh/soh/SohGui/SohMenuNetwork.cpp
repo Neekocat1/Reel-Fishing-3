@@ -33,6 +33,7 @@ void SohMenu::AddMenuNetwork() {
 
     // Sail
     path.sidebarName = "Sail";
+    path.column = SECTION_COLUMN_1;
     AddSidebarEntry("Network", path.sidebarName, 3);
 
     AddWidget(path,
