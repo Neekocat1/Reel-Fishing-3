@@ -17,6 +17,7 @@
 #include "soh/SaveManager.h"
 #include "soh/Enhancements/randomizer/ShuffleFairies.h"
 #include "soh/Network/Archipelago/Archipelago.h"
+#include "soh/Network/Archipelago/ArchipelagoConsoleWindow.h"
 
 extern "C" {
 #include "macros.h"
@@ -223,7 +224,8 @@ static RandomizerCheck randomizerQueuedCheck = RC_UNKNOWN_CHECK;
 static GetItemEntry randomizerQueuedItemEntry = GET_ITEM_NONE;
 
 void ArchipelagoOnRecieveItem(const std::string& ap_item_name) {
-    SPDLOG_TRACE("Recieve item handler called! {}", ap_item_name);
+    std::string logMessage = "[LOG] Receive item handler called: " + ap_item_name;
+    ArchipelagoConsole_SendMessage(logMessage.c_str());
     randomizerQueuedChecks.push(RC_ARCHIPELAGO_RECIEVED_ITEM);
     Rando::Context::GetInstance()->AddRecievedArchipelagoItem(ap_item_name);
 }
@@ -314,7 +316,6 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
         GetItemID vanillaItem = (GetItemID)Rando::StaticData::RetrieveItem(vanillaRandomizerGet).GetItemID();
         getItemEntry = Rando::Context::GetInstance()->GetFinalGIEntry(rc, true, (GetItemID)vanillaRandomizerGet);
     }
-    SPDLOG_TRACE("RC found!");
 
     if (loc->HasObtained()) {
         SPDLOG_INFO("RC {} already obtained, skipping", static_cast<uint32_t>(rc));
@@ -372,8 +373,6 @@ void RandomizerOnPlayerUpdateForItemQueueHandler() {
 void RandomizerOnItemReceiveHandler(GetItemEntry receivedItemEntry) {
     if (randomizerQueuedCheck == RC_UNKNOWN_CHECK)
         return;
-
-    SPDLOG_TRACE("Dropped into recieve handler!");
 
     auto loc = Rando::Context::GetInstance()->GetItemLocation(randomizerQueuedCheck);
     if (randomizerQueuedItemEntry.modIndex == receivedItemEntry.modIndex &&

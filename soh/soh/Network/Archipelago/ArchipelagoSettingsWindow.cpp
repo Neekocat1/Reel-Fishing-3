@@ -15,7 +15,7 @@ void ArchipelagoSettingsWindow::DrawElement() {
 
     if (ImGui::Button("Connect")) {
         bool success = AP_client.start_client();
-        AddToArchipelagoConsole("Trying to connect...");
+        ArchipelagoConsole_SendMessage("[LOG] Trying to connect...");
     }
 
     ImGui::SameLine();

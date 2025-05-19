@@ -5,9 +5,9 @@
 
 #include <fstream>
 #include <filesystem>
-#include <spdlog/spdlog.h>
 #include <iostream>
 
+#include "soh/Network/Archipelago/ArchipelagoConsoleWindow.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
@@ -67,7 +67,8 @@ bool ArchipelagoClient::start_client() {
             const std::string itemName = apItem.itemName;
             const std::string playerName = apItem.playerName;
             const std::string locationName = apItem.locationName;
-            SPDLOG_TRACE("Location scouted: {} for {} in location {}", itemName, playerName, locationName);
+            std::string logMessage = "[LOG] Location scouted: " + itemName + " for " + playerName + " in location " + locationName;
+            ArchipelagoConsole_SendMessage(logMessage.c_str());
         }
     
     });    // todo maybe move these functions to a lambda, since they don't have to be static anymore
@@ -108,7 +109,8 @@ void ArchipelagoClient::check_location(RandomizerCheck SoH_check_id) {
         return;
     }
     int64_t ap_item_id = apclient->get_location_id(std::string(ap_name));
-    SPDLOG_TRACE("Checked: {}({}), sending to AP server", ap_name, ap_item_id);
+    std::string logMessage = "[LOG] Checked: " + ap_name + "(" + std::to_string(ap_item_id) + "), sending to AP server";
+    ArchipelagoConsole_SendMessage(logMessage.c_str());
 
 // currently not sending, because i only get so many real chances
     if(!isConnected()) {
@@ -127,7 +129,7 @@ void ArchipelagoClient::removeItemRecievedCallback(std::function<void(const std:
 
 void ArchipelagoClient::on_connected() {
     // todo implement me
-    SPDLOG_TRACE("AP Connected!!");
+    ArchipelagoConsole_SendMessage("[LOG] AP Connected!");
 }
 //void ArchipelagoClient::on_couldntConnect(AP_ConnectionStatus connection_status) {
 //    // todo implement me
@@ -138,7 +140,8 @@ void ArchipelagoClient::on_item_recieved(int64_t recieved_item_id, bool notify_p
     const std::string item_name = apclient->get_item_name(recieved_item_id, AP_Client_consts::AP_GAME_NAME);
     ArchipelagoClient& ap_client = ArchipelagoClient::getInstance();
     if(ap_client.ItemRecievedCallback) {
-        SPDLOG_TRACE("item recieved: {}, notify: {}", item_name, notify_player);
+        std::string logMessage = "[LOG] Item recieved: " + item_name + ". Notify: " + std::to_string(notify_player);
+        ArchipelagoConsole_SendMessage(logMessage.c_str());
         ap_client.ItemRecievedCallback.operator()(item_name);   // somehow passing it through the itemname breaks it????
     }
 }

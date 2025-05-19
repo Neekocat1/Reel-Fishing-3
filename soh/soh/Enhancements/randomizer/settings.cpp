@@ -4,11 +4,11 @@
 
 #include "soh/OTRGlobals.h"
 
-#include <spdlog/spdlog.h>
-
 #include <utility>
 
 #include "consolevariablebridge.h"
+
+#include "soh/Network/Archipelago/ArchipelagoConsoleWindow.h"
 
 namespace Rando {
 std::shared_ptr<Settings> Settings::mInstance;
@@ -2968,7 +2968,8 @@ void Settings::ParseArchipelago(const std::map<std::string, int>& slot_data) {
         const std::string& setting_name = std::string(StaticData::APsettingToHoSsetting[APname]);
         const RandomizerSettingKey index = StaticData::optionNameToEnum[setting_name];
         mContext->GetOption(index).Set(value);
-        SPDLOG_INFO("Parsed Setting {}: ({}, {})", APname, (int)index, value);
+        std::string logMessage = "[LOG] Parsed Setting " + APname + ": (" + std::to_string((int)index) + ", " + std::to_string(value) + ")";
+        ArchipelagoConsole_SendMessage(logMessage.c_str());
     }
 
     // maybe we have to set a couple of settings manually, if ap doesn't set them

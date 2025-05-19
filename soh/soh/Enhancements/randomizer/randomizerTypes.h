@@ -14,7 +14,6 @@
 typedef enum {
     MOD_NONE,
     MOD_RANDOMIZER,
-    MOD_ARCHIPELAGO // no actually used yet i think
 } ModIndex;
 typedef enum {
     TABLE_VANILLA = MOD_NONE,

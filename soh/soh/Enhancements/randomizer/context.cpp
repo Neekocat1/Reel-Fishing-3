@@ -348,13 +348,12 @@ void Context::SetSpoilerLoaded(const bool spoilerLoaded) {
 
 void Context::AddRecievedArchipelagoItem(const std::string& ap_item_id) {
     mAPrecieveQueue.emplace(ap_item_id);
-    SPDLOG_TRACE("Item Pushed {}", ap_item_id);
-    AddToArchipelagoConsole("Item Pushed");
+    std::string logMessage = "[LOG] Item Pushed: " + ap_item_id;
+    ArchipelagoConsole_SendMessage(logMessage.c_str());
 }
 
 GetItemEntry Context::GetArchipelagoGIEntry() {
-    SPDLOG_TRACE("Trying to get Item Entry");
-    AddToArchipelagoConsole("Trying to get Item Entry");
+    ArchipelagoConsole_SendMessage("[LOG] Trying to get Item Entry");
     if(mAPrecieveQueue.empty()) {
         // something must have gone wrong here, just give a rupee
         return ItemTableManager::Instance->RetrieveItemEntry(MOD_NONE, GI_HEART);

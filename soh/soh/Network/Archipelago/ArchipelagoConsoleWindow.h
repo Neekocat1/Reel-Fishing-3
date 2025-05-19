@@ -15,6 +15,6 @@ class ArchipelagoConsoleWindow final : public Ship::GuiWindow {
     void UpdateElement() override {};
 };
 
-void AddToArchipelagoConsole(const char* fmt, ...);
+void ArchipelagoConsole_SendMessage(const char* fmt, ...);
 
 #endif // ARCHIPELAGO_CONSOLE_WINDOW_H

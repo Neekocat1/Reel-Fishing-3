@@ -7,7 +7,7 @@ ImVector<char*> Items;
 bool autoScroll = true;
 bool scrollToBottom = false;
 
-void AddToArchipelagoConsole(const char* fmt, ...) IM_FMTARGS(2) {
+void ArchipelagoConsole_SendMessage(const char* fmt, ...) IM_FMTARGS(2) {
     char buf[1024];
     va_list args;
     va_start(args, fmt);
@@ -22,7 +22,7 @@ void ArchipelagoConsoleWindow::DrawElement() {
     const float footer_height_to_reserve = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
 
     if (ImGui::Button("Add line to log")) {
-        AddToArchipelagoConsole("Hello world");
+        ArchipelagoConsole_SendMessage("Hello World");
     }
 
     if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, 400), false,
