@@ -18,10 +18,9 @@ void ArchipelagoConsole_SendMessage(const char* fmt, ...) IM_FMTARGS(2) {
 }
 
 void ArchipelagoConsoleWindow::DrawElement() {
-    // Reserve enough left-over height for 1 separator + 1 input text
-    const float footer_height_to_reserve = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
-
     if (ImGui::Button("Add line to log")) {
+        ArchipelagoConsole_SendMessage("[LOG] Hello World");
+        ArchipelagoConsole_SendMessage("[ERROR] Hello World");
         ArchipelagoConsole_SendMessage("Hello World");
     }
 
@@ -36,18 +35,21 @@ void ArchipelagoConsoleWindow::DrawElement() {
             // Normally you would store more information in your item than just a string.
             // (e.g. make Items[] an array of structure, store color/type etc.)
             ImVec4 color;
-            bool has_color = false;
-            if (strstr(item, "[error]")) {
+            bool hasColor = false;
+            if (strstr(item, "[ERROR]")) {
                 color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
-                has_color = true;
+                hasColor = true;
+            } else if (strstr(item, "[LOG]")) {
+                color = ImVec4(0.7f, 0.7f, 1.0f, 1.0f);
+                hasColor = true;
             } else if (strncmp(item, "# ", 2) == 0) {
                 color = ImVec4(1.0f, 0.8f, 0.6f, 1.0f);
-                has_color = true;
+                hasColor = true;
             }
-            if (has_color)
+            if (hasColor)
                 ImGui::PushStyleColor(ImGuiCol_Text, color);
             ImGui::TextUnformatted(item);
-            if (has_color)
+            if (hasColor)
                 ImGui::PopStyleColor();
         }
 

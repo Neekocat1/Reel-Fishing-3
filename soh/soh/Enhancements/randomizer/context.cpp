@@ -441,9 +441,9 @@ void Context::ParseArchipelago() {
     mSeedGenerated = false;
     mSpoilerLoaded = false;
 
-    ArchipelagoClient& ap_client = ArchipelagoClient::getInstance();
-    Rando::Settings::GetInstance()->ParseArchipelago(ap_client.get_slot_data());
-    ParseArchipelagoItemsLocations(ap_client.get_scouted_items());
+    ArchipelagoClient& ap_client = ArchipelagoClient::GetInstance();
+    Rando::Settings::GetInstance()->ParseArchipelago(ap_client.GetSlotData());
+    ParseArchipelagoItemsLocations(ap_client.GetScoutedItems());
 
     // lets see if counting AP_loaded as spoiler loaded does the trick
     mSpoilerLoaded = true;
@@ -484,7 +484,7 @@ void Context::ParseItemLocationsJson(nlohmann::json spoilerFileJson) {
 }
 
 void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient::ApItem>& scouted_items) {
-    const std::string SlotName = ArchipelagoClient::getInstance().get_slot_name();
+    const std::string SlotName = ArchipelagoClient::GetInstance().GetSlotName();
     
     // init the item table with regular items first
     for(int rc = 1; rc <= RC_MAX; rc++) {

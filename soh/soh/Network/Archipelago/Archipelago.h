@@ -28,39 +28,38 @@ class ArchipelagoClient{
             int index;
         };
 
-        static ArchipelagoClient& getInstance();
+        static ArchipelagoClient& GetInstance();
 
-        bool start_client();
-        bool stop_client();
+        bool StartClient();
+        bool StopClient();
 
-        void start_location_scouts();
+        void StartLocationScouts();
 
         // getters
-        const std::string& get_slot_name() const;
+        const std::string& GetSlotName() const;
 
-        char* get_server_address_buff();
-        char* get_slot_name_buff();
-        char* get_password_buff();
-        const char* get_connection_status();
-        const std::map<std::string, int>& get_slot_data();
-        const std::vector<ApItem>& get_scouted_items();
+        char* GetServerAddressBuffer();
+        char* GetSlotNameBuffer();
+        char* GetPasswordBuffer();
+        const char* GetConnectionStatus();
+        const std::map<std::string, int>& GetSlotData();
+        const std::vector<ApItem>& GetScoutedItems();
 
-        bool isConnected();
+        bool IsConnected();
         void check_location(RandomizerCheck SoH_check_id);
 
         // callback slots
-        void addItemRecievedCallback(std::function<void(const std::string&)> callback);
-        void removeItemRecievedCallback(std::function<void(const std::string&)> old_callback);
-
+        void AddItemRecievedCallback(std::function<void(const std::string&)> callback);
+        void RemoveItemRecievedCallback(std::function<void(const std::string&)> old_callback);
 
         // todo move me back down when done testing
-        void on_item_recieved(int64_t recieved_item_id, bool notify_player);
+        void OnItemReceived(int64_t recieved_item_id, bool notify_player);
 
-        void send_game_won();
+        void SendGameWon();
 
-        void poll();
+        void Poll();
 
-        std::unique_ptr<APClient> apclient;
+        std::unique_ptr<APClient> apClient;
 
     protected:
         ArchipelagoClient();
@@ -73,23 +72,23 @@ class ArchipelagoClient{
         static std::shared_ptr<ArchipelagoClient> instance; // is this even used?
         static bool initialized;
 
-        char server_address[AP_Client_consts::MAX_ADDRESS_LENGTH];
-        char slot_name[AP_Client_consts::MAX_PLAYER_NAME_LENGHT];
+        char serverAddress[AP_Client_consts::MAX_ADDRESS_LENGTH];
+        char slotName[AP_Client_consts::MAX_PLAYER_NAME_LENGHT];
         char password[AP_Client_consts::MAX_PLAYER_NAME_LENGHT];
 
         bool game_won;
 
-        std::map<std::string, int> slot_data;
+        std::map<std::string, int> slotData;
         std::set<int64_t> locations;
-        std::vector<ApItem> scouted_items;
+        std::vector<ApItem> scoutedItems;
         
-        void save_data();
+        void SaveData();
 
         // callback functions
-        void on_connected();
+        void OnConnected();
         
-        void on_location_checked(int64_t location_id);
-        void on_deathlink_recieved() { }; // TODO: implement me
+        void OnLocationChecked(int64_t location_id);
+        void OnDeathLinkReceived() { }; // TODO: implement me
 
         // callbacks
         std::function<void(const std::string&)> ItemRecievedCallback;

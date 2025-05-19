@@ -19,50 +19,50 @@ ArchipelagoClient::ArchipelagoClient() {
     game_won = false;
 
     namespace apc = AP_Client_consts;
-    CVarSetInteger("archipelago_connected", 0);
-    strncpy(server_address, CVarGetString(apc::SETTING_ADDRESS, apc::DEFAULT_SERVER_NAME), apc::MAX_ADDRESS_LENGTH);
-    strncpy(slot_name, CVarGetString(apc::SETTING_NAME, ""), apc::MAX_PLAYER_NAME_LENGHT);
+    CVarSetInteger("ArchipelagoConnected", 0);
+    strncpy(serverAddress, CVarGetString(apc::SETTING_ADDRESS, apc::DEFAULT_SERVER_NAME), apc::MAX_ADDRESS_LENGTH);
+    strncpy(slotName, CVarGetString(apc::SETTING_NAME, ""), apc::MAX_PLAYER_NAME_LENGHT);
 
     // call poll every frame
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([](){ArchipelagoClient::getInstance().poll();});
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([](){ArchipelagoClient::GetInstance().Poll();});
 }
 
-ArchipelagoClient& ArchipelagoClient::getInstance() {
+ArchipelagoClient& ArchipelagoClient::GetInstance() {
     static ArchipelagoClient Client;
     return Client;
 }
 
-bool ArchipelagoClient::start_client() {
-    if(apclient != NULL) {
-        apclient.reset();
+bool ArchipelagoClient::StartClient() {
+    if(apClient != NULL) {
+        apClient.reset();
     }
 
-    apclient = std::unique_ptr<APClient>(new APClient(uuid, AP_Client_consts::AP_GAME_NAME, server_address));
+    apClient = std::unique_ptr<APClient>(new APClient(uuid, AP_Client_consts::AP_GAME_NAME, serverAddress));
 
-    apclient->set_room_info_handler([&]() {
+    apClient->set_room_info_handler([&]() {
         std::list<std::string> tags;
         // tags.push_back("DeathLink");     // todo, implement deathlink
-        apclient->ConnectSlot(slot_name, password, 0b001, tags);
+        apClient->ConnectSlot(slotName, password, 0b001, tags);
     });
 
-    apclient->set_items_received_handler([&](const std::list<APClient::NetworkItem>& items) {
+    apClient->set_items_received_handler([&](const std::list<APClient::NetworkItem>& items) {
         for(const APClient::NetworkItem& item : items) {
-            on_item_recieved(item.item, false);  // todo get rid of notify, since it doesn't work for us right now anyway
+            OnItemReceived(item.item, false);  // todo get rid of notify, since it doesn't work for us right now anyway
         }
     });
 
-    apclient->set_location_info_handler([&](const std::list<APClient::NetworkItem>& items) {
-        scouted_items.clear();
+    apClient->set_location_info_handler([&](const std::list<APClient::NetworkItem>& items) {
+        scoutedItems.clear();
     
         for(const APClient::NetworkItem& item: items) {
             ApItem apItem;
-            const std::string game = apclient->get_player_game(item.player);
-            apItem.itemName = apclient->get_item_name(item.item, game);
-            apItem.locationName = apclient->get_location_name(item.location, game);
-            apItem.playerName = apclient->get_player_alias(item.player);
+            const std::string game = apClient->get_player_game(item.player);
+            apItem.itemName = apClient->get_item_name(item.item, game);
+            apItem.locationName = apClient->get_location_name(item.location, game);
+            apItem.playerName = apClient->get_player_alias(item.player);
             apItem.flags = item.flags;
             apItem.index = item.index;
-            scouted_items.push_back(apItem);
+            scoutedItems.push_back(apItem);
 
             const std::string itemName = apItem.itemName;
             const std::string playerName = apItem.playerName;
@@ -72,17 +72,17 @@ bool ArchipelagoClient::start_client() {
         }
     
     });    // todo maybe move these functions to a lambda, since they don't have to be static anymore
-    apclient->set_location_checked_handler([&](const std::list<int64_t> locations) {
+    apClient->set_location_checked_handler([&](const std::list<int64_t> locations) {
         // todo implement me
     });
 
-    save_data();
+    SaveData();
     return true;
 }
 
-void ArchipelagoClient::start_location_scouts() {
-    std::set<int64_t> missing_loc_set = apclient->get_missing_locations();
-    std::set<int64_t> found_loc_set = apclient->get_checked_locations();
+void ArchipelagoClient::StartLocationScouts() {
+    std::set<int64_t> missing_loc_set = apClient->get_missing_locations();
+    std::set<int64_t> found_loc_set = apClient->get_checked_locations();
     std::list<int64_t> location_list;
     for(const int64_t loc_id : missing_loc_set) {
         location_list.emplace_back(loc_id);
@@ -90,16 +90,16 @@ void ArchipelagoClient::start_location_scouts() {
     for(const int64_t loc_id : found_loc_set) {
         location_list.emplace_back(loc_id);
     }
-    apclient->LocationScouts(location_list);
+    apClient->LocationScouts(location_list);
 }
 
-void ArchipelagoClient::save_data() {
-    CVarSetString(AP_Client_consts::SETTING_ADDRESS, server_address);
-    CVarSetString(AP_Client_consts::SETTING_NAME, slot_name);
+void ArchipelagoClient::SaveData() {
+    CVarSetString(AP_Client_consts::SETTING_ADDRESS, serverAddress);
+    CVarSetString(AP_Client_consts::SETTING_NAME, slotName);
 }
 
-bool ArchipelagoClient::isConnected() {
-    return apclient->get_state() == APClient::State::SLOT_CONNECTED;
+bool ArchipelagoClient::IsConnected() {
+    return apClient->get_state() == APClient::State::SLOT_CONNECTED;
 }
 
 void ArchipelagoClient::check_location(RandomizerCheck SoH_check_id) {
@@ -108,26 +108,26 @@ void ArchipelagoClient::check_location(RandomizerCheck SoH_check_id) {
     if(ap_name.empty()) {
         return;
     }
-    int64_t ap_item_id = apclient->get_location_id(std::string(ap_name));
+    int64_t ap_item_id = apClient->get_location_id(std::string(ap_name));
     std::string logMessage = "[LOG] Checked: " + ap_name + "(" + std::to_string(ap_item_id) + "), sending to AP server";
     ArchipelagoConsole_SendMessage(logMessage.c_str());
 
 // currently not sending, because i only get so many real chances
-    if(!isConnected()) {
+    if(!IsConnected()) {
         return;
     }
-    apclient->LocationChecks({ap_item_id});
+    apClient->LocationChecks({ap_item_id});
 }
 
-void ArchipelagoClient::addItemRecievedCallback(std::function<void(const std::string&)> callback) {
+void ArchipelagoClient::AddItemRecievedCallback(std::function<void(const std::string&)> callback) {
     ItemRecievedCallback = callback;
 }
 
-void ArchipelagoClient::removeItemRecievedCallback(std::function<void(const std::string&)> old_callback) {
+void ArchipelagoClient::RemoveItemRecievedCallback(std::function<void(const std::string&)> old_callback) {
     ItemRecievedCallback = nullptr;
 }
 
-void ArchipelagoClient::on_connected() {
+void ArchipelagoClient::OnConnected() {
     // todo implement me
     ArchipelagoConsole_SendMessage("[LOG] AP Connected!");
 }
@@ -135,10 +135,10 @@ void ArchipelagoClient::on_connected() {
 //    // todo implement me
 //}
 
-void ArchipelagoClient::on_item_recieved(int64_t recieved_item_id, bool notify_player) {
+void ArchipelagoClient::OnItemReceived(int64_t recieved_item_id, bool notify_player) {
     // call each callback
-    const std::string item_name = apclient->get_item_name(recieved_item_id, AP_Client_consts::AP_GAME_NAME);
-    ArchipelagoClient& ap_client = ArchipelagoClient::getInstance();
+    const std::string item_name = apClient->get_item_name(recieved_item_id, AP_Client_consts::AP_GAME_NAME);
+    ArchipelagoClient& ap_client = ArchipelagoClient::GetInstance();
     if(ap_client.ItemRecievedCallback) {
         std::string logMessage = "[LOG] Item recieved: " + item_name + ". Notify: " + std::to_string(notify_player);
         ArchipelagoConsole_SendMessage(logMessage.c_str());
@@ -146,53 +146,53 @@ void ArchipelagoClient::on_item_recieved(int64_t recieved_item_id, bool notify_p
     }
 }
 
-void ArchipelagoClient::send_game_won() {
+void ArchipelagoClient::SendGameWon() {
     if(!game_won) {
-        apclient->StatusUpdate(APClient::ClientStatus::GOAL);
+        apClient->StatusUpdate(APClient::ClientStatus::GOAL);
         game_won = true;
     }
 }
 
-void ArchipelagoClient::poll() {
-    if(apclient == nullptr) {
+void ArchipelagoClient::Poll() {
+    if(apClient == nullptr) {
         return;
     }
     
-    apclient->poll();
+    apClient->poll();
 }
 
-const std::string& ArchipelagoClient::get_slot_name() const {
-    if(apclient == NULL) {
+const std::string& ArchipelagoClient::GetSlotName() const {
+    if(apClient == NULL) {
         return "";
     }
 
-    return apclient->get_slot();
+    return apClient->get_slot();
 }
 
-char* ArchipelagoClient::get_server_address_buff() {
-    return server_address;
+char* ArchipelagoClient::GetServerAddressBuffer() {
+    return serverAddress;
 }
-char* ArchipelagoClient::get_slot_name_buff() {
-    return slot_name;
+char* ArchipelagoClient::GetSlotNameBuffer() {
+    return slotName;
 }
-char* ArchipelagoClient::get_password_buff() {
+char* ArchipelagoClient::GetPasswordBuffer() {
     return password;
 }
 
-const std::map<std::string, int>& ArchipelagoClient::get_slot_data() {
-    return slot_data;
+const std::map<std::string, int>& ArchipelagoClient::GetSlotData() {
+    return slotData;
 }
 
-const std::vector<ArchipelagoClient::ApItem>& ArchipelagoClient::get_scouted_items() {
-    return scouted_items;
+const std::vector<ArchipelagoClient::ApItem>& ArchipelagoClient::GetScoutedItems() {
+    return scoutedItems;
 }
 
-const char* ArchipelagoClient::get_connection_status() {
-    if (!apclient) {
+const char* ArchipelagoClient::GetConnectionStatus() {
+    if (!apClient) {
         return "";
     }
 
-    APClient::State clientStatus = apclient->get_state();
+    APClient::State clientStatus = apClient->get_state();
 
     switch (clientStatus) { 
         case APClient::State::DISCONNECTED: {

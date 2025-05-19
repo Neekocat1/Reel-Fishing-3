@@ -2594,7 +2594,7 @@ void SoH_ProcessDroppedFiles(std::string filePath) {
     }
 }
 
-extern "C" void parse_archipelago() {
+extern "C" void ParseArchipelago() {
     OTRGlobals::Instance->gRandoContext->ParseArchipelago();
 }
 // #endregion

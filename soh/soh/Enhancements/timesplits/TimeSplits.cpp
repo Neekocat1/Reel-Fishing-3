@@ -352,7 +352,7 @@ void HandleDragAndDrop(std::vector<SplitObject>& objectList, int targetIndex, co
 void TimeSplitCompleteSplits() {
     gSaveContext.ship.stats.itemTimestamp[TIMESTAMP_DEFEAT_GANON] = GAMEPLAYSTAT_TOTAL_TIME;
     gSaveContext.ship.stats.gameComplete = true;
-    ArchipelagoClient::getInstance().send_game_won();
+    ArchipelagoClient::GetInstance().SendGameWon();
 }
 
 void TimeSplitsSkipSplit(uint32_t index) {

@@ -783,7 +783,7 @@ void RegisterBossDefeatTimestamps() {
             case ACTOR_BOSS_GANON2:
                 gSaveContext.ship.stats.itemTimestamp[TIMESTAMP_DEFEAT_GANON] = GAMEPLAYSTAT_TOTAL_TIME;
                 gSaveContext.ship.stats.gameComplete = true;
-                ArchipelagoClient::getInstance().send_game_won();
+                ArchipelagoClient::GetInstance().SendGameWon();
                 break;
             case ACTOR_BOSS_GANONDROF:
                 gSaveContext.ship.stats.itemTimestamp[TIMESTAMP_DEFEAT_PHANTOM_GANON] = GAMEPLAYSTAT_TOTAL_TIME;

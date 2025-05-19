@@ -383,7 +383,7 @@ void RandomizerOnItemReceiveHandler(GetItemEntry receivedItemEntry) {
         // todo maybe move to seperate function
         // let arhipelago know we got this check
         if(randomizerQueuedCheck != RC_ARCHIPELAGO_RECIEVED_ITEM) {
-            ArchipelagoClient& ap_client = ArchipelagoClient::getInstance();
+            ArchipelagoClient& ap_client = ArchipelagoClient::GetInstance();
             ap_client.check_location(randomizerQueuedCheck);
         }
 
@@ -2445,7 +2445,7 @@ void RandomizerRegisterHooks() {
         GameInteractor::Instance->UnregisterGameHook<GameInteractor::OnVanillaBehavior>(
             shuffleFreestandingOnVanillaBehaviorHook);
 
-        ArchipelagoClient::getInstance().removeItemRecievedCallback(ArchipelagoOnRecieveItem);
+        ArchipelagoClient::GetInstance().RemoveItemRecievedCallback(ArchipelagoOnRecieveItem);
 
         onFlagSetHook = 0;
         onSceneFlagSetHook = 0;
@@ -2562,6 +2562,6 @@ void RandomizerRegisterHooks() {
             ShuffleFairies_RegisterHooks();
         }
 
-        ArchipelagoClient::getInstance().addItemRecievedCallback(ArchipelagoOnRecieveItem);
+        ArchipelagoClient::GetInstance().AddItemRecievedCallback(ArchipelagoOnRecieveItem);
     });
 }

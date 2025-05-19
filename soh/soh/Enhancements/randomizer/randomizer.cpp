@@ -5885,7 +5885,7 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
                 (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT_PIECES_REQUIRED) + 1)) {
                 gSaveContext.ship.stats.itemTimestamp[TIMESTAMP_TRIFORCE_COMPLETED] = GAMEPLAYSTAT_TOTAL_TIME;
                 gSaveContext.ship.stats.gameComplete = 1;
-                ArchipelagoClient::getInstance().send_game_won();
+                ArchipelagoClient::GetInstance().SendGameWon();
                 Flags_SetRandomizerInf(RAND_INF_GRANT_GANONS_BOSSKEY);
                 Play_PerformSave(play);
                 Notification::Emit({
