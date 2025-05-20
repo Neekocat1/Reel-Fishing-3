@@ -309,7 +309,7 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
     RandomizerCheck rc = randomizerQueuedChecks.front();
     auto loc = Rando::Context::GetInstance()->GetItemLocation(rc);
 
-    if(rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
+    if (rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
         getItemEntry = Rando::Context::GetInstance()->GetArchipelagoGIEntry();
     } else {
         RandomizerGet vanillaRandomizerGet = Rando::StaticData::GetLocation(rc)->GetVanillaItem();
@@ -384,7 +384,7 @@ void RandomizerOnItemReceiveHandler(GetItemEntry receivedItemEntry) {
         // let arhipelago know we got this check
         if(randomizerQueuedCheck != RC_ARCHIPELAGO_RECIEVED_ITEM) {
             ArchipelagoClient& ap_client = ArchipelagoClient::GetInstance();
-            ap_client.check_location(randomizerQueuedCheck);
+            ap_client.CheckLocation(randomizerQueuedCheck);
         }
 
         loc->SetCheckStatus(RCSHOW_COLLECTED);

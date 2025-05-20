@@ -16,10 +16,10 @@ ArchipelagoClient::ArchipelagoClient() {
     std::string uuid = ap_get_uuid("uuid");
 
     ItemRecievedCallback = nullptr;
-    game_won = false;
+    gameWon = false;
 
     namespace apc = AP_Client_consts;
-    CVarSetInteger("ArchipelagoConnected", 0);
+    CVarSetInteger(CVAR_REMOTE_ARCHIPELAGO("Connected"), 0);
 
     // call poll every frame
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([](){ArchipelagoClient::GetInstance().Poll();});
@@ -44,6 +44,11 @@ bool ArchipelagoClient::StartClient() {
         apClient->ConnectSlot(CVarGetString(CVAR_REMOTE_ARCHIPELAGO("SlotName"), ""),
                               CVarGetString(CVAR_REMOTE_ARCHIPELAGO("Password"), ""),
                               0b001, tags);
+    });
+
+    apClient->set_slot_connected_handler([&](const nlohmann::json) {
+        ArchipelagoConsole_SendMessage("[LOG] Connected.", false);
+        ArchipelagoClient::StartLocationScouts();
     });
 
     apClient->set_items_received_handler([&](const std::list<APClient::NetworkItem>& items) {
@@ -71,8 +76,10 @@ bool ArchipelagoClient::StartClient() {
             std::string logMessage = "[LOG] Location scouted: " + itemName + " for " + playerName + " in location " + locationName;
             ArchipelagoConsole_SendMessage(logMessage.c_str());
         }
-    
+
+        ArchipelagoConsole_SendMessage("[LOG] Scouting finished.");
     });    // todo maybe move these functions to a lambda, since they don't have to be static anymore
+
     apClient->set_location_checked_handler([&](const std::list<int64_t> locations) {
         // todo implement me
     });
@@ -97,7 +104,7 @@ bool ArchipelagoClient::IsConnected() {
     return apClient->get_state() == APClient::State::SLOT_CONNECTED;
 }
 
-void ArchipelagoClient::check_location(RandomizerCheck SoH_check_id) {
+void ArchipelagoClient::CheckLocation(RandomizerCheck SoH_check_id) {
     //std::string_view ap_name = Rando::StaticData::SohCheckToAP[SoH_check_id];
     std::string ap_name = Rando::StaticData::GetLocation(SoH_check_id)->GetName();
     if(ap_name.empty()) {
@@ -122,14 +129,6 @@ void ArchipelagoClient::RemoveItemRecievedCallback(std::function<void(const std:
     ItemRecievedCallback = nullptr;
 }
 
-void ArchipelagoClient::OnConnected() {
-    // todo implement me
-    ArchipelagoConsole_SendMessage("[LOG] AP Connected!");
-}
-//void ArchipelagoClient::on_couldntConnect(AP_ConnectionStatus connection_status) {
-//    // todo implement me
-//}
-
 void ArchipelagoClient::OnItemReceived(int64_t recieved_item_id, bool notify_player) {
     // call each callback
     const std::string item_name = apClient->get_item_name(recieved_item_id, AP_Client_consts::AP_GAME_NAME);
@@ -142,9 +141,9 @@ void ArchipelagoClient::OnItemReceived(int64_t recieved_item_id, bool notify_pla
 }
 
 void ArchipelagoClient::SendGameWon() {
-    if(!game_won) {
+    if(!gameWon) {
         apClient->StatusUpdate(APClient::ClientStatus::GOAL);
-        game_won = true;
+        gameWon = true;
     }
 }
 

@@ -9,14 +9,16 @@ bool autoScroll = true;
 
 using namespace UIWidgets;
 
-void ArchipelagoConsole_SendMessage(const char* fmt, ...) {
-    char buf[1024];
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(buf, IM_ARRAYSIZE(buf), fmt, args);
-    buf[IM_ARRAYSIZE(buf) - 1] = 0;
-    va_end(args);
-    Items.push_back(strdup(buf));
+void ArchipelagoConsole_SendMessage(const char* fmt, bool debugMessage, ...) {
+    if (!debugMessage || CVarGetInteger(CVAR_REMOTE_ARCHIPELAGO("DebugEnabled"), 0)) {
+        char buf[1024];
+        va_list args;
+        va_start(args, fmt);
+        vsnprintf(buf, IM_ARRAYSIZE(buf), fmt, args);
+        buf[IM_ARRAYSIZE(buf) - 1] = 0;
+        va_end(args);
+        Items.push_back(strdup(buf));
+    }
 }
 
 void ArchipelagoConsoleWindow::DrawElement() {
@@ -60,11 +62,4 @@ void ArchipelagoConsoleWindow::DrawElement() {
     ImGui::EndChild();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
-
-    if (UIWidgets::Button("Add dummy lines to log",
-                          UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
-        ArchipelagoConsole_SendMessage("[LOG] Hello World");
-        ArchipelagoConsole_SendMessage("[ERROR] Hello World");
-        ArchipelagoConsole_SendMessage("Hello World");
-    }
 };

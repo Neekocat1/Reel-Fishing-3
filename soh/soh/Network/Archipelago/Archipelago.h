@@ -39,7 +39,7 @@ class ArchipelagoClient{
         const std::vector<ApItem>& GetScoutedItems();
 
         bool IsConnected();
-        void check_location(RandomizerCheck SoH_check_id);
+        void CheckLocation(RandomizerCheck SoH_check_id);
 
         // callback slots
         void AddItemRecievedCallback(std::function<void(const std::string&)> callback);
@@ -65,19 +65,17 @@ class ArchipelagoClient{
         static std::shared_ptr<ArchipelagoClient> instance; // is this even used?
         static bool initialized;
 
-        bool game_won;
+        bool gameWon;
 
         std::map<std::string, int> slotData;
         std::set<int64_t> locations;
         std::vector<ApItem> scoutedItems;
 
-        // callback functions
-        void OnConnected();
-        
+        // Callback Functions
         void OnLocationChecked(int64_t location_id);
         void OnDeathLinkReceived() { }; // TODO: implement me
 
-        // callbacks
+        // Callbacks
         std::function<void(const std::string&)> ItemRecievedCallback;
         
 };

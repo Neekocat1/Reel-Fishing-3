@@ -15,6 +15,6 @@ class ArchipelagoConsoleWindow final : public Ship::GuiWindow {
     void UpdateElement() override {};
 };
 
-void ArchipelagoConsole_SendMessage(const char* fmt, ...);
+void ArchipelagoConsole_SendMessage(const char* fmt, bool debugMessage = true, ...);
 
 #endif // ARCHIPELAGO_CONSOLE_WINDOW_H

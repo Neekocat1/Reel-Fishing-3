@@ -178,6 +178,20 @@ typedef struct ShipQuestSaveContextData {
     ShipQuestSpecificSaveContextData data;
 } ShipQuestSaveContextData;
 
+typedef struct ArchipelagoLocationData {
+    char itemName[100];
+    char locationName[100];
+    char playerName[17];
+    u8 flags;
+} ArchipelagoLocationData;
+
+typedef struct ArchipelagoData {
+    char roomHash[100];
+    char slotName[17];
+    u32 lastReceivedItemIndex;
+    ArchipelagoLocationData locations[RC_MAX];
+} ArchipelagoData;
+
 typedef struct ShipSaveContextData {
     u16 pendingSale;
     u16 pendingSaleMod;
@@ -185,6 +199,7 @@ typedef struct ShipSaveContextData {
     SohStats stats;
     FaroresWindData backupFW;
     ShipQuestSaveContextData quest;
+    ArchipelagoData apData;
     u8 maskMemory;
     u8 filenameLanguage;
     //TODO: Move non-rando specific flags to a new sohInf and move the remaining randomizerInf to ShipRandomizerSaveContextData
@@ -314,12 +329,14 @@ typedef enum {
     /* 01 */ QUEST_MASTER,
     /* 02 */ QUEST_RANDOMIZER,
     /* 03 */ QUEST_BOSSRUSH,
+    /* 03 */ QUEST_ARCHIPELAGO,
 } Quest;
 
 #define IS_VANILLA (gSaveContext.ship.quest.id == QUEST_NORMAL)
 #define IS_MASTER_QUEST (gSaveContext.ship.quest.id == QUEST_MASTER)
 #define IS_RANDO (gSaveContext.ship.quest.id == QUEST_RANDOMIZER)
 #define IS_BOSS_RUSH (gSaveContext.ship.quest.id == QUEST_BOSSRUSH)
+#define IS_ARCHIPELAGO (gSaveContext.ship.quest.id == QUEST_ARCHIPELAGO)
 
 typedef enum {
     /* 0x00 */ BTN_ENABLED,

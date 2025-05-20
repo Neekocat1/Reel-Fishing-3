@@ -1075,7 +1075,7 @@ void FileChoose_UpdateRandomizer() {
         }
     }
 
-    if (CVarGetInteger("ArchipelagoConnected", 0) && !fileSelectArchipelagoLoaded) {
+    if (CVarGetInteger(CVAR_REMOTE_ARCHIPELAGO("Connected"), 0) && !fileSelectArchipelagoLoaded) {
         ParseArchipelago();
         fileSelectArchipelagoLoaded = true;
         Audio_PlayFanfare(NA_BGM_HORSE_GOAL);

@@ -38,24 +38,31 @@ void ArchipelagoSettingsWindow::DrawElement() {
 
     if (UIWidgets::Button("Connect", UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
         bool success = AP_client.StartClient();
-        ArchipelagoConsole_SendMessage("[LOG] Trying to connect...");
+        ArchipelagoConsole_SendMessage("[LOG] Trying to connect...", false);
     }
 
     ImGui::SameLine();
     ImGui::Text(ArchipelagoClient::GetInstance().GetConnectionStatus());
 
-    // Temporary developer helpers
-    ImGui::SeparatorText("Developer Tools");
-    if (UIWidgets::Button("Scout", UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
-        AP_client.StartLocationScouts();
-    }
-    ImGui::SameLine();
-    if (UIWidgets::Button("Link up", UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
-        CVarSetInteger("ArchipelagoConnected", 1);
-    }
-    ImGui::SameLine();
-    if (UIWidgets::Button("Give Blue Rupee", UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
-        ArchipelagoClient::GetInstance().OnItemReceived(66077, true);
-    }
+    UIWidgets::CVarCheckbox(
+        "Debug Enabled", CVAR_REMOTE_ARCHIPELAGO("DebugEnabled"),
+        UIWidgets::CheckboxOptions().Color(THEME_COLOR).Tooltip("Enable Archipelago debug tools and extra logging."));
 
+    // Temporary developer helpers
+    UIWidgets::Separator();
+    if (CVarGetInteger(CVAR_REMOTE_ARCHIPELAGO("DebugEnabled"), 0)) {
+        ImGui::SeparatorText("Developer Tools");
+        if (UIWidgets::Button("Scout", UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
+            AP_client.StartLocationScouts();
+        }
+        ImGui::SameLine();
+        if (UIWidgets::Button("Link up", UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
+            CVarSetInteger("ArchipelagoConnected", 1);
+        }
+        ImGui::SameLine();
+        if (UIWidgets::Button("Give Blue Rupee",
+                              UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
+            ArchipelagoClient::GetInstance().OnItemReceived(66077, true);
+        }
+    }
 };
