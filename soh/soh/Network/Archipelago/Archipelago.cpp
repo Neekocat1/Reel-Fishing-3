@@ -36,7 +36,8 @@ bool ArchipelagoClient::StartClient() {
     }
 
     apClient = std::unique_ptr<APClient>(
-        new APClient(uuid, AP_Client_consts::AP_GAME_NAME, CVarGetString(CVAR_REMOTE_ARCHIPELAGO("ServerAddress"), "localhost:38281")));
+        new APClient(uuid, AP_Client_consts::AP_GAME_NAME,
+                     CVarGetString(CVAR_REMOTE_ARCHIPELAGO("ServerAddress"), "localhost:38281"), "cacert.pem"));
 
     apClient->set_room_info_handler([&]() {
         std::list<std::string> tags;

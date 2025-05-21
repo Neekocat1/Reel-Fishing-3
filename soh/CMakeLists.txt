@@ -279,9 +279,6 @@ endif()
 ################################################################################
 add_compile_definitions(ASIO_STANDALONE)
 
-# TEMPORARY
-add_compile_definitions(WSWRAP_NO_SSL)
-
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/asio/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/websocketpp
@@ -304,6 +301,13 @@ if (BUILD_REMOTE_CONTROL)
         set(BUILD_REMOTE_CONTROL 0)
     else()
         set(SDL2-NET-INCLUDE ${SDL_NET_INCLUDE_DIRS})
+    endif()
+
+    set(OPENSSL_USE_STATIC_LIBS TRUE)
+    find_package(OpenSSL)
+    if(NOT OPENSSL_FOUND)
+        message(STATUS "OpenSSL not found (it's possible the version installed is too old). Disabling BUILD_REMOTE_CONTROL.")
+        set(BUILD_REMOTE_CONTROL 0)
     endif()
 endif()
 
@@ -638,6 +642,8 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
 			"SDL2::SDL2;"
 			"SDL2::SDL2main;"
             "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:SDL2_net::SDL2_net-static>"
+            "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:OpenSSL::SSL>"
+            "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:OpenSSL::Crypto>"
 			"glfw;"
 			"winmm;"
 			"imm32;"
