@@ -346,6 +346,8 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
         }
     }
 
+    GameInteractor_ExecuteOnRandomizerItemGivenHooks((uint32_t)rc);
+
     randomizerQueuedChecks.pop();
 }
 
@@ -2407,6 +2409,9 @@ void RandomizerRegisterHooks() {
 
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnLoadGame>([](int32_t fileNum) {
         ShipInit::Init("IS_RANDO");
+
+        // Add condition around this to only fire when loading into an Archipelago save file
+        ShipInit::Init("IS_ARCHIPELAGO");
 
         randomizerQueuedChecks = std::queue<RandomizerCheck>();
         randomizerQueuedCheck = RC_UNKNOWN_CHECK;

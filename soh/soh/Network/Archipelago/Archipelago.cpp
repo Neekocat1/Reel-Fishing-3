@@ -11,6 +11,7 @@
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/ShipInit.hpp"
 
 ArchipelagoClient::ArchipelagoClient() {
     std::string uuid = ap_get_uuid("uuid");
@@ -115,7 +116,7 @@ void ArchipelagoClient::CheckLocation(RandomizerCheck SoH_check_id) {
     std::string logMessage = "[LOG] Checked: " + ap_name + "(" + std::to_string(ap_item_id) + "), sending to AP server";
     ArchipelagoConsole_SendMessage(logMessage.c_str());
 
-// currently not sending, because i only get so many real chances
+    // currently not sending, because i only get so many real chances
     if(!IsConnected()) {
         return;
     }
@@ -199,3 +200,20 @@ const char* ArchipelagoClient::GetConnectionStatus() {
             return "";
     }
 }
+
+// Implement this properly once we have some kind of indication within a save file wether the player is in a normal
+// rando save or an archipelago one.
+#define IS_ARCHIPELAGO true
+
+void RegisterArchipelago() {
+    COND_HOOK(GameInteractor::OnRandomizerItemGivenHooks, IS_ARCHIPELAGO,
+              [](uint32_t rc) { 
+        if (rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
+            // Update lastReceivedIndex
+        } else {
+            ArchipelagoClient::GetInstance().CheckLocation((RandomizerCheck)rc);
+        }
+    });
+}
+
+static RegisterShipInitFunc initFunc(RegisterArchipelago, { "IS_ARCHIPELAGO" });
