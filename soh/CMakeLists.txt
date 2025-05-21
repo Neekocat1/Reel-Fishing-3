@@ -694,6 +694,8 @@ else()
 		"ZAPDLib;"
 		SDL2::SDL2
         "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:SDL2_net::SDL2_net>"
+        "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:OpenSSL::SSL>"
+        "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:OpenSSL::Crypto>"
 		${CMAKE_DL_LIBS}
 		Threads::Threads
 	)
