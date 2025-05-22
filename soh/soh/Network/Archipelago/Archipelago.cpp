@@ -11,6 +11,7 @@
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ShipInit.hpp"
 
 ArchipelagoClient::ArchipelagoClient() {
@@ -23,7 +24,7 @@ ArchipelagoClient::ArchipelagoClient() {
     CVarSetInteger(CVAR_REMOTE_ARCHIPELAGO("Connected"), 0);
 
     // call poll every frame
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([](){ArchipelagoClient::GetInstance().Poll();});
+    COND_HOOK(GameInteractor::OnGameFrameUpdate, true, [](){ArchipelagoClient::GetInstance().Poll();})
 }
 
 ArchipelagoClient& ArchipelagoClient::GetInstance() {
@@ -132,14 +133,9 @@ void ArchipelagoClient::RemoveItemRecievedCallback(std::function<void(const std:
 }
 
 void ArchipelagoClient::OnItemReceived(int64_t recieved_item_id, bool notify_player) {
-    // call each callback
     const std::string item_name = apClient->get_item_name(recieved_item_id, AP_Client_consts::AP_GAME_NAME);
-    ArchipelagoClient& ap_client = ArchipelagoClient::GetInstance();
-    if(ap_client.ItemRecievedCallback) {
-        std::string logMessage = "[LOG] Item recieved: " + item_name + ". Notify: " + std::to_string(notify_player);
-        ArchipelagoConsole_SendMessage(logMessage.c_str());
-        ap_client.ItemRecievedCallback.operator()(item_name);   // somehow passing it through the itemname breaks it????
-    }
+    const RandomizerGet item = Rando::StaticData::itemNameToEnum[item_name];
+    GameInteractor_ExecuteOnArchipelagoItemRecieved(static_cast<int32_t>(item));
 }
 
 void ArchipelagoClient::SendGameWon() {

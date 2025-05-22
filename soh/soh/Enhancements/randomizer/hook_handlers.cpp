@@ -16,7 +16,6 @@
 #include "soh/Notification/Notification.h"
 #include "soh/SaveManager.h"
 #include "soh/Enhancements/randomizer/ShuffleFairies.h"
-#include "soh/Network/Archipelago/Archipelago.h"
 #include "soh/Network/Archipelago/ArchipelagoConsoleWindow.h"
 
 extern "C" {
@@ -223,11 +222,11 @@ static std::queue<RandomizerCheck> randomizerQueuedChecks;
 static RandomizerCheck randomizerQueuedCheck = RC_UNKNOWN_CHECK;
 static GetItemEntry randomizerQueuedItemEntry = GET_ITEM_NONE;
 
-void ArchipelagoOnRecieveItem(const std::string& ap_item_name) {
-    std::string logMessage = "[LOG] Receive item handler called: " + ap_item_name;
-    ArchipelagoConsole_SendMessage(logMessage.c_str());
+void ArchipelagoOnRecieveItem(const int32_t item) {
+    std::string logMessage = "[LOG] Receive item handler called: " + item;
+    ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
     randomizerQueuedChecks.push(RC_ARCHIPELAGO_RECIEVED_ITEM);
-    Rando::Context::GetInstance()->AddRecievedArchipelagoItem(ap_item_name);
+    Rando::Context::GetInstance()->AddRecievedArchipelagoItem(static_cast<RandomizerGet>(item));
 }
 
 void RandomizerOnFlagSetHandler(int16_t flagType, int16_t flag) {
@@ -2443,7 +2442,7 @@ void RandomizerRegisterHooks() {
         GameInteractor::Instance->UnregisterGameHook<GameInteractor::OnVanillaBehavior>(
             shuffleFreestandingOnVanillaBehaviorHook);
 
-        ArchipelagoClient::GetInstance().RemoveItemRecievedCallback(ArchipelagoOnRecieveItem);
+        
 
         onFlagSetHook = 0;
         onSceneFlagSetHook = 0;
@@ -2525,6 +2524,11 @@ void RandomizerRegisterHooks() {
             RandomizerOnKaleidoscopeUpdateHandler);
         onCuccoOrChickenHatchHook = GameInteractor::Instance->RegisterGameHook<GameInteractor::OnCuccoOrChickenHatch>(
             RandomizerOnCuccoOrChickenHatch);
+        
+        // TODO Implement propeerly when we can read what kind of game we're playing from the save file
+
+        #define IS_ARCHIPELAGO true
+        COND_HOOK(GameInteractor::OnArchipelagoItemRecieved, IS_ARCHIPELAGO, ArchipelagoOnRecieveItem);
 
         if (RAND_GET_OPTION(RSK_FISHSANITY) != RO_FISHSANITY_OFF) {
             OTRGlobals::Instance->gRandoContext->GetFishsanity()->InitializeFromSave();
@@ -2559,7 +2563,5 @@ void RandomizerRegisterHooks() {
         if (RAND_GET_OPTION(RSK_SHUFFLE_FAIRIES)) {
             ShuffleFairies_RegisterHooks();
         }
-
-        ArchipelagoClient::GetInstance().AddItemRecievedCallback(ArchipelagoOnRecieveItem);
     });
 }
