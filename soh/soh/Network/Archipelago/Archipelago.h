@@ -80,3 +80,6 @@ class ArchipelagoClient{
         
 };
 
+void LoadArchipelagoData();
+void SaveArchipelagoData(SaveContext* saveContext, int sectionID, bool fullSave);
+void InitArchipelagoData(bool isDebug);

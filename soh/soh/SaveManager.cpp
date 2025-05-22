@@ -113,6 +113,7 @@ SaveManager::SaveManager() {
     coreSectionIDsByName["entrances"] = SECTION_ID_ENTRANCES;
     coreSectionIDsByName["scenes"] = SECTION_ID_SCENES;
     coreSectionIDsByName["trackerData"] = SECTION_ID_TRACKER_DATA;
+    coreSectionIDsByName["archipelagoData"] = SECTION_ID_ARCHIPELAGO;
     AddLoadFunction("base", 1, LoadBaseVersion1);
     AddLoadFunction("base", 2, LoadBaseVersion2);
     AddLoadFunction("base", 3, LoadBaseVersion3);

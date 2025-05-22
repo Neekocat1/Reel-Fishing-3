@@ -12,6 +12,13 @@
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipInit.hpp"
+#include "soh/SaveManager.h"
+
+extern "C" {
+#include "variables.h"
+#include "macros.h"
+extern PlayState* gPlayState;
+}
 
 ArchipelagoClient::ArchipelagoClient() {
     std::string uuid = ap_get_uuid("uuid");
@@ -199,6 +206,26 @@ const char* ArchipelagoClient::GetConnectionStatus() {
         default:
             return "";
     }
+}
+
+
+void LoadArchipelagoData() {
+    SaveManager::Instance->LoadCharArray("roomHash", gSaveContext.ship.quest.data.archipelago.roomHash,
+                                         ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.roomHash));
+    SaveManager::Instance->LoadData("lastReceivedItemIndex", gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex);
+}
+
+void SaveArchipelagoData(SaveContext* saveContext, int sectionID, bool fullSave) {
+    SaveManager::Instance->SaveData("roomHash", saveContext->ship.quest.data.archipelago.roomHash);
+    SaveManager::Instance->SaveData("lastReceivedItemIndex",
+                                    saveContext->ship.quest.data.archipelago.lastReceivedItemIndex);
+}
+
+void InitArchipelagoData(bool isDebug) {
+    SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.roomHash, "",
+                                    ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.roomHash));
+
+    gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex = 0;
 }
 
 // Implement this properly once we have some kind of indication within a save file wether the player is in a normal

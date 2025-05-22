@@ -69,6 +69,7 @@ typedef enum { // Pre-existing IDs for save sections in base code
     SECTION_ID_ENTRANCES,
     SECTION_ID_SCENES,
     SECTION_ID_TRACKER_DATA,
+    SECTION_ID_ARCHIPELAGO,
     SECTION_ID_MAX
 } SaveFuncIDs;
 
@@ -168,29 +169,30 @@ typedef struct ShipBossRushSaveContextData {
     u8 options[BR_OPTIONS_MAX];
 } ShipBossRushSaveContextData;
 
+typedef struct ArchipelagoLocationData {
+    char itemName[100];
+    char locationName[100];
+    char playerName[17];
+    u8 itemType;
+} ArchipelagoLocationData;
+
+typedef struct ShipArchipelagoSaveContextData {
+    char roomHash[100];
+    char slotName[17];
+    u32 lastReceivedItemIndex;
+    ArchipelagoLocationData locations[RC_MAX];
+} ShipArchipelagoSaveContextData;
+
 typedef union ShipQuestSpecificSaveContextData {
     ShipRandomizerSaveContextData randomizer;
     ShipBossRushSaveContextData bossRush;
+    ShipArchipelagoSaveContextData archipelago;
 } ShipQuestSpecificSaveContextData;
 
 typedef struct ShipQuestSaveContextData {
     u8 id;
     ShipQuestSpecificSaveContextData data;
 } ShipQuestSaveContextData;
-
-typedef struct ArchipelagoLocationData {
-    char itemName[100];
-    char locationName[100];
-    char playerName[17];
-    u8 flags;
-} ArchipelagoLocationData;
-
-typedef struct ArchipelagoData {
-    char roomHash[100];
-    char slotName[17];
-    u32 lastReceivedItemIndex;
-    ArchipelagoLocationData locations[RC_MAX];
-} ArchipelagoData;
 
 typedef struct ShipSaveContextData {
     u16 pendingSale;
@@ -199,7 +201,6 @@ typedef struct ShipSaveContextData {
     SohStats stats;
     FaroresWindData backupFW;
     ShipQuestSaveContextData quest;
-    ArchipelagoData apData;
     u8 maskMemory;
     u8 filenameLanguage;
     //TODO: Move non-rando specific flags to a new sohInf and move the remaining randomizerInf to ShipRandomizerSaveContextData

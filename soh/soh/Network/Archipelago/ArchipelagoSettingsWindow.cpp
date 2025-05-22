@@ -4,6 +4,7 @@
 #include "soh/SohGui/UIWidgets.hpp"
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/Network/Archipelago/ArchipelagoConsoleWindow.h"
+#include "soh/SaveManager.h"
 
 void ArchipelagoSettingsWindow::DrawElement() {
     ArchipelagoClient& AP_client = ArchipelagoClient::GetInstance();
@@ -66,3 +67,10 @@ void ArchipelagoSettingsWindow::DrawElement() {
         }
     }
 };
+
+void ArchipelagoSettingsWindow::InitElement() {
+    SaveManager::Instance->AddLoadFunction("archipelagoData", 1, LoadArchipelagoData);
+    SaveManager::Instance->AddSaveFunction("archipelagoData", 1, SaveArchipelagoData, true,
+                                           SECTION_PARENT_NONE);
+    SaveManager::Instance->AddInitFunction(InitArchipelagoData);
+}
