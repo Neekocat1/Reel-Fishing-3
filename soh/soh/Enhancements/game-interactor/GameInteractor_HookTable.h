@@ -69,3 +69,5 @@ DEFINE_HOOK(OnSetGameLanguage, ());
 DEFINE_HOOK(OnFileDropped, (std::string filePath));
 DEFINE_HOOK(OnAssetAltChange, ());
 DEFINE_HOOK(OnKaleidoUpdate, ());
+
+DEFINE_HOOK(OnRandomizerItemGivenHooks, (uint32_t rc));

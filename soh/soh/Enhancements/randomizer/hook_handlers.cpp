@@ -346,6 +346,8 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
         }
     }
 
+    GameInteractor_ExecuteOnRandomizerItemGivenHooks((uint32_t)rc);
+
     randomizerQueuedChecks.pop();
 }
 
@@ -379,13 +381,6 @@ void RandomizerOnItemReceiveHandler(GetItemEntry receivedItemEntry) {
         randomizerQueuedItemEntry.itemId == receivedItemEntry.itemId) {
         SPDLOG_INFO("Item received mod {} item {} from RC {}", receivedItemEntry.modIndex, receivedItemEntry.itemId,
                     static_cast<uint32_t>(randomizerQueuedCheck));
-
-        // todo maybe move to seperate function
-        // let arhipelago know we got this check
-        if(randomizerQueuedCheck != RC_ARCHIPELAGO_RECIEVED_ITEM) {
-            ArchipelagoClient& ap_client = ArchipelagoClient::GetInstance();
-            ap_client.CheckLocation(randomizerQueuedCheck);
-        }
 
         loc->SetCheckStatus(RCSHOW_COLLECTED);
         CheckTracker::SpoilAreaFromCheck(randomizerQueuedCheck);
@@ -2407,6 +2402,9 @@ void RandomizerRegisterHooks() {
 
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnLoadGame>([](int32_t fileNum) {
         ShipInit::Init("IS_RANDO");
+
+        // Add condition around this to only fire when loading into an Archipelago save file
+        ShipInit::Init("IS_ARCHIPELAGO");
 
         randomizerQueuedChecks = std::queue<RandomizerCheck>();
         randomizerQueuedCheck = RC_UNKNOWN_CHECK;

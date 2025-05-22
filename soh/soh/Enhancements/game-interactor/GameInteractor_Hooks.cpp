@@ -301,3 +301,9 @@ void GameInteractor_RegisterOnAssetAltChange(void (*fn)(void)) {
 void GameInteractor_ExecuteOnKaleidoUpdate() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnKaleidoUpdate>();
 }
+
+// Mark: Randomizer
+
+void GameInteractor_ExecuteOnRandomizerItemGivenHooks(uint32_t rc) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnRandomizerItemGivenHooks>(rc);
+}

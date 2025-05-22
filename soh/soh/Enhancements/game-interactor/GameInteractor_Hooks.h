@@ -81,6 +81,9 @@ void GameInteractor_RegisterOnAssetAltChange(void (*fn)(void));
 // Mark: - Pause Menu
 void GameInteractor_ExecuteOnKaleidoUpdate();
 
+// Mark: - Randomizer
+void GameInteractor_ExecuteOnRandomizerItemGivenHooks(uint32_t rc);
+
 #ifdef __cplusplus
 }
 #endif
