@@ -487,7 +487,7 @@ void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient
     const std::string SlotName = ArchipelagoClient::GetInstance().GetSlotName();
     
     // init the item table with regular items first
-    for(int rc = 1; rc <= RC_MAX; rc++) {
+    for(int rc = 1; rc < RC_MAX; rc++) {
         // This may not even be needed
         const RandomizerGet vanillaItem = StaticData::GetLocation(static_cast<RandomizerCheck>(rc))->GetVanillaItem();
         itemLocationTable[rc].SetPlacedItem(vanillaItem);
