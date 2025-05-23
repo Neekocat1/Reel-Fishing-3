@@ -62,6 +62,13 @@ bool ArchipelagoClient::StartClient() {
     apClient->set_slot_connected_handler([&](const nlohmann::json) {
         ArchipelagoConsole_SendMessage("[LOG] Connected.", false);
         ArchipelagoClient::StartLocationScouts();
+
+        // if we are already in game when we connect 
+        // we won't have to request an itemSynch
+        if(GameInteractor::IsSaveLoaded(true)) {
+            SynchSentLocations();
+            SynchRecievedLocations();
+        }
     });
 
     apClient->set_items_received_handler([&](const std::list<APClient::NetworkItem>& items) {
@@ -101,15 +108,21 @@ bool ArchipelagoClient::StartClient() {
 }
 
 void ArchipelagoClient::GameLoaded() {
-    // if its not an AP save, disconnect
-    if(!IS_ARCHIPELAGO) {
-        if(apClient != nullptr) {
-            apClient->reset();
-        }
+    if(apClient == nullptr) {
         return;
     }
 
+    // if its not an AP save, disconnect
+    if(!IS_ARCHIPELAGO) {
+        apClient->reset();
+        return;
+    }
+
+    ArchipelagoConsole_SendMessage("[LOG] Synching Items and Locations.");
+
     SynchItems();
+    SynchSentLocations();
+    SynchRecievedLocations();
 }
 
 void ArchipelagoClient::StartLocationScouts() {
@@ -126,8 +139,12 @@ void ArchipelagoClient::StartLocationScouts() {
 }
 
 void ArchipelagoClient::SynchItems() {
-    ArchipelagoConsole_SendMessage("[LOG] Synching Items and Locations.");
+    // Send a Synch request to get any items we may have missed
+    ArchipelagoConsole_SendMessage("[LOG] Sending synch request");
+    apClient->Sync();
+}
 
+void ArchipelagoClient::SynchSentLocations() {
     // send already checked locations
     std::list<int64_t> checkedLocations;
     for(const auto& loc : Rando::StaticData::GetLocationTable()) {
@@ -141,14 +158,13 @@ void ArchipelagoClient::SynchItems() {
     ArchipelagoConsole_SendMessage(locationLog.c_str());
 
     apClient->LocationChecks(checkedLocations);
+}
+
+void ArchipelagoClient::SynchRecievedLocations() {
     // Open checks that have been found previously but went unsaved
     for(const int64_t apLoc : apClient->get_checked_locations()) {
         // TODO call location checked function to open any unopened checks.
     }
-
-    // Send a Synch request to get any items we may have missed
-    ArchipelagoConsole_SendMessage("[LOG] Sending synch request");
-    apClient->Sync();
 }
 
 bool ArchipelagoClient::IsConnected() {

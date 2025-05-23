@@ -33,6 +33,8 @@ class ArchipelagoClient{
         void GameLoaded();
         void StartLocationScouts();
         void SynchItems();
+        void SynchSentLocations();
+        void SynchRecievedLocations();
 
         // getters
         const std::string GetSlotName() const;
