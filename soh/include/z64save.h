@@ -170,16 +170,18 @@ typedef struct ShipBossRushSaveContextData {
 } ShipBossRushSaveContextData;
 
 typedef struct ArchipelagoLocationData {
+    u8 itemType;
     char itemName[100];
     char locationName[100];
     char playerName[17];
-    u8 itemType;
 } ArchipelagoLocationData;
 
 typedef struct ShipArchipelagoSaveContextData {
+    u8 isArchipelago;
+    u32 lastReceivedItemIndex;
+    u8 deathLink;
     char roomHash[100];
     char slotName[17];
-    u32 lastReceivedItemIndex;
     ArchipelagoLocationData locations[RC_MAX];
 } ShipArchipelagoSaveContextData;
 

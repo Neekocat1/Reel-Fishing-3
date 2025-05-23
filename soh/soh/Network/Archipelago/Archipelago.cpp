@@ -210,22 +210,81 @@ const char* ArchipelagoClient::GetConnectionStatus() {
 
 
 void LoadArchipelagoData() {
+    SaveManager::Instance->LoadData("isArchipelago", gSaveContext.ship.quest.data.archipelago.isArchipelago);
+    SaveManager::Instance->LoadData("lastReceivedItemIndex",
+                                    gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex);
+    SaveManager::Instance->LoadData("deathLink", gSaveContext.ship.quest.data.archipelago.deathLink);
+
     SaveManager::Instance->LoadCharArray("roomHash", gSaveContext.ship.quest.data.archipelago.roomHash,
                                          ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.roomHash));
-    SaveManager::Instance->LoadData("lastReceivedItemIndex", gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex);
+    SaveManager::Instance->LoadCharArray("slotName", gSaveContext.ship.quest.data.archipelago.slotName,
+                                         ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.slotName));
+
+    SaveManager::Instance->LoadArray(
+        "locations", ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations),
+        [](size_t i) { 
+            SaveManager::Instance->LoadStruct("", [&i]() {
+                SaveManager::Instance->LoadData("itemType",
+                                                gSaveContext.ship.quest.data.archipelago.locations[i].itemType);
+
+                SaveManager::Instance->LoadCharArray(
+                    "itemName", gSaveContext.ship.quest.data.archipelago.locations[i].itemName,
+                    ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].itemName));
+                SaveManager::Instance->LoadCharArray(
+                    "locationName", gSaveContext.ship.quest.data.archipelago.locations[i].locationName,
+                    ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].locationName));
+                SaveManager::Instance->LoadCharArray(
+                    "playerName", gSaveContext.ship.quest.data.archipelago.locations[i].playerName,
+                    ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].playerName));
+            });
+        });
 }
 
 void SaveArchipelagoData(SaveContext* saveContext, int sectionID, bool fullSave) {
-    SaveManager::Instance->SaveData("roomHash", saveContext->ship.quest.data.archipelago.roomHash);
+    SaveManager::Instance->SaveData("isArchipelago", saveContext->ship.quest.data.archipelago.isArchipelago);
     SaveManager::Instance->SaveData("lastReceivedItemIndex",
                                     saveContext->ship.quest.data.archipelago.lastReceivedItemIndex);
+    SaveManager::Instance->SaveData("deathLink", saveContext->ship.quest.data.archipelago.deathLink);
+
+    SaveManager::Instance->SaveData("roomHash", saveContext->ship.quest.data.archipelago.roomHash);
+    SaveManager::Instance->SaveData("slotName", saveContext->ship.quest.data.archipelago.slotName);
+
+    SaveManager::Instance->SaveArray(
+        "locations", ARRAY_COUNT(saveContext->ship.quest.data.archipelago.locations), [&](size_t i) {
+            SaveManager::Instance->SaveStruct("", [&]() {
+                SaveManager::Instance->SaveData("itemType",
+                                                saveContext->ship.quest.data.archipelago.locations[i].itemType);
+
+                SaveManager::Instance->SaveData("itemName",
+                                                saveContext->ship.quest.data.archipelago.locations[i].itemName);
+                SaveManager::Instance->SaveData("locationName",
+                                                saveContext->ship.quest.data.archipelago.locations[i].locationName);
+                SaveManager::Instance->SaveData("playerName",
+                                                saveContext->ship.quest.data.archipelago.locations[i].playerName);
+            });
+        });
 }
 
 void InitArchipelagoData(bool isDebug) {
+    gSaveContext.ship.quest.data.archipelago.isArchipelago = 0;
+    gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex = 0;
+    gSaveContext.ship.quest.data.archipelago.deathLink = 0;
+
     SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.roomHash, "",
                                     ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.roomHash));
+    SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.slotName, "",
+                                    ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.slotName));
 
-    gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex = 0;
+    for (uint32_t i; i < ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations); i++) {
+        gSaveContext.ship.quest.data.archipelago.locations[i].itemType = 0;
+
+        SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[i].itemName, "",
+                                        ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].itemName));
+        SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[i].locationName, "",
+            ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].locationName));
+        SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[i].playerName, "",
+                                        ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].playerName));
+    }
 }
 
 // Implement this properly once we have some kind of indication within a save file wether the player is in a normal
