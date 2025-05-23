@@ -307,3 +307,8 @@ void GameInteractor_ExecuteOnKaleidoUpdate() {
 void GameInteractor_ExecuteOnRandomizerItemGivenHooks(uint32_t rc) {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnRandomizerItemGivenHooks>(rc);
 }
+
+// MARK: Archipelago
+void GameInteractor_ExecuteOnArchipelagoItemRecieved(uint32_t rc) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnArchipelagoItemRecieved>(rc);
+}

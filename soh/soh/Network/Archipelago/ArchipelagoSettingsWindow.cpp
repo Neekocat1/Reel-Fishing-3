@@ -58,12 +58,12 @@ void ArchipelagoSettingsWindow::DrawElement() {
         }
         ImGui::SameLine();
         if (UIWidgets::Button("Link up", UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
-            CVarSetInteger("ArchipelagoConnected", 1);
+            CVarSetInteger(CVAR_REMOTE_ARCHIPELAGO("Connected"), 1);
         }
         ImGui::SameLine();
         if (UIWidgets::Button("Give Blue Rupee",
                               UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
-            ArchipelagoClient::GetInstance().OnItemReceived(66077, true);
+            ArchipelagoClient::GetInstance().OnItemReceived(16711816, true);
         }
     }
 };
