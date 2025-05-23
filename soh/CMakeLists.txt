@@ -303,14 +303,17 @@ if (BUILD_REMOTE_CONTROL)
         set(SDL2-NET-INCLUDE ${SDL_NET_INCLUDE_DIRS})
     endif()
 
-    file(STRINGS /etc/os-release distro REGEX "^NAME=")
-    string(REGEX REPLACE "NAME=\"(.*)\"" "\\1" distro "${distro}")
+    set(OPENSSL_USE_STATIC_LIBS ON)
 
-    if(${distro} MATCHES "Fedora Linux")
-        set(OPENSSL_USE_STATIC_LIBS OFF)
-    else()
-        set(OPENSSL_USE_STATIC_LIBS ON)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        file(STRINGS /etc/os-release distro REGEX "^NAME=")
+        string(REGEX REPLACE "NAME=\"(.*)\"" "\\1" distro "${distro}")
+
+        if(${distro} MATCHES "Fedora Linux")
+            set(OPENSSL_USE_STATIC_LIBS OFF)
+        endif()
     endif()
+
     find_package(OpenSSL)
     if(NOT OPENSSL_FOUND)
         message(STATUS "OpenSSL not found (it's possible the version installed is too old). Disabling BUILD_REMOTE_CONTROL.")
