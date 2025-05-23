@@ -101,9 +101,12 @@ bool ArchipelagoClient::StartClient() {
 }
 
 void ArchipelagoClient::GameLoaded() {
+    // if its not an AP save, disconnect
     if(!IS_ARCHIPELAGO) {
-    //    apClient->reset();
-    //    return;
+        if(apClient != nullptr) {
+            apClient->reset();
+        }
+        return;
     }
 
     SynchItems();
@@ -344,10 +347,6 @@ void InitArchipelagoData(bool isDebug) {
                                         ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].playerName));
     }
 }
-
-// Implement this properly once we have some kind of indication within a save file wether the player is in a normal
-// rando save or an archipelago one.
-#define IS_ARCHIPELAGO true
 
 void RegisterArchipelago() {
     COND_HOOK(GameInteractor::OnRandomizerItemGivenHooks, IS_ARCHIPELAGO,
