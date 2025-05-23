@@ -6,10 +6,12 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+#include <string>
 
 #include "soh/Network/Archipelago/ArchipelagoConsoleWindow.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/static_data.h"
+#include "soh/Enhancements/randomizer/context.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ShipInit.hpp"
@@ -24,14 +26,15 @@ extern PlayState* gPlayState;
 ArchipelagoClient::ArchipelagoClient() {
     std::string uuid = ap_get_uuid("uuid");
 
-    ItemRecievedCallback = nullptr;
     gameWon = false;
 
     namespace apc = AP_Client_consts;
     CVarSetInteger(CVAR_REMOTE_ARCHIPELAGO("Connected"), 0);
 
     // call poll every frame
-    COND_HOOK(GameInteractor::OnGameFrameUpdate, true, [](){ArchipelagoClient::GetInstance().Poll();})
+    COND_HOOK(GameInteractor::OnGameFrameUpdate, true, [](){ArchipelagoClient::GetInstance().Poll();});
+    COND_HOOK(GameInteractor::OnLoadGame, true, [](int32_t file_id){ArchipelagoClient::GetInstance().GameLoaded();});
+
 }
 
 ArchipelagoClient& ArchipelagoClient::GetInstance() {
@@ -63,7 +66,7 @@ bool ArchipelagoClient::StartClient() {
 
     apClient->set_items_received_handler([&](const std::list<APClient::NetworkItem>& items) {
         for(const APClient::NetworkItem& item : items) {
-            OnItemReceived(item.item, false);  // todo get rid of notify, since it doesn't work for us right now anyway
+            OnItemReceived(item.item, item.index);
         }
     });
 
@@ -97,6 +100,15 @@ bool ArchipelagoClient::StartClient() {
     return true;
 }
 
+void ArchipelagoClient::GameLoaded() {
+    if(!IS_ARCHIPELAGO) {
+    //    apClient->reset();
+    //    return;
+    }
+
+    SynchItems();
+}
+
 void ArchipelagoClient::StartLocationScouts() {
     std::set<int64_t> missing_loc_set = apClient->get_missing_locations();
     std::set<int64_t> found_loc_set = apClient->get_checked_locations();
@@ -108,6 +120,32 @@ void ArchipelagoClient::StartLocationScouts() {
         location_list.emplace_back(loc_id);
     }
     apClient->LocationScouts(location_list);
+}
+
+void ArchipelagoClient::SynchItems() {
+    ArchipelagoConsole_SendMessage("[LOG] Synching Items and Locations.");
+
+    // send already checked locations
+    std::list<int64_t> checkedLocations;
+    for(const auto& loc : Rando::StaticData::GetLocationTable()) {
+        const RandomizerCheck rc = loc.GetRandomizerCheck();
+        if(Rando::Context::GetInstance()->GetItemLocation(rc)->HasObtained()) {
+            const int64_t apLocation = apClient->get_location_id(loc.GetName());
+            checkedLocations.emplace_back(apLocation);
+        }
+    }
+    std::string locationLog = "[LOG] Synching " + std::to_string(checkedLocations.size())+ " checks already found in game";
+    ArchipelagoConsole_SendMessage(locationLog.c_str());
+
+    apClient->LocationChecks(checkedLocations);
+    // Open checks that have been found previously but went unsaved
+    for(const int64_t apLoc : apClient->get_checked_locations()) {
+        // TODO call location checked function to open any unopened checks.
+    }
+
+    // Send a Synch request to get any items we may have missed
+    ArchipelagoConsole_SendMessage("[LOG] Sending synch request");
+    apClient->Sync();
 }
 
 bool ArchipelagoClient::IsConnected() {
@@ -130,16 +168,21 @@ void ArchipelagoClient::CheckLocation(RandomizerCheck sohCheckId) {
     apClient->LocationChecks({ apItemId });
 }
 
-void ArchipelagoClient::AddItemRecievedCallback(std::function<void(const std::string&)> callback) {
-    ItemRecievedCallback = callback;
-}
+void ArchipelagoClient::OnItemReceived(int64_t apItemId, int64_t itemIndex) {
+    if(!GameInteractor::IsSaveLoaded(true)) {
+        // Don't queue up any items when we aren't in game
+        // Any Items missed this way will get synched when we load the save
+        return;
+    }
 
-void ArchipelagoClient::RemoveItemRecievedCallback(std::function<void(const std::string&)> old_callback) {
-    ItemRecievedCallback = nullptr;
-}
+    if(itemIndex < gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex) {
+        // Skip recieving any items we already have
+        return;
+    }
 
-void ArchipelagoClient::OnItemReceived(int64_t recieved_item_id, bool notify_player) {
-    const std::string item_name = apClient->get_item_name(recieved_item_id, AP_Client_consts::AP_GAME_NAME);
+    const std::string item_name = apClient->get_item_name(apItemId, AP_Client_consts::AP_GAME_NAME);
+    std::string logMessage = "[Log] Recieved " + item_name;
+    ArchipelagoConsole_SendMessage(logMessage.c_str());
     const RandomizerGet item = Rando::StaticData::itemNameToEnum[item_name];
     GameInteractor_ExecuteOnArchipelagoItemRecieved(static_cast<int32_t>(item));
 }
@@ -159,7 +202,7 @@ void ArchipelagoClient::Poll() {
     apClient->poll();
 }
 
-const std::string& ArchipelagoClient::GetSlotName() const {
+const std::string ArchipelagoClient::GetSlotName() const {
     if(apClient == NULL) {
         return "";
     }
@@ -310,7 +353,7 @@ void RegisterArchipelago() {
     COND_HOOK(GameInteractor::OnRandomizerItemGivenHooks, IS_ARCHIPELAGO,
               [](uint32_t rc) { 
         if (rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
-            // Update lastReceivedIndex
+            gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex++;
         } else {
             ArchipelagoClient::GetInstance().CheckLocation((RandomizerCheck)rc);
         }
