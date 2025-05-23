@@ -114,21 +114,20 @@ bool ArchipelagoClient::IsConnected() {
     return apClient->get_state() == APClient::State::SLOT_CONNECTED;
 }
 
-void ArchipelagoClient::CheckLocation(RandomizerCheck SoH_check_id) {
-    //std::string_view ap_name = Rando::StaticData::SohCheckToAP[SoH_check_id];
-    std::string ap_name = Rando::StaticData::GetLocation(SoH_check_id)->GetName();
-    if(ap_name.empty()) {
+void ArchipelagoClient::CheckLocation(RandomizerCheck sohCheckId) {
+    std::string apName = Rando::StaticData::GetLocation(sohCheckId)->GetName();
+    if (apName.empty()) {
         return;
     }
-    int64_t ap_item_id = apClient->get_location_id(std::string(ap_name));
-    std::string logMessage = "[LOG] Checked: " + ap_name + "(" + std::to_string(ap_item_id) + "), sending to AP server";
+    int64_t apItemId = apClient->get_location_id(std::string(apName));
+
+    std::string logMessage = "[LOG] Checked: " + apName + "(" + std::to_string(apItemId) + "), sending to AP server";
     ArchipelagoConsole_SendMessage(logMessage.c_str());
 
-    // currently not sending, because i only get so many real chances
     if(!IsConnected()) {
         return;
     }
-    apClient->LocationChecks({ap_item_id});
+    apClient->LocationChecks({ apItemId });
 }
 
 void ArchipelagoClient::AddItemRecievedCallback(std::function<void(const std::string&)> callback) {
@@ -204,6 +203,26 @@ const char* ArchipelagoClient::GetConnectionStatus() {
     }
 }
 
+extern "C" void Archipelago_InitSaveFile() {
+    gSaveContext.ship.quest.data.archipelago.isArchipelago = 1;
+
+    std::vector<ArchipelagoClient::ApItem> scoutedItems = ArchipelagoClient::GetInstance().GetScoutedItems();
+
+    for (uint32_t i = 0; i < scoutedItems.size(); i++) {
+        RandomizerCheck rc = Rando::StaticData::locationNameToEnum[scoutedItems[i].locationName];
+        gSaveContext.ship.quest.data.archipelago.locations[rc].itemType = scoutedItems[i].flags;
+
+        SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[rc].itemName,
+                                        scoutedItems[i].itemName,
+                                        ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[rc].itemName));
+        SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[rc].locationName,
+                                        scoutedItems[i].locationName,
+            ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[rc].locationName));
+        SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[rc].playerName,
+                                        scoutedItems[i].playerName,
+                                        ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[rc].playerName));
+    }
+}
 
 void LoadArchipelagoData() {
     SaveManager::Instance->LoadData("isArchipelago", gSaveContext.ship.quest.data.archipelago.isArchipelago);
@@ -271,8 +290,8 @@ void InitArchipelagoData(bool isDebug) {
     SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.slotName, "",
                                     ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.slotName));
 
-    for (uint32_t i; i < ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations); i++) {
-        gSaveContext.ship.quest.data.archipelago.locations[i].itemType = 0;
+    for (uint32_t i = 0; i < ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations); i++) {
+        gSaveContext.ship.quest.data.archipelago.locations[i].itemType = -1;
 
         SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[i].itemName, "",
                                         ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].itemName));

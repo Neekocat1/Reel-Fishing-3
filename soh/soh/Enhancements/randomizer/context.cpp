@@ -484,8 +484,8 @@ void Context::ParseItemLocationsJson(nlohmann::json spoilerFileJson) {
 void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient::ApItem>& scouted_items) {
     const std::string SlotName = ArchipelagoClient::GetInstance().GetSlotName();
     
-    // Zero out the item table first
-    for(int rc = 1; rc <= RC_MAX; rc++) {
+    // Zero out the location table first
+    for(int rc = 1; rc < RC_MAX; rc++) {
         itemLocationTable[rc].SetPlacedItem(RG_NONE);
     }
 
@@ -497,15 +497,20 @@ void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient
             // our item
             SPDLOG_TRACE("Populated item {} at location {}", ap_item.itemName, ap_item.locationName);
             const RandomizerGet item = StaticData::itemNameToEnum[ap_item.itemName];
-            //const RandomizerGet item = StaticData::APitemToSoh.find(ap_item.itemName)->second;
             itemLocationTable[rc].SetPlacedItem(item);
         } else {
             // other player item
-            itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_USEFUL); 
-            // i'll have to figure out custom names at some point, this currently does nothing
-            //overrides[rc] = ItemOverride(rc, RG_DEKU_NUTS_5);
-            //std::string getText = ap_item.playerName + "'s " + ap_item.itemName;
-            //overrides[rc].SetTrickName(Text(getText, getText, getText));
+            switch (ap_item.flags) {
+                case 0:
+                    itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_JUNK);
+                    break;
+                case 1:
+                    itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_PROGRESSIVE);
+                    break;
+                case 2:
+                    itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_USEFUL);
+                    break;
+            }
         }
     }
 }

@@ -5540,12 +5540,9 @@ void Randomizer::CreateCustomMessages() {
         GIMESSAGE(RG_DEKU_NUT_BAG, ITEM_NUT, "You found the %rDeku Nut Bag%w!&You can now hold Deku Nuts!",
                   "Du hast eine %rDeku-Nuß-Tasche%w&gefunden! Nun kannst Du &%yDeku-Nüsse%w halten!",
                   "Vous avez trouvé le %rSac de Noix& Mojo%w!&Vous pouvez maintenant porter des&Noix Mojo!"),
-        GIMESSAGE_NO_GERMAN(RG_ARCHIPELAGO_ITEM_USEFUL, ITEM_BEAN, "You found an useful %rAP_ITEM%w!",
-                            "Needs French Translation"),
-        GIMESSAGE_NO_GERMAN(RG_ARCHIPELAGO_ITEM_JUNK, ITEM_BEAN, "You found a junk %rAP_ITEM%w!",
-                            "Needs French Translation"),
-        GIMESSAGE_NO_GERMAN(RG_ARCHIPELAGO_ITEM_PROGRESSIVE, ITEM_BEAN, "You found a progressive %rAP_ITEM%w!",
-                            "Needs French Translation"),
+        GIMESSAGE_UNTRANSLATED(RG_ARCHIPELAGO_ITEM_USEFUL, ITEM_NUT, "You found an useful %gAP Item%w!"),
+        GIMESSAGE_UNTRANSLATED(RG_ARCHIPELAGO_ITEM_JUNK, ITEM_NUT, "You found a junk %gAP Item%w!"),
+        GIMESSAGE_UNTRANSLATED(RG_ARCHIPELAGO_ITEM_PROGRESSIVE, ITEM_NUT, "You found a progressive %gAP Item%w!"),
     } };
     CreateGetItemMessages(getItemMessages);
     CreateRupeeMessages();

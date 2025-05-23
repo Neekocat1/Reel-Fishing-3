@@ -1,4 +1,5 @@
 #pragma once
+#ifdef __cplusplus
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include <vector>
@@ -83,3 +84,9 @@ class ArchipelagoClient{
 void LoadArchipelagoData();
 void SaveArchipelagoData(SaveContext* saveContext, int sectionID, bool fullSave);
 void InitArchipelagoData(bool isDebug);
+extern "C" {
+#endif // END __cplusplus
+void Archipelago_InitSaveFile();
+#ifdef __cplusplus
+}
+#endif
