@@ -486,11 +486,9 @@ void Context::ParseItemLocationsJson(nlohmann::json spoilerFileJson) {
 void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient::ApItem>& scouted_items) {
     const std::string SlotName = ArchipelagoClient::GetInstance().GetSlotName();
     
-    // init the item table with regular items first
+    // Zero out the item table first
     for(int rc = 1; rc <= RC_MAX; rc++) {
-        // This may not even be needed
-        const RandomizerGet vanillaItem = StaticData::GetLocation(static_cast<RandomizerCheck>(rc))->GetVanillaItem();
-        itemLocationTable[rc].SetPlacedItem(vanillaItem);
+        itemLocationTable[rc].SetPlacedItem(RG_NONE);
     }
 
     for(const ArchipelagoClient::ApItem& ap_item: scouted_items) {
@@ -505,7 +503,7 @@ void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient
             itemLocationTable[rc].SetPlacedItem(item);
         } else {
             // other player item
-            itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM); 
+            itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_USEFUL); 
             // i'll have to figure out custom names at some point, this currently does nothing
             //overrides[rc] = ItemOverride(rc, RG_DEKU_NUTS_5);
             //std::string getText = ap_item.playerName + "'s " + ap_item.itemName;
