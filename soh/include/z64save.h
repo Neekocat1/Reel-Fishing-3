@@ -339,7 +339,7 @@ typedef enum {
 #define IS_MASTER_QUEST (gSaveContext.ship.quest.id == QUEST_MASTER)
 #define IS_RANDO (gSaveContext.ship.quest.id == QUEST_RANDOMIZER)
 #define IS_BOSS_RUSH (gSaveContext.ship.quest.id == QUEST_BOSSRUSH)
-#define IS_ARCHIPELAGO (gSaveContext.ship.quest.id == QUEST_ARCHIPELAGO)
+#define IS_ARCHIPELAGO (gSaveContext.ship.quest.data.archipelago.isArchipelago == 1)
 
 typedef enum {
     /* 0x00 */ BTN_ENABLED,

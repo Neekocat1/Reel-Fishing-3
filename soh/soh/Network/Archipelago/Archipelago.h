@@ -30,10 +30,14 @@ class ArchipelagoClient{
         bool StartClient();
         bool StopClient();
 
+        void GameLoaded();
         void StartLocationScouts();
+        void SynchItems();
+        void SynchSentLocations();
+        void SynchRecievedLocations();
 
         // getters
-        const std::string& GetSlotName() const;
+        const std::string GetSlotName() const;
 
         const char* GetConnectionStatus();
         const std::map<std::string, int>& GetSlotData();
@@ -42,12 +46,8 @@ class ArchipelagoClient{
         bool IsConnected();
         void CheckLocation(RandomizerCheck SoH_check_id);
 
-        // callback slots
-        void AddItemRecievedCallback(std::function<void(const std::string&)> callback);
-        void RemoveItemRecievedCallback(std::function<void(const std::string&)> old_callback);
-
         // todo move me back down when done testing
-        void OnItemReceived(int64_t recieved_item_id, bool notify_player);
+        void OnItemReceived(int64_t apItemId, int64_t itemIndex);
 
         void SendGameWon();
 
@@ -71,14 +71,6 @@ class ArchipelagoClient{
         std::map<std::string, int> slotData;
         std::set<int64_t> locations;
         std::vector<ApItem> scoutedItems;
-
-        // Callback Functions
-        void OnLocationChecked(int64_t location_id);
-        void OnDeathLinkReceived() { }; // TODO: implement me
-
-        // Callbacks
-        std::function<void(const std::string&)> ItemRecievedCallback;
-        
 };
 
 void LoadArchipelagoData();

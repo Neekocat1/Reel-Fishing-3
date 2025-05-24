@@ -2527,7 +2527,6 @@ void RandomizerRegisterHooks() {
         
         // TODO Implement propeerly when we can read what kind of game we're playing from the save file
 
-        #define IS_ARCHIPELAGO true
         COND_HOOK(GameInteractor::OnArchipelagoItemRecieved, IS_ARCHIPELAGO, ArchipelagoOnRecieveItem);
 
         if (RAND_GET_OPTION(RSK_FISHSANITY) != RO_FISHSANITY_OFF) {
