@@ -796,6 +796,8 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
     va_list args;
     va_copy(args, originalArgs);
 
+    u8 test;
+
     switch (id) {
         case VB_ALLOW_ENTRANCE_CS_FOR_EITHER_AGE: {
             s32 entranceIndex = va_arg(args, s32);
@@ -858,6 +860,7 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
             }
             break;
         case VB_MOVE_MIDO_IN_KOKIRI_FOREST:
+            test = RAND_GET_OPTION(RSK_FOREST);
             if (RAND_GET_OPTION(RSK_FOREST) == RO_CLOSED_FOREST_OFF && gSaveContext.cutsceneIndex == 0) {
                 *should = true;
             }
