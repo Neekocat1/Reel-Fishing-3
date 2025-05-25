@@ -30,6 +30,7 @@ ArchipelagoClient::ArchipelagoClient() {
 
     namespace apc = AP_Client_consts;
     CVarSetInteger(CVAR_REMOTE_ARCHIPELAGO("Connected"), 0);
+    bool itemQueued = false;
 
     // call poll every frame
     COND_HOOK(GameInteractor::OnGameFrameUpdate, true, [](){ArchipelagoClient::GetInstance().Poll();});
@@ -73,7 +74,14 @@ bool ArchipelagoClient::StartClient() {
 
     apClient->set_items_received_handler([&](const std::list<APClient::NetworkItem>& items) {
         for(const APClient::NetworkItem& item : items) {
-            OnItemReceived(item.item, item.index);
+            ApItem apItem;
+            const std::string game = apClient->get_player_game(item.player);
+            apItem.itemName = apClient->get_item_name(item.item, game);
+            apItem.locationName = apClient->get_location_name(item.location, game);
+            apItem.playerName = apClient->get_player_alias(item.player);
+            apItem.flags = item.flags;
+            apItem.index = item.index;
+            OnItemReceived(apItem);
         }
     });
 
@@ -187,23 +195,37 @@ void ArchipelagoClient::CheckLocation(RandomizerCheck sohCheckId) {
     apClient->LocationChecks({ apItemId });
 }
 
-void ArchipelagoClient::OnItemReceived(int64_t apItemId, int64_t itemIndex) {
+void ArchipelagoClient::OnItemReceived(const ApItem apItem) {
     if(!GameInteractor::IsSaveLoaded(true)) {
         // Don't queue up any items when we aren't in game
         // Any Items missed this way will get synched when we load the save
         return;
     }
 
-    if(itemIndex < gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex) {
-        // Skip recieving any items we already have
+    std::string logMessage = "[Log] Recieved " + apItem.itemName;
+    ArchipelagoConsole_SendMessage(logMessage.c_str());
+
+    // add item to the queue
+    recieveQueue.push(apItem);
+}
+
+void ArchipelagoClient::QueueItem(const ApItem item) {
+    if(item.index < gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex) {
+        // Skip queueing any items we already have
+        std::string logMessage = "[Log] Skipping giving " + item.itemName + ". We recieved this previously.";
+        ArchipelagoConsole_SendMessage(logMessage.c_str());
         return;
     }
 
-    const std::string item_name = apClient->get_item_name(apItemId, AP_Client_consts::AP_GAME_NAME);
-    std::string logMessage = "[Log] Recieved " + item_name;
+    std::string logMessage = "[Log] Giving " + item.itemName;
     ArchipelagoConsole_SendMessage(logMessage.c_str());
-    const RandomizerGet item = Rando::StaticData::itemNameToEnum[item_name];
-    GameInteractor_ExecuteOnArchipelagoItemRecieved(static_cast<int32_t>(item));
+    const RandomizerGet RG = Rando::StaticData::itemNameToEnum[item.itemName];
+    if(RG == RG_NONE) {
+        return;
+    }
+
+    itemQueued = true;
+    GameInteractor_ExecuteOnArchipelagoItemRecieved(static_cast<int32_t>(RG));
 }
 
 void ArchipelagoClient::SendGameWon() {
@@ -216,6 +238,14 @@ void ArchipelagoClient::SendGameWon() {
 void ArchipelagoClient::Poll() {
     if(apClient == nullptr) {
         return;
+    }
+
+    // queue another item to be recieved
+    if(!itemQueued && recieveQueue.size() > 0) {
+        
+        const ApItem item = recieveQueue.front();
+        recieveQueue.pop();
+        QueueItem(item);
     }
     
     apClient->poll();
@@ -369,6 +399,7 @@ void RegisterArchipelago() {
               [](uint32_t rc) { 
         if (rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
             gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex++;
+            ArchipelagoClient::GetInstance().itemQueued = false;
         } else {
             ArchipelagoClient::GetInstance().CheckLocation((RandomizerCheck)rc);
         }

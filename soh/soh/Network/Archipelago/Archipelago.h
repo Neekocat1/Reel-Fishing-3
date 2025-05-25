@@ -3,6 +3,7 @@
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include <vector>
+#include <queue>
 
 // Forward declaration
 class APClient;
@@ -22,7 +23,7 @@ class ArchipelagoClient{
             std::string locationName;
             std::string playerName;
             unsigned int flags;
-            int index;
+            uint64_t index;
         };
 
         static ArchipelagoClient& GetInstance();
@@ -46,14 +47,15 @@ class ArchipelagoClient{
         bool IsConnected();
         void CheckLocation(RandomizerCheck SoH_check_id);
 
-        // todo move me back down when done testing
-        void OnItemReceived(int64_t apItemId, int64_t itemIndex);
+        void OnItemReceived(const ApItem apItem);
+        void QueueItem(const ApItem item);
 
         void SendGameWon();
 
         void Poll();
 
         std::unique_ptr<APClient> apClient;
+        bool itemQueued;
 
     protected:
         ArchipelagoClient();
@@ -71,6 +73,7 @@ class ArchipelagoClient{
         std::map<std::string, int> slotData;
         std::set<int64_t> locations;
         std::vector<ApItem> scoutedItems;
+        std::queue<ApItem> recieveQueue;
 };
 
 void LoadArchipelagoData();

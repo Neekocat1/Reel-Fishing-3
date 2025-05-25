@@ -63,7 +63,13 @@ void ArchipelagoSettingsWindow::DrawElement() {
         ImGui::SameLine();
         if (UIWidgets::Button("Give Blue Rupee",
                               UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
-            ArchipelagoClient::GetInstance().OnItemReceived(16711816, true);
+            ArchipelagoClient::ApItem apItem;
+            apItem.itemName = "Blue Rupee";
+            apItem.locationName = "Nowhere";
+            apItem.playerName = "Nobody";
+            apItem.flags = 0b001;
+            apItem.index = 999999;
+            ArchipelagoClient::GetInstance().OnItemReceived(apItem);
         }
     }
 };
