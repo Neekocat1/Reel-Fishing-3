@@ -484,6 +484,8 @@ void Context::ParseItemLocationsJson(nlohmann::json spoilerFileJson) {
 void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_data) {
     // Set options to what Archipelago expects. Need to slowly convert these to options in apworld and
     // load those in instead.
+
+    nlohmann::json slotData = ArchipelagoClient::GetInstance().GetSlotData();
     mOptions[RSK_FOREST].Set(RO_CLOSED_FOREST_OFF);
     mOptions[RSK_KAK_GATE].Set(RO_KAK_GATE_OPEN);
     mOptions[RSK_DOOR_OF_TIME].Set(RO_DOOROFTIME_OPEN);
@@ -587,7 +589,7 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_FISHING_POLE_HINT].Set(RO_GENERIC_NO);
     mOptions[RSK_HINT_CLARITY].Set(0);
     mOptions[RSK_HINT_DISTRIBUTION].Set(0);
-    mOptions[RSK_SHUFFLE_MAPANDCOMPASS].Set(0);
+    mOptions[RSK_SHUFFLE_MAPANDCOMPASS].Set(RO_DUNGEON_ITEM_LOC_ANYWHERE);
     mOptions[RSK_KEYSANITY].Set(RO_DUNGEON_ITEM_LOC_ANYWHERE);
     mOptions[RSK_GERUDO_KEYS].Set(RO_GERUDO_KEYS_ANYWHERE);
     mOptions[RSK_BOSS_KEYSANITY].Set(RO_DUNGEON_ITEM_LOC_ANYWHERE);
@@ -669,7 +671,7 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_MIX_GROTTO_ENTRANCES].Set(0);
     mOptions[RSK_DECOUPLED_ENTRANCES].Set(0);
     mOptions[RSK_STARTING_SKULLTULA_TOKEN].Set(0);
-    mOptions[RSK_STARTING_HEARTS].Set(3);
+    mOptions[RSK_STARTING_HEARTS].Set(2);
     mOptions[RSK_DAMAGE_MULTIPLIER].Set(0);
     mOptions[RSK_ALL_LOCATIONS_REACHABLE].Set(0);
     mOptions[RSK_SHUFFLE_BOSS_ENTRANCES].Set(0);
@@ -710,17 +712,16 @@ void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient
             const RandomizerGet item = StaticData::itemNameToEnum[ap_item.itemName];
             itemLocationTable[rc].SetPlacedItem(item);
         } else {
-            // other player item
-            switch (ap_item.flags) {
-                case 0:
-                    itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_JUNK);
-                    break;
-                case 1:
-                    itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_PROGRESSIVE);
-                    break;
-                case 2:
-                    itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_USEFUL);
-                    break;
+            // Other player item
+            // If progressive or trap bit flag is set, make item progressive.
+            if (ap_item.flags & (1 << 0) || ap_item.flags & (1 << 2)) {
+                itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_PROGRESSIVE);
+            // If useful bit flag is on, make item useful.
+            } else if (ap_item.flags & (1 << 1)) {
+                itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_USEFUL);
+            // None of these flags being present means it's junk.
+            } else {
+                itemLocationTable[rc].SetPlacedItem(RG_ARCHIPELAGO_ITEM_JUNK);
             }
         }
     }

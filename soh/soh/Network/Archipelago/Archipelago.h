@@ -3,6 +3,7 @@
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include <vector>
+#include <nlohmann/json.hpp>
 
 // Forward declaration
 class APClient;
@@ -40,7 +41,7 @@ class ArchipelagoClient{
         const std::string GetSlotName() const;
 
         const char* GetConnectionStatus();
-        const std::map<std::string, int>& GetSlotData();
+        const nlohmann::json GetSlotData();
         const std::vector<ApItem>& GetScoutedItems();
 
         bool IsConnected();
@@ -68,7 +69,7 @@ class ArchipelagoClient{
 
         bool gameWon;
 
-        std::map<std::string, int> slotData;
+        nlohmann::json slotData;
         std::set<int64_t> locations;
         std::vector<ApItem> scoutedItems;
 };
