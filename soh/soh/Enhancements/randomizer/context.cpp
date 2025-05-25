@@ -528,9 +528,9 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_INCLUDE_TYCOON_WALLET].Set(RO_GENERIC_YES);
     mOptions[RSK_SHUFFLE_DUNGEON_REWARDS].Set(RO_DUNGEON_REWARDS_ANYWHERE);
     mOptions[RSK_SHUFFLE_SONGS].Set(RO_SONG_SHUFFLE_ANYWHERE);
-    mOptions[RSK_SHUFFLE_TOKENS].Set(RO_TOKENSANITY_ALL);
-    mOptions[RSK_SHOPSANITY].Set(RO_SHOPSANITY_OFF);
-    mOptions[RSK_SHOPSANITY_COUNT].Set(0);
+    mOptions[RSK_SHUFFLE_TOKENS].Set(slotData["shuffle_tokens"]);
+    mOptions[RSK_SHOPSANITY].Set(slotData["shuffle_shops"]);
+    mOptions[RSK_SHOPSANITY_COUNT].Set(4);
     mOptions[RSK_SHOPSANITY_PRICES].Set(0);
     mOptions[RSK_SHOPSANITY_PRICES_FIXED_PRICE].Set(0);
     mOptions[RSK_SHOPSANITY_PRICES_RANGE_1].Set(0);
@@ -541,7 +541,11 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_SHOPSANITY_PRICES_GIANT_WALLET_WEIGHT].Set(0);
     mOptions[RSK_SHOPSANITY_PRICES_TYCOON_WALLET_WEIGHT].Set(0);
     mOptions[RSK_SHOPSANITY_PRICES_AFFORDABLE].Set(0);
-    mOptions[RSK_SHUFFLE_SCRUBS].Set(RO_SCRUBS_OFF);
+    if (slotData["shuffle_scrubs"] == 1) {
+        mOptions[RSK_SHUFFLE_SCRUBS].Set(RO_SCRUBS_ALL);
+    } else {
+        mOptions[RSK_SHUFFLE_SCRUBS].Set(RO_SCRUBS_OFF);
+    }
     mOptions[RSK_SCRUBS_PRICES].Set(0);
     mOptions[RSK_SCRUBS_PRICES_FIXED_PRICE].Set(0);
     mOptions[RSK_SCRUBS_PRICES_RANGE_1].Set(0);
@@ -552,13 +556,13 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_SCRUBS_PRICES_GIANT_WALLET_WEIGHT].Set(0);
     mOptions[RSK_SCRUBS_PRICES_TYCOON_WALLET_WEIGHT].Set(0);
     mOptions[RSK_SCRUBS_PRICES_AFFORDABLE].Set(0);
-    mOptions[RSK_SHUFFLE_BEEHIVES].Set(RO_GENERIC_NO);
-    mOptions[RSK_SHUFFLE_COWS].Set(RO_GENERIC_NO);
+    mOptions[RSK_SHUFFLE_BEEHIVES].Set(slotData["shuffle_beehives"]);
+    mOptions[RSK_SHUFFLE_COWS].Set(slotData["shuffle_cows"]);
     mOptions[RSK_SHUFFLE_WEIRD_EGG].Set(RO_GENERIC_NO);
     mOptions[RSK_SHUFFLE_GERUDO_MEMBERSHIP_CARD].Set(RO_GENERIC_YES);
-    mOptions[RSK_SHUFFLE_POTS].Set(RO_GENERIC_NO);
-    mOptions[RSK_SHUFFLE_CRATES].Set(RO_GENERIC_NO);
-    mOptions[RSK_SHUFFLE_FROG_SONG_RUPEES].Set(RO_GENERIC_NO);
+    mOptions[RSK_SHUFFLE_POTS].Set(slotData["shuffle_pots"]);
+    mOptions[RSK_SHUFFLE_CRATES].Set(slotData["shuffle_crates"]);
+    mOptions[RSK_SHUFFLE_FROG_SONG_RUPEES].Set(slotData["shuffle_frogs"]);
     mOptions[RSK_ITEM_POOL].Set(0);
     mOptions[RSK_ICE_TRAPS].Set(0);
     mOptions[RSK_GOSSIP_STONE_HINTS].Set(RO_GOSSIP_STONES_NONE);
@@ -606,8 +610,12 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_COMPLETE_MASK_QUEST].Set(RO_GENERIC_YES);
     mOptions[RSK_SKIP_SCARECROWS_SONG].Set(RO_GENERIC_YES);
     mOptions[RSK_SKULLS_SUNS_SONG].Set(0);
-    mOptions[RSK_SHUFFLE_ADULT_TRADE].Set(RO_GENERIC_NO);
-    mOptions[RSK_SHUFFLE_MERCHANTS].Set(RO_GENERIC_NO);
+    mOptions[RSK_SHUFFLE_ADULT_TRADE].Set(slotData["shuffle_trade_items"]);
+    if (slotData["shuffle_merchants"] == 1) {
+        mOptions[RSK_SHUFFLE_MERCHANTS].Set(RO_SHUFFLE_MERCHANTS_ALL);
+    } else {
+        mOptions[RSK_SHUFFLE_MERCHANTS].Set(RO_SHUFFLE_MERCHANTS_OFF);
+    }
     mOptions[RSK_MERCHANT_PRICES].Set(0);
     mOptions[RSK_MERCHANT_PRICES_FIXED_PRICE].Set(0);
     mOptions[RSK_MERCHANT_PRICES_RANGE_1].Set(0);
@@ -680,18 +688,26 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_TRIFORCE_HUNT_PIECES_TOTAL].Set(0);
     mOptions[RSK_TRIFORCE_HUNT_PIECES_REQUIRED].Set(0);
     mOptions[RSK_SHUFFLE_BOSS_SOULS].Set(RO_GENERIC_NO);
-    mOptions[RSK_FISHSANITY].Set(RO_FISHSANITY_OFF);
-    mOptions[RSK_FISHSANITY_POND_COUNT].Set(0);
-    mOptions[RSK_FISHSANITY_AGE_SPLIT].Set(0);
+    if (slotData["shuffle_fish"] == 0) {
+        mOptions[RSK_FISHSANITY].Set(RO_FISHSANITY_OFF);
+    } else if (slotData["shuffle_fish"] == 1) {
+        mOptions[RSK_FISHSANITY].Set(RO_FISHSANITY_POND);
+    } else if (slotData["shuffle_fish"] == 2) {
+        mOptions[RSK_FISHSANITY].Set(RO_FISHSANITY_OVERWORLD);
+    } else if (slotData["shuffle_fish"] == 3) {
+        mOptions[RSK_FISHSANITY].Set(RO_FISHSANITY_BOTH);
+    }
+    mOptions[RSK_FISHSANITY_POND_COUNT].Set(15);
+    mOptions[RSK_FISHSANITY_AGE_SPLIT].Set(15);
     mOptions[RSK_SHUFFLE_FISHING_POLE].Set(RO_GENERIC_NO);
     mOptions[RSK_INFINITE_UPGRADES].Set(RO_INF_UPGRADES_OFF);
     mOptions[RSK_SKELETON_KEY].Set(RO_GENERIC_NO);
     mOptions[RSK_SHUFFLE_DEKU_STICK_BAG].Set(RO_GENERIC_NO);
     mOptions[RSK_SHUFFLE_DEKU_NUT_BAG].Set(RO_GENERIC_NO);
-    mOptions[RSK_SHUFFLE_FREESTANDING].Set(RO_SHUFFLE_FREESTANDING_OFF);
-    mOptions[RSK_SHUFFLE_FAIRIES].Set(RO_GENERIC_NO);
+    mOptions[RSK_SHUFFLE_FREESTANDING].Set(slotData["shuffle_freestanding"]);
+    mOptions[RSK_SHUFFLE_FAIRIES].Set(slotData["shuffle_fairies"]);
     mOptions[RSK_LOCK_OVERWORLD_DOORS].Set(RO_GENERIC_NO);
-    mOptions[RSK_SHUFFLE_GRASS].Set(RO_SHUFFLE_GRASS_OFF);
+    mOptions[RSK_SHUFFLE_GRASS].Set(slotData["shuffle_grass"]);
 }
 
 void Context::ParseArchipelagoItemsLocations(const std::vector<ArchipelagoClient::ApItem>& scouted_items) {
