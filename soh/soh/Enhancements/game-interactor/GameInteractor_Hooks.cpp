@@ -304,8 +304,8 @@ void GameInteractor_ExecuteOnKaleidoUpdate() {
 
 // Mark: Randomizer
 
-void GameInteractor_ExecuteOnRandomizerItemGivenHooks(uint32_t rc) {
-    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnRandomizerItemGivenHooks>(rc);
+void GameInteractor_ExecuteOnRandomizerItemGivenHooks(uint32_t rc, GetItemEntry gi, uint8_t isGiSkipped) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnRandomizerItemGivenHooks>(rc, gi, isGiSkipped);
 }
 
 // MARK: Archipelago

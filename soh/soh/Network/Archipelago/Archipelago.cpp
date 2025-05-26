@@ -14,6 +14,7 @@
 #include "soh/Enhancements/randomizer/context.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Notification/Notification.h"
 #include "soh/ShipInit.hpp"
 #include "soh/SaveManager.h"
 
@@ -352,11 +353,21 @@ void InitArchipelagoData(bool isDebug) {
 
 void RegisterArchipelago() {
     COND_HOOK(GameInteractor::OnRandomizerItemGivenHooks, IS_ARCHIPELAGO,
-              [](uint32_t rc) { 
+              [](uint32_t rc, GetItemEntry gi, uint8_t isGiSkipped) { 
         if (rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
             gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex++;
         } else {
             ArchipelagoClient::GetInstance().CheckLocation((RandomizerCheck)rc);
+
+            if (isGiSkipped && gi.modIndex == MOD_RANDOMIZER &&
+                (gi.getItemId == RG_ARCHIPELAGO_ITEM_PROGRESSIVE || gi.getItemId == RG_ARCHIPELAGO_ITEM_USEFUL ||
+                 gi.getItemId == RG_ARCHIPELAGO_ITEM_JUNK)) {
+                Notification::Emit({
+                    .prefix = std::string(gSaveContext.ship.quest.data.archipelago.locations[rc].itemName),
+                    .message = " for ",
+                    .suffix = std::string(gSaveContext.ship.quest.data.archipelago.locations[rc].playerName)
+                });
+            }
         }
     });
 }

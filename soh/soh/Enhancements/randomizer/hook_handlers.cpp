@@ -307,6 +307,7 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
     GetItemEntry getItemEntry;
     RandomizerCheck rc = randomizerQueuedChecks.front();
     auto loc = Rando::Context::GetInstance()->GetItemLocation(rc);
+    uint8_t isGiSkipped = 0;
 
     if (rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
         getItemEntry = Rando::Context::GetInstance()->GetArchipelagoGIEntry();
@@ -324,6 +325,7 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
         randomizerQueuedItemEntry = getItemEntry;
         SPDLOG_INFO("Queueing Item mod {} item {} from RC {}", getItemEntry.modIndex, getItemEntry.itemId,
                     static_cast<uint32_t>(rc));
+
         if (
             // Skipping ItemGet animation incompatible with checks that require closing a text box to finish
             rc != RC_HF_OCARINA_OF_TIME_ITEM && rc != RC_SPIRIT_TEMPLE_SILVER_GAUNTLETS_CHEST &&
@@ -342,10 +344,12 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
                    getItemEntry.getItemCategory == ITEM_CATEGORY_SKULLTULA_TOKEN ||
                    getItemEntry.getItemCategory == ITEM_CATEGORY_LESSER))))) {
             Item_DropCollectible(gPlayState, &spawnPos, ITEM00_SOH_GIVE_ITEM_ENTRY | 0x8000);
+
+            isGiSkipped = 1;
         }
     }
 
-    GameInteractor_ExecuteOnRandomizerItemGivenHooks((uint32_t)rc);
+    GameInteractor_ExecuteOnRandomizerItemGivenHooks((uint32_t)rc, getItemEntry, isGiSkipped);
 
     randomizerQueuedChecks.pop();
 }
@@ -1048,12 +1052,16 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
                         .suffix = SohUtils::GetItemName(item00->itemEntry.itemId),
                     });
                 } else if (item00->itemEntry.modIndex == MOD_RANDOMIZER) {
-                    Notification::Emit({
-                        .message = "You found ",
-                        .suffix = Rando::StaticData::RetrieveItem((RandomizerGet)item00->itemEntry.getItemId)
-                                      .GetName()
-                                      .english,
-                    });
+                    if (!(item00->itemEntry.getItemId == RG_ARCHIPELAGO_ITEM_PROGRESSIVE ||
+                        item00->itemEntry.getItemId == RG_ARCHIPELAGO_ITEM_USEFUL ||
+                        item00->itemEntry.getItemId == RG_ARCHIPELAGO_ITEM_JUNK)) {
+                        Notification::Emit({
+                            .message = "You found ",
+                            .suffix = Rando::StaticData::RetrieveItem((RandomizerGet)item00->itemEntry.getItemId)
+                                          .GetName()
+                                          .english,
+                        });
+                    }
                 }
 
                 // This is typically called when you close the text box after getting an item, in case a previous
