@@ -49,6 +49,7 @@ class ArchipelagoClient{
 
         void OnItemReceived(const ApItem apItem);
         void QueueItem(const ApItem item);
+        void QueueExternalCheck(int64_t apLocation);
 
         void SendGameWon();
 

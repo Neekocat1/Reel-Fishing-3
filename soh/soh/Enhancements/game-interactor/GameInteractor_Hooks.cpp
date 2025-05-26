@@ -309,6 +309,10 @@ void GameInteractor_ExecuteOnRandomizerItemGivenHooks(uint32_t rc) {
 }
 
 // MARK: Archipelago
-void GameInteractor_ExecuteOnArchipelagoItemRecieved(uint32_t rc) {
-    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnArchipelagoItemRecieved>(rc);
+void GameInteractor_ExecuteOnArchipelagoItemRecieved(uint32_t rg) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnArchipelagoItemRecieved>(rg);
+}
+
+void GameInteractor_ExecuteOnRandomizerExternalCheck(uint32_t rc) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnRandomizerExternalCheck>(rc);
 }

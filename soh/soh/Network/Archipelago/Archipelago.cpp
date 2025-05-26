@@ -109,7 +109,9 @@ bool ArchipelagoClient::StartClient() {
     });    // todo maybe move these functions to a lambda, since they don't have to be static anymore
 
     apClient->set_location_checked_handler([&](const std::list<int64_t> locations) {
-        // todo implement me
+        for(const int64_t apLoc : locations) {
+            QueueExternalCheck(apLoc);
+        }
     });
 
     return true;
@@ -171,8 +173,14 @@ void ArchipelagoClient::SynchSentLocations() {
 void ArchipelagoClient::SynchRecievedLocations() {
     // Open checks that have been found previously but went unsaved
     for(const int64_t apLoc : apClient->get_checked_locations()) {
-        // TODO call location checked function to open any unopened checks.
+        QueueExternalCheck(apLoc);
     }
+}
+
+void ArchipelagoClient::QueueExternalCheck(const int64_t apLocation) {
+    const std::string checkName = apClient->get_location_name(apLocation, AP_Client_consts::AP_GAME_NAME);
+    const uint32_t RC = static_cast<uint32_t>(Rando::StaticData::locationNameToEnum[checkName]);
+    GameInteractor_ExecuteOnRandomizerExternalCheck(RC);
 }
 
 bool ArchipelagoClient::IsConnected() {

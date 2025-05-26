@@ -85,7 +85,8 @@ void GameInteractor_ExecuteOnKaleidoUpdate();
 void GameInteractor_ExecuteOnRandomizerItemGivenHooks(uint32_t rc);
 
 // Mark: - Archipelago
-void GameInteractor_ExecuteOnArchipelagoItemRecieved(uint32_t rc);
+void GameInteractor_ExecuteOnArchipelagoItemRecieved(uint32_t rg);
+void GameInteractor_ExecuteOnRandomizerExternalCheck(uint32_t rc);
 
 #ifdef __cplusplus
 }
