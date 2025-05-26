@@ -2906,10 +2906,6 @@ void Settings::ParseJson(nlohmann::json spoilerFileJson) {
     }
 }
 
-void Settings::ParseArchipelago(const std::map<std::string, int>& slot_data) {
-    // This is going to be completely redone since switching to apclientpp
-}
-
 void Settings::AssignContext(std::shared_ptr<Context> ctx) {
     mContext = ctx;
 }

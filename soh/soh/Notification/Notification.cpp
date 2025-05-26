@@ -89,7 +89,7 @@ void Window::Draw() {
 
         if (notification.itemIcon != nullptr) {
             ImGui::Image(Ship::Context::GetInstance()->GetWindow()->GetGui()->GetTextureByName(notification.itemIcon),
-                         ImVec2(24, 24));
+                         ImVec2(32, 32));
             ImGui::SameLine();
         }
         if (!notification.prefix.empty()) {

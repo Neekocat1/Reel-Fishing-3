@@ -14,6 +14,7 @@
 #include "soh/Enhancements/randomizer/context.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Notification/Notification.h"
 #include "soh/ShipInit.hpp"
 #include "soh/SaveManager.h"
 
@@ -60,9 +61,11 @@ bool ArchipelagoClient::StartClient() {
                               0b001, tags);
     });
 
-    apClient->set_slot_connected_handler([&](const nlohmann::json) {
+    apClient->set_slot_connected_handler([&](const nlohmann::json data) {
         ArchipelagoConsole_SendMessage("[LOG] Connected.", false);
         ArchipelagoClient::StartLocationScouts();
+        
+        slotData = data;
 
         // if we are already in game when we connect 
         // we won't have to request an itemSynch
@@ -267,7 +270,7 @@ const std::string ArchipelagoClient::GetSlotName() const {
     return apClient->get_slot();
 }
 
-const std::map<std::string, int>& ArchipelagoClient::GetSlotData() {
+const nlohmann::json ArchipelagoClient::GetSlotData() {
     return slotData;
 }
 
@@ -306,18 +309,17 @@ const char* ArchipelagoClient::GetConnectionStatus() {
 extern "C" void Archipelago_InitSaveFile() {
     gSaveContext.ship.quest.data.archipelago.isArchipelago = 1;
 
+    nlohmann::json slotData = ArchipelagoClient::GetInstance().GetSlotData();
+    gSaveContext.ship.quest.data.archipelago.deathLink = slotData["death_link"];
+
     std::vector<ArchipelagoClient::ApItem> scoutedItems = ArchipelagoClient::GetInstance().GetScoutedItems();
 
     for (uint32_t i = 0; i < scoutedItems.size(); i++) {
         RandomizerCheck rc = Rando::StaticData::locationNameToEnum[scoutedItems[i].locationName];
-        gSaveContext.ship.quest.data.archipelago.locations[rc].itemType = scoutedItems[i].flags;
 
         SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[rc].itemName,
                                         scoutedItems[i].itemName,
                                         ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[rc].itemName));
-        SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[rc].locationName,
-                                        scoutedItems[i].locationName,
-            ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[rc].locationName));
         SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[rc].playerName,
                                         scoutedItems[i].playerName,
                                         ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[rc].playerName));
@@ -339,15 +341,9 @@ void LoadArchipelagoData() {
         "locations", ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations),
         [](size_t i) { 
             SaveManager::Instance->LoadStruct("", [&i]() {
-                SaveManager::Instance->LoadData("itemType",
-                                                gSaveContext.ship.quest.data.archipelago.locations[i].itemType);
-
                 SaveManager::Instance->LoadCharArray(
                     "itemName", gSaveContext.ship.quest.data.archipelago.locations[i].itemName,
                     ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].itemName));
-                SaveManager::Instance->LoadCharArray(
-                    "locationName", gSaveContext.ship.quest.data.archipelago.locations[i].locationName,
-                    ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].locationName));
                 SaveManager::Instance->LoadCharArray(
                     "playerName", gSaveContext.ship.quest.data.archipelago.locations[i].playerName,
                     ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].playerName));
@@ -367,13 +363,8 @@ void SaveArchipelagoData(SaveContext* saveContext, int sectionID, bool fullSave)
     SaveManager::Instance->SaveArray(
         "locations", ARRAY_COUNT(saveContext->ship.quest.data.archipelago.locations), [&](size_t i) {
             SaveManager::Instance->SaveStruct("", [&]() {
-                SaveManager::Instance->SaveData("itemType",
-                                                saveContext->ship.quest.data.archipelago.locations[i].itemType);
-
                 SaveManager::Instance->SaveData("itemName",
                                                 saveContext->ship.quest.data.archipelago.locations[i].itemName);
-                SaveManager::Instance->SaveData("locationName",
-                                                saveContext->ship.quest.data.archipelago.locations[i].locationName);
                 SaveManager::Instance->SaveData("playerName",
                                                 saveContext->ship.quest.data.archipelago.locations[i].playerName);
             });
@@ -391,12 +382,8 @@ void InitArchipelagoData(bool isDebug) {
                                     ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.slotName));
 
     for (uint32_t i = 0; i < ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations); i++) {
-        gSaveContext.ship.quest.data.archipelago.locations[i].itemType = -1;
-
         SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[i].itemName, "",
                                         ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].itemName));
-        SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[i].locationName, "",
-            ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].locationName));
         SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.locations[i].playerName, "",
                                         ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.locations[i].playerName));
     }
@@ -404,12 +391,37 @@ void InitArchipelagoData(bool isDebug) {
 
 void RegisterArchipelago() {
     COND_HOOK(GameInteractor::OnRandomizerItemGivenHooks, IS_ARCHIPELAGO,
-              [](uint32_t rc) { 
+              [](uint32_t rc, GetItemEntry gi, uint8_t isGiSkipped) { 
         if (rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
             gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex++;
             ArchipelagoClient::GetInstance().itemQueued = false;
         } else {
             ArchipelagoClient::GetInstance().CheckLocation((RandomizerCheck)rc);
+
+            if (isGiSkipped && gi.modIndex == MOD_RANDOMIZER &&
+                (gi.getItemId == RG_ARCHIPELAGO_ITEM_PROGRESSIVE || gi.getItemId == RG_ARCHIPELAGO_ITEM_USEFUL ||
+                 gi.getItemId == RG_ARCHIPELAGO_ITEM_JUNK)) {
+
+                const char* itemIcon = "";
+                switch (gi.getItemId) { 
+                    case RG_ARCHIPELAGO_ITEM_PROGRESSIVE:
+                        itemIcon = "Archipelago Progressive Icon";
+                        break;
+                    case RG_ARCHIPELAGO_ITEM_USEFUL:
+                        itemIcon = "Archipelago Useful Icon";
+                        break;
+                    case RG_ARCHIPELAGO_ITEM_JUNK:
+                        itemIcon = "Archipelago Junk Icon";
+                        break;
+                }
+
+                Notification::Emit({ 
+                    .itemIcon = itemIcon,
+                    .prefix = std::string(gSaveContext.ship.quest.data.archipelago.locations[rc].itemName),
+                    .message = " for ",
+                    .suffix = std::string(gSaveContext.ship.quest.data.archipelago.locations[rc].playerName)
+                });
+            }
         }
     });
 }

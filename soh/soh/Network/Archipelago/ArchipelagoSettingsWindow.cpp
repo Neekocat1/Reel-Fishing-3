@@ -16,12 +16,12 @@ void ArchipelagoSettingsWindow::DrawElement() {
 
     ImGui::Text("Server Address");
     UIWidgets::CVarInputString("##ArchipelagoServerAddress", CVAR_REMOTE_ARCHIPELAGO("ServerAddress"),
-                    UIWidgets::InputOptions()
-                        .Color(THEME_COLOR)
-                        .PlaceholderText("archipelago.gg:38281")
-                        .DefaultValue("archipelago.gg:38281")
-                        .Size(ImVec2(ImGui::GetFontSize() * 15, 0))
-                        .LabelPosition(UIWidgets::LabelPositions::None));
+                               UIWidgets::InputOptions()
+                                   .Color(THEME_COLOR)
+                                   .PlaceholderText("archipelago.gg:38281")
+                                   .DefaultValue("archipelago.gg:38281")
+                                   .Size(ImVec2(ImGui::GetFontSize() * 15, 0))
+                                   .LabelPosition(UIWidgets::LabelPositions::None));
     ImGui::Text("Slot Name");
     UIWidgets::CVarInputString("##ArchipelagoSlotName", CVAR_REMOTE_ARCHIPELAGO("SlotName"),
                                UIWidgets::InputOptions()
@@ -71,6 +71,18 @@ void ArchipelagoSettingsWindow::DrawElement() {
             apItem.index = 999999;
             ArchipelagoClient::GetInstance().OnItemReceived(apItem);
         }
+    }
+
+    static bool sArchipelagoTexturesLoaded = false;
+    if (!sArchipelagoTexturesLoaded) {
+        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadTextureFromRawImage(
+            "Archipelago Progressive Icon", "textures/parameter_static/gArchipelagoProgressive.png");
+        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadTextureFromRawImage(
+            "Archipelago Useful Icon", "textures/parameter_static/gArchipelagoUseful.png");
+        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadTextureFromRawImage(
+            "Archipelago Junk Icon", "textures/parameter_static/gArchipelagoJunk.png");
+
+        sArchipelagoTexturesLoaded = true;
     }
 };
 

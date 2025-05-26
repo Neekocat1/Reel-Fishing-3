@@ -82,7 +82,7 @@ void GameInteractor_RegisterOnAssetAltChange(void (*fn)(void));
 void GameInteractor_ExecuteOnKaleidoUpdate();
 
 // Mark: - Randomizer
-void GameInteractor_ExecuteOnRandomizerItemGivenHooks(uint32_t rc);
+void GameInteractor_ExecuteOnRandomizerItemGivenHooks(uint32_t rc, GetItemEntry gi, uint8_t isGiSkipped);
 
 // Mark: - Archipelago
 void GameInteractor_ExecuteOnArchipelagoItemRecieved(uint32_t rg);
