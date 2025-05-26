@@ -39,7 +39,7 @@ void ArchipelagoSettingsWindow::DrawElement() {
 
     if (UIWidgets::Button("Connect", UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
         bool success = AP_client.StartClient();
-        ArchipelagoConsole_SendMessage("[LOG] Trying to connect...", false);
+        ArchipelagoConsole_SendMessage("[LOG] Trying to connect...", true);
     }
 
     ImGui::SameLine();

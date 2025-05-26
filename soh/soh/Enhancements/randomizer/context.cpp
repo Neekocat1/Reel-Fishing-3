@@ -349,11 +349,11 @@ void Context::SetSpoilerLoaded(const bool spoilerLoaded) {
 void Context::AddRecievedArchipelagoItem(const RandomizerGet item) {
     mAPrecieveQueue.emplace(item);
     std::string logMessage = "[LOG] Item Pushed: " + item;
-    ArchipelagoConsole_SendMessage(logMessage.c_str());
+    ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
 }
 
 GetItemEntry Context::GetArchipelagoGIEntry() {
-    ArchipelagoConsole_SendMessage("[LOG] Trying to get Item Entry");
+    ArchipelagoConsole_SendMessage("[LOG] Trying to get Item Entry", true);
     if(mAPrecieveQueue.empty()) {
         // something must have gone wrong here, just give a rupee
         return ItemTableManager::Instance->RetrieveItemEntry(MOD_NONE, GI_HEART);
