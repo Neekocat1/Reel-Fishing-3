@@ -362,7 +362,22 @@ void RegisterArchipelago() {
             if (isGiSkipped && gi.modIndex == MOD_RANDOMIZER &&
                 (gi.getItemId == RG_ARCHIPELAGO_ITEM_PROGRESSIVE || gi.getItemId == RG_ARCHIPELAGO_ITEM_USEFUL ||
                  gi.getItemId == RG_ARCHIPELAGO_ITEM_JUNK)) {
-                Notification::Emit({
+
+                const char* itemIcon = "";
+                switch (gi.getItemId) { 
+                    case RG_ARCHIPELAGO_ITEM_PROGRESSIVE:
+                        itemIcon = "Archipelago Progressive Icon";
+                        break;
+                    case RG_ARCHIPELAGO_ITEM_USEFUL:
+                        itemIcon = "Archipelago Useful Icon";
+                        break;
+                    case RG_ARCHIPELAGO_ITEM_JUNK:
+                        itemIcon = "Archipelago Junk Icon";
+                        break;
+                }
+
+                Notification::Emit({ 
+                    .itemIcon = itemIcon,
                     .prefix = std::string(gSaveContext.ship.quest.data.archipelago.locations[rc].itemName),
                     .message = " for ",
                     .suffix = std::string(gSaveContext.ship.quest.data.archipelago.locations[rc].playerName)
