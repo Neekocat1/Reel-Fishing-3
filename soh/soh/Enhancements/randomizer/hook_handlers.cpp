@@ -286,6 +286,10 @@ void RandomizerOnSceneFlagSetHandler(int16_t sceneNum, int16_t flagType, int16_t
     randomizerQueuedChecks.push(rc);
 }
 
+void RandomizerOnExternalCheckHandler(uint32_t randomizerCheck) {
+    randomizerQueuedChecks.push(static_cast<RandomizerCheck>(randomizerCheck));
+}
+
 static Vec3f spawnPos = { 0.0f, -999.0f, 0.0f };
 
 void RandomizerOnPlayerUpdateForRCQueueHandler() {
@@ -2536,9 +2540,8 @@ void RandomizerRegisterHooks() {
         onCuccoOrChickenHatchHook = GameInteractor::Instance->RegisterGameHook<GameInteractor::OnCuccoOrChickenHatch>(
             RandomizerOnCuccoOrChickenHatch);
         
-        // TODO Implement propeerly when we can read what kind of game we're playing from the save file
-
         COND_HOOK(GameInteractor::OnArchipelagoItemRecieved, IS_ARCHIPELAGO, ArchipelagoOnRecieveItem);
+        COND_HOOK(GameInteractor::OnRandomizerExternalCheck, IS_ARCHIPELAGO, RandomizerOnExternalCheckHandler)
 
         if (RAND_GET_OPTION(RSK_FISHSANITY) != RO_FISHSANITY_OFF) {
             OTRGlobals::Instance->gRandoContext->GetFishsanity()->InitializeFromSave();

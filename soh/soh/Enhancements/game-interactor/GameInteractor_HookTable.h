@@ -71,4 +71,5 @@ DEFINE_HOOK(OnAssetAltChange, ());
 DEFINE_HOOK(OnKaleidoUpdate, ());
 
 DEFINE_HOOK(OnRandomizerItemGivenHooks, (uint32_t rc, GetItemEntry gi, uint8_t isGiSkipped));
-DEFINE_HOOK(OnArchipelagoItemRecieved, (uint32_t rc));
+DEFINE_HOOK(OnArchipelagoItemRecieved, (uint32_t rg));
+DEFINE_HOOK(OnRandomizerExternalCheck, (uint32_t rc));
