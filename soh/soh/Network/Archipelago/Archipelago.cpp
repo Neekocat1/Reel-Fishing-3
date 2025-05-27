@@ -113,8 +113,19 @@ bool ArchipelagoClient::StartClient() {
         }
     });
 
-    apClient->set_print_json_handler([&](const std::list<APClient::TextNode>& nodes) {
-        std::string text = apClient->render_json(nodes, APClient::RenderFormat::TEXT);
+    apClient->set_print_json_handler([&](const APClient::PrintJSONArgs& arg) {
+        std::string tag = "[" + arg.type + "] ";
+        
+        const int slot = apClient->get_player_number();
+        if(arg.type == "ItemSend") {
+            if((*arg.item).player == slot) {
+                tag = "[Found] ";
+            } else if (*arg.receiving == slot ) {
+                tag = "[Received] ";
+            }
+        }
+
+        std::string text = tag + apClient->render_json(arg.data, APClient::RenderFormat::TEXT);
         ArchipelagoConsole_SendMessage(text.c_str(), false);
     });
 
@@ -214,7 +225,7 @@ void ArchipelagoClient::OnItemReceived(const ApItem apItem) {
         return;
     }
 
-    std::string logMessage = "[Log] Recieved " + apItem.itemName;
+    std::string logMessage = "[LOG] Recieved " + apItem.itemName;
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
 
     // add item to the queue
@@ -224,12 +235,12 @@ void ArchipelagoClient::OnItemReceived(const ApItem apItem) {
 void ArchipelagoClient::QueueItem(const ApItem item) {
     if(item.index < gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex) {
         // Skip queueing any items we already have
-        std::string logMessage = "[Log] Skipping giving " + item.itemName + ". We recieved this previously.";
+        std::string logMessage = "[LOG] Skipping giving " + item.itemName + ". We recieved this previously.";
         ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
         return;
     }
 
-    std::string logMessage = "[Log] Giving " + item.itemName;
+    std::string logMessage = "[LOG] Giving " + item.itemName;
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
     const RandomizerGet RG = Rando::StaticData::itemNameToEnum[item.itemName];
     if(RG == RG_NONE) {
