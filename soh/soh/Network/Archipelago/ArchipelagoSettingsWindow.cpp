@@ -71,6 +71,11 @@ void ArchipelagoSettingsWindow::DrawElement() {
             apItem.index = 999999;
             ArchipelagoClient::GetInstance().OnItemReceived(apItem);
         }
+        ImGui::SameLine();
+        if (UIWidgets::Button("Send Game Won",
+                              UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
+            ArchipelagoClient::GetInstance().SendGameWon();
+        }
     }
 
     static bool sArchipelagoTexturesLoaded = false;

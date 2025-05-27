@@ -526,7 +526,11 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_SHUFFLE_MASTER_SWORD].Set(RO_GENERIC_NO);
     mOptions[RSK_SHUFFLE_CHILD_WALLET].Set(RO_GENERIC_NO);
     mOptions[RSK_INCLUDE_TYCOON_WALLET].Set(RO_GENERIC_YES);
-    mOptions[RSK_SHUFFLE_DUNGEON_REWARDS].Set(RO_DUNGEON_REWARDS_ANYWHERE);
+    if (slotData["shuffle_dungeon_rewards"] == 0) {
+        mOptions[RSK_SHUFFLE_DUNGEON_REWARDS].Set(RO_DUNGEON_REWARDS_VANILLA);
+    } else if (slotData["shuffle_dungeon_rewards"] == 1) {
+        mOptions[RSK_SHUFFLE_DUNGEON_REWARDS].Set(RO_DUNGEON_REWARDS_ANYWHERE);
+    }
     mOptions[RSK_SHUFFLE_SONGS].Set(RO_SONG_SHUFFLE_ANYWHERE);
     mOptions[RSK_SHUFFLE_TOKENS].Set(slotData["shuffle_tokens"]);
     mOptions[RSK_SHOPSANITY].Set(slotData["shuffle_shops"]);
@@ -597,7 +601,11 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_KEYSANITY].Set(RO_DUNGEON_ITEM_LOC_ANYWHERE);
     mOptions[RSK_GERUDO_KEYS].Set(RO_GERUDO_KEYS_ANYWHERE);
     mOptions[RSK_BOSS_KEYSANITY].Set(RO_DUNGEON_ITEM_LOC_ANYWHERE);
-    mOptions[RSK_GANONS_BOSS_KEY].Set(RO_GANON_BOSS_KEY_ANYWHERE);
+    if (slotData["gcbk_setting"] == 1) {
+        mOptions[RSK_GANONS_BOSS_KEY].Set(RO_GANON_BOSS_KEY_ANYWHERE);
+    } else if (slotData["gcbk_setting"] == 0) {
+        mOptions[RSK_GANONS_BOSS_KEY].Set(RO_GANON_BOSS_KEY_LACS_REWARDS);
+    }
     mOptions[RSK_SKIP_CHILD_STEALTH].Set(RO_GENERIC_YES);
     mOptions[RSK_SKIP_CHILD_ZELDA].Set(RO_GENERIC_NO);
     mOptions[RSK_STARTING_STICKS].Set(RO_GENERIC_NO);
@@ -630,7 +638,7 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_SUNLIGHT_ARROWS].Set(RO_GENERIC_YES);
     mOptions[RSK_ENABLE_BOMBCHU_DROPS].Set(RO_GENERIC_YES);
     mOptions[RSK_BOMBCHU_BAG].Set(RO_GENERIC_YES);
-    mOptions[RSK_LINKS_POCKET].Set(RO_LINKS_POCKET_NOTHING);
+    mOptions[RSK_LINKS_POCKET].Set(RO_LINKS_POCKET_ANYTHING);
     mOptions[RSK_MQ_DUNGEON_RANDOM].Set(0);
     mOptions[RSK_MQ_DUNGEON_COUNT].Set(0);
     mOptions[RSK_MQ_DUNGEON_SET].Set(0);
@@ -648,7 +656,7 @@ void Context::ParseArchipelagoOptions(const std::map<std::string, int>& slot_dat
     mOptions[RSK_MQ_GANONS_CASTLE].Set(0);
     mOptions[RSK_LACS_STONE_COUNT].Set(0);
     mOptions[RSK_LACS_MEDALLION_COUNT].Set(0);
-    mOptions[RSK_LACS_REWARD_COUNT].Set(0);
+    mOptions[RSK_LACS_REWARD_COUNT].Set(slotData["gcbk_rewards_required"]);
     mOptions[RSK_LACS_DUNGEON_COUNT].Set(0);
     mOptions[RSK_LACS_TOKEN_COUNT].Set(0);
     mOptions[RSK_LACS_OPTIONS].Set(0);
