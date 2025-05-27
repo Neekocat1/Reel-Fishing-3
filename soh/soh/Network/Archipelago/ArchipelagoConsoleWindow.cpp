@@ -42,6 +42,33 @@ void ArchipelagoConsoleWindow::DrawElement() {
             } else if (strstr(item, "[LOG]")) {
                 color = ImVec4(0.7f, 0.7f, 1.0f, 1.0f);
                 hasColor = true;
+            } else if (strstr(item, "[Found]")) {
+                color = ImVec4(0.24f, 0.64f, 0.69f, 1.00f);
+                hasColor = true;
+            } else if (strstr(item, "[Received]")) {
+                color = ImVec4(0.18f, 0.76f, 0.42f, 1.00f);
+                hasColor = true;
+            } else if (strstr(item, "[ItemCheat]")) {
+                color = ImVec4(0.97f, 0.26f, 0.26f, 1.00f);
+                hasColor = true;
+            } else if (strstr(item, "[Hint]")) {
+                color = ImVec4(0.89f, 0.45f, 1.00f, 1.00f);
+                hasColor = true;
+            } else if (strstr(item, "[Join]")) {
+                color = ImVec4(0.00f, 0.80f, 0.11f, 1.00f);
+                hasColor = true;
+            } else if (strstr(item, "[Part]")) {
+                color = ImVec4(1.00f, 0.01f, 0.01f, 1.00f);
+                hasColor = true;
+            } else if (strstr(item, "[Goal]")) {
+                color = ImVec4(0.00f, 0.70f, 0.21f, 1.00f);
+                hasColor = true;
+            } else if (strstr(item, "[Release]")) {
+                color = ImVec4(0.51f, 0.21f, 0.61f, 1.00f);
+                hasColor = true;
+            } else if (strstr(item, "[Collect]")) {
+                color = ImVec4(0.51f, 0.21f, 0.61f, 1.00f);
+                hasColor = true;
             }
             if (hasColor) {
                 ImGui::PushStyleColor(ImGuiCol_Text, color);
