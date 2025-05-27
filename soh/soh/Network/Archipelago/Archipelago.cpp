@@ -195,6 +195,15 @@ void ArchipelagoClient::SynchRecievedLocations() {
 void ArchipelagoClient::QueueExternalCheck(const int64_t apLocation) {
     const std::string checkName = apClient->get_location_name(apLocation, AP_Client_consts::AP_GAME_NAME);
     const uint32_t RC = static_cast<uint32_t>(Rando::StaticData::locationNameToEnum[checkName]);
+
+    // Don't queue checks we already have
+    if(Rando::Context::GetInstance()->GetItemLocation(RC)->HasObtained()) {
+        return;
+    }
+
+    std::string locationLog = "[LOG] Externaly checking" + checkName;
+    ArchipelagoConsole_SendMessage(locationLog.c_str(), true);
+
     GameInteractor_ExecuteOnRandomizerExternalCheck(RC);
 }
 
