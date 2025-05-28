@@ -134,19 +134,7 @@ bool ArchipelagoClient::StartClient() {
             return;
         }
 
-        std::string tag = "[" + arg.type + "] ";
-        
-        const int slot = apClient->get_player_number();
-        if(arg.type == "ItemSend") {
-            if((*arg.item).player == slot) {
-                tag = "[Found] ";
-            } else if (*arg.receiving == slot ) {
-                tag = "[Received] ";
-            }
-        }
-
-        std::string text = tag + apClient->render_json(arg.data, APClient::RenderFormat::TEXT);
-        ArchipelagoConsole_SendMessage(text.c_str(), false);
+        ArchipelagoConsole_PrintJson(arg.data);
     });
 
     return true;
