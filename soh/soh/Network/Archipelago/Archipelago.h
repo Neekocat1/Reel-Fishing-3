@@ -27,6 +27,11 @@ class ArchipelagoClient{
             uint64_t index;
         };
 
+        struct ColoredTextNode {
+            std::string text;
+            std::string color;
+        };
+
         static ArchipelagoClient& GetInstance();
 
         bool StartClient();

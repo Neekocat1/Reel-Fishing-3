@@ -134,7 +134,57 @@ bool ArchipelagoClient::StartClient() {
             return;
         }
 
-        ArchipelagoConsole_PrintJson(arg.data);
+        std::vector<ColoredTextNode> coloredNodes;
+
+        for(const APClient::TextNode& node : arg.data) {
+            APClient* client = apClient.get();
+            std::string color;
+            std::string text;
+            
+            if(node.type == "player_id") {
+                int id = std::stoi(node.text);
+                if (color.empty() && id == client->get_player_number()) color = "magenta";
+                else if(color.empty()) color = "yellow";
+                text = client->get_player_alias(id);
+            } else if (node.type == "item_id") {
+                int64_t id = std::stoll(node.text);
+                if(color.empty()) {
+                    if (node.flags & APClient::ItemFlags::FLAG_ADVANCEMENT) color = "plum";
+                    else if (node.flags & APClient::ItemFlags::FLAG_NEVER_EXCLUDE) color = "slateblue";
+                    else if (node.flags & APClient::ItemFlags::FLAG_TRAP) color = "salmon";
+                    else color = "cyan";
+                }
+                text = client->get_item_name(id, client->get_player_game(node.player));
+            } else if (node.type == "location_id") {
+                int64_t id = std::stoll(node.text);
+                if (color.empty()) color = "blue";
+                text = client->get_location_name(id, client->get_player_game(node.player));
+            } else if (node.type == "hint_status") {
+                text = node.text;
+                if (node.hintStatus == APClient::HINT_FOUND) color = "green";
+                else if (node.hintStatus == APClient::HINT_UNSPECIFIED) color = "grey";
+                else if (node.hintStatus == APClient::HINT_NO_PRIORITY) color = "slateblue";
+                else if (node.hintStatus == APClient::HINT_AVOID) color = "salmon";
+                else if (node.hintStatus == APClient::HINT_PRIORITY) color = "plum";
+                else color = "red";  // unknown status -> red
+            } else if (node.type == "ERROR") {
+                color = "ERROR";
+                text = node.text;
+            } else if (node.type == "LOG") {
+                color = "LOG";
+                text = node.text;
+            } else {
+                color = "white";
+                text = node.text;
+            }
+
+            ColoredTextNode Colornode;
+            Colornode.color = color;
+            Colornode.text = text;
+            coloredNodes.push_back(Colornode);
+        }
+
+        ArchipelagoConsole_PrintJson(coloredNodes);
     });
 
     return true;

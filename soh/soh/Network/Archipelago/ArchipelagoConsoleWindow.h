@@ -3,7 +3,7 @@
 #define ARCHIPELAGO_CONSOLE_WINDOW_H
 
 #include <libultraship/libultraship.h>
-#include <apclient.hpp>
+#include "Archipelago.h"
 #include <vector>
 #include <list>
 
@@ -19,7 +19,7 @@ class ArchipelagoConsoleWindow final : public Ship::GuiWindow {
 };
 
 void ArchipelagoConsole_SendMessage(const char* fmt, bool debugMessage = false, ...);
-void ArchipelagoConsole_PrintJson(const std::list<APClient::TextNode> nodes);
+void ArchipelagoConsole_PrintJson(const std::vector<ArchipelagoClient::ColoredTextNode> nodes);
 ImVec4 getColorVal(const std::string& color);
 
 #endif // ARCHIPELAGO_CONSOLE_WINDOW_H
