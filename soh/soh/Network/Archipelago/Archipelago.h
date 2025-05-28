@@ -58,6 +58,7 @@ class ArchipelagoClient{
 
         std::unique_ptr<APClient> apClient;
         bool itemQueued;
+        bool disconnecting;
 
     protected:
         ArchipelagoClient();
@@ -65,9 +66,12 @@ class ArchipelagoClient{
     private:
         ArchipelagoClient(ArchipelagoClient &) = delete;
         void operator=(const ArchipelagoClient &) = delete;
+
+        bool isRightSaveLoaded() const;
+
         std::string uuid;
 
-        static std::shared_ptr<ArchipelagoClient> instance; // is this even used?
+        static std::shared_ptr<ArchipelagoClient> instance;
         static bool initialized;
 
         bool gameWon;
