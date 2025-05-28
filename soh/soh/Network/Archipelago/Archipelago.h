@@ -36,7 +36,7 @@ class ArchipelagoClient{
         void StartLocationScouts();
         void SynchItems();
         void SynchSentLocations();
-        void SynchRecievedLocations();
+        void SynchReceivedLocations();
 
         // getters
         const std::string GetSlotName() const;
@@ -75,7 +75,7 @@ class ArchipelagoClient{
         nlohmann::json slotData;
         std::set<int64_t> locations;
         std::vector<ApItem> scoutedItems;
-        std::queue<ApItem> recieveQueue;
+        std::queue<ApItem> receiveQueue;
 };
 
 void LoadArchipelagoData();

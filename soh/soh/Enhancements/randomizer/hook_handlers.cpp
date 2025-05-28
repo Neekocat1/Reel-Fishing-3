@@ -222,11 +222,11 @@ static std::queue<RandomizerCheck> randomizerQueuedChecks;
 static RandomizerCheck randomizerQueuedCheck = RC_UNKNOWN_CHECK;
 static GetItemEntry randomizerQueuedItemEntry = GET_ITEM_NONE;
 
-void ArchipelagoOnRecieveItem(const int32_t item) {
+void ArchipelagoOnReceiveItem(const int32_t item) {
     std::string logMessage = "[LOG] Receive item handler called: " + item;
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
-    randomizerQueuedChecks.push(RC_ARCHIPELAGO_RECIEVED_ITEM);
-    Rando::Context::GetInstance()->AddRecievedArchipelagoItem(static_cast<RandomizerGet>(item));
+    randomizerQueuedChecks.push(RC_ARCHIPELAGO_RECEIVED_ITEM);
+    Rando::Context::GetInstance()->AddReceivedArchipelagoItem(static_cast<RandomizerGet>(item));
 }
 
 void RandomizerOnFlagSetHandler(int16_t flagType, int16_t flag) {
@@ -313,7 +313,7 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
     auto loc = Rando::Context::GetInstance()->GetItemLocation(rc);
     uint8_t isGiSkipped = 0;
 
-    if (rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
+    if (rc == RC_ARCHIPELAGO_RECEIVED_ITEM) {
         getItemEntry = Rando::Context::GetInstance()->GetArchipelagoGIEntry();
     } else {
         RandomizerGet vanillaRandomizerGet = Rando::StaticData::GetLocation(rc)->GetVanillaItem();
@@ -2540,7 +2540,7 @@ void RandomizerRegisterHooks() {
         onCuccoOrChickenHatchHook = GameInteractor::Instance->RegisterGameHook<GameInteractor::OnCuccoOrChickenHatch>(
             RandomizerOnCuccoOrChickenHatch);
         
-        COND_HOOK(GameInteractor::OnArchipelagoItemRecieved, IS_ARCHIPELAGO, ArchipelagoOnRecieveItem);
+        COND_HOOK(GameInteractor::OnArchipelagoItemReceived, IS_ARCHIPELAGO, ArchipelagoOnReceiveItem);
         COND_HOOK(GameInteractor::OnRandomizerExternalCheck, IS_ARCHIPELAGO, RandomizerOnExternalCheckHandler)
 
         if (RAND_GET_OPTION(RSK_FISHSANITY) != RO_FISHSANITY_OFF) {

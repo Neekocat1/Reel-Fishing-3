@@ -67,7 +67,7 @@ bool ArchipelagoClient::StartClient() {
         // we won't have to request an itemSynch
         if(GameInteractor::IsSaveLoaded(true)) {
             SynchSentLocations();
-            SynchRecievedLocations();
+            SynchReceivedLocations();
         }
     });
 
@@ -147,7 +147,7 @@ void ArchipelagoClient::GameLoaded() {
 
     SynchItems();
     SynchSentLocations();
-    SynchRecievedLocations();
+    SynchReceivedLocations();
 }
 
 void ArchipelagoClient::StartLocationScouts() {
@@ -185,7 +185,7 @@ void ArchipelagoClient::SynchSentLocations() {
     apClient->LocationChecks(checkedLocations);
 }
 
-void ArchipelagoClient::SynchRecievedLocations() {
+void ArchipelagoClient::SynchReceivedLocations() {
     // Open checks that have been found previously but went unsaved
     for(const int64_t apLoc : apClient->get_checked_locations()) {
         QueueExternalCheck(apLoc);
@@ -244,17 +244,17 @@ void ArchipelagoClient::OnItemReceived(const ApItem apItem) {
         return;
     }
 
-    std::string logMessage = "[LOG] Recieved " + apItem.itemName;
+    std::string logMessage = "[LOG] Received " + apItem.itemName;
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
 
     // add item to the queue
-    recieveQueue.push(apItem);
+    receiveQueue.push(apItem);
 }
 
 void ArchipelagoClient::QueueItem(const ApItem item) {
     if(item.index < gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex) {
         // Skip queueing any items we already have
-        std::string logMessage = "[LOG] Skipping giving " + item.itemName + ". We recieved this previously.";
+        std::string logMessage = "[LOG] Skipping giving " + item.itemName + ". We received this previously.";
         ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
         return;
     }
@@ -267,7 +267,7 @@ void ArchipelagoClient::QueueItem(const ApItem item) {
     }
 
     itemQueued = true;
-    GameInteractor_ExecuteOnArchipelagoItemRecieved(static_cast<int32_t>(RG));
+    GameInteractor_ExecuteOnArchipelagoItemReceived(static_cast<int32_t>(RG));
 }
 
 void ArchipelagoClient::SendGameWon() {
@@ -282,11 +282,11 @@ void ArchipelagoClient::Poll() {
         return;
     }
 
-    // queue another item to be recieved
-    if(!itemQueued && recieveQueue.size() > 0) {
+    // queue another item to be received
+    if(!itemQueued && receiveQueue.size() > 0) {
         
-        const ApItem item = recieveQueue.front();
-        recieveQueue.pop();
+        const ApItem item = receiveQueue.front();
+        receiveQueue.pop();
         QueueItem(item);
     }
     
@@ -327,7 +327,7 @@ const char* ArchipelagoClient::GetConnectionStatus() {
             return "Socket Connected!";
         }
         case APClient::State::ROOM_INFO: {
-            return "Room info Recieved!";
+            return "Room info Received!";
         }
         case APClient::State::SLOT_CONNECTED: {
             return "Slot Connected!";
@@ -425,7 +425,7 @@ void RegisterArchipelago() {
 
     COND_HOOK(GameInteractor::OnRandomizerItemGivenHooks, IS_ARCHIPELAGO,
               [](uint32_t rc, GetItemEntry gi, uint8_t isGiSkipped) { 
-        if (rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
+        if (rc == RC_ARCHIPELAGO_RECEIVED_ITEM) {
             gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex++;
             ArchipelagoClient::GetInstance().itemQueued = false;
         } else {

@@ -346,27 +346,27 @@ void Context::SetSpoilerLoaded(const bool spoilerLoaded) {
     mSpoilerLoaded = spoilerLoaded;
 }
 
-void Context::AddRecievedArchipelagoItem(const RandomizerGet item) {
-    mAPrecieveQueue.emplace(item);
+void Context::AddReceivedArchipelagoItem(const RandomizerGet item) {
+    mAPreceiveQueue.emplace(item);
     std::string logMessage = "[LOG] Item Pushed: " + item;
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
 }
 
 GetItemEntry Context::GetArchipelagoGIEntry() {
     ArchipelagoConsole_SendMessage("[LOG] Trying to get Item Entry", true);
-    if(mAPrecieveQueue.empty()) {
+    if(mAPreceiveQueue.empty()) {
         // something must have gone wrong here, just give a rupee
         return ItemTableManager::Instance->RetrieveItemEntry(MOD_NONE, GI_HEART);
     }
 
     // get the first item from the archipelago queue
-    RandomizerGet item_id = mAPrecieveQueue.front();
+    RandomizerGet item_id = mAPreceiveQueue.front();
     assert(item_id != RG_NONE);
 
     Item& item = StaticData::RetrieveItem(item_id);
     SPDLOG_TRACE("Found item! {}, {}", item.GetName().GetEnglish(), (int)item_id);
     GetItemEntry item_entry = item.GetGIEntry_Copy();
-    mAPrecieveQueue.pop();
+    mAPreceiveQueue.pop();
     return item_entry;      // todo: add custom text maybe?
 }
 
