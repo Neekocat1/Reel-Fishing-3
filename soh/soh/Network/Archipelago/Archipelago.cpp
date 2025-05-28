@@ -30,10 +30,6 @@ ArchipelagoClient::ArchipelagoClient() {
     gameWon = false;
     itemQueued = false;
     disconnecting = false;
-
-    // call poll every frame
-    COND_HOOK(GameInteractor::OnGameFrameUpdate, true, [](){ArchipelagoClient::GetInstance().Poll();});
-    COND_HOOK(GameInteractor::OnLoadGame, true, [](int32_t file_id){ArchipelagoClient::GetInstance().GameLoaded();});
 }
 
 ArchipelagoClient& ArchipelagoClient::GetInstance() {
@@ -278,18 +274,18 @@ void ArchipelagoClient::OnItemReceived(const ApItem apItem) {
     std::string logMessage = "[LOG] Received " + apItem.itemName;
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
 
+    if(apItem.index < gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex) {
+        // Skip queueing any items we already have
+        std::string logMessage = "[LOG] Skipping giving " + apItem.itemName + ". We received this previously.";
+        ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
+        return;
+    }
+
     // add item to the queue
     receiveQueue.push(apItem);
 }
 
 void ArchipelagoClient::QueueItem(const ApItem item) {
-    if(item.index < gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex) {
-        // Skip queueing any items we already have
-        std::string logMessage = "[LOG] Skipping giving " + item.itemName + ". We received this previously.";
-        ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
-        return;
-    }
-
     std::string logMessage = "[LOG] Giving " + item.itemName;
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
     const RandomizerGet RG = Rando::StaticData::itemNameToEnum[item.itemName];
@@ -470,8 +466,13 @@ void InitArchipelagoData(bool isDebug) {
 }
 
 void RegisterArchipelago() {
+    // make sure the client is constructed
+    ArchipelagoClient::GetInstance();
+
     CVarSetInteger(CVAR_REMOTE_ARCHIPELAGO("Connected"), 0);
 
+    COND_HOOK(GameInteractor::OnGameFrameUpdate, true, [](){ArchipelagoClient::GetInstance().Poll();});
+    COND_HOOK(GameInteractor::OnLoadGame, true, [](int32_t file_id){ArchipelagoClient::GetInstance().GameLoaded();});
     COND_HOOK(GameInteractor::OnRandomizerItemGivenHooks, IS_ARCHIPELAGO,
               [](uint32_t rc, GetItemEntry gi, uint8_t isGiSkipped) { 
         if (rc == RC_ARCHIPELAGO_RECEIVED_ITEM) {
