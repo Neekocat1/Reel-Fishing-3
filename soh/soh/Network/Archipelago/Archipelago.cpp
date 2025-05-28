@@ -196,12 +196,17 @@ void ArchipelagoClient::QueueExternalCheck(const int64_t apLocation) {
     const std::string checkName = apClient->get_location_name(apLocation, AP_Client_consts::AP_GAME_NAME);
     const uint32_t RC = static_cast<uint32_t>(Rando::StaticData::locationNameToEnum[checkName]);
 
+    if(RC == RC_UNKNOWN_CHECK) {
+        ArchipelagoConsole_SendMessage("[ERROR] Attempting to queue RC_UNKOWN_CHECK, skipping", false);
+        return;
+    }
+
     // Don't queue checks we already have
     if(Rando::Context::GetInstance()->GetItemLocation(RC)->HasObtained()) {
         return;
     }
 
-    std::string locationLog = "[LOG] Externaly checking" + checkName;
+    std::string locationLog = "[LOG] Externaly checking: " + checkName;
     ArchipelagoConsole_SendMessage(locationLog.c_str(), true);
 
     GameInteractor_ExecuteOnRandomizerExternalCheck(RC);
@@ -212,12 +217,17 @@ bool ArchipelagoClient::IsConnected() {
 }
 
 void ArchipelagoClient::CheckLocation(RandomizerCheck sohCheckId) {
+    if(sohCheckId == RC_UNKNOWN_CHECK) {
+        ArchipelagoConsole_SendMessage("[ERROR] trying to send RC_UNKNOWN_CHECK, skipping", false);
+        return;
+    }
+
     std::string apName = Rando::StaticData::GetLocation(sohCheckId)->GetName();
     if (apName.empty()) {
         return;
     }
-    int64_t apItemId = apClient->get_location_id(std::string(apName));
 
+    int64_t apItemId = apClient->get_location_id(std::string(apName));
     std::string logMessage = "[LOG] Checked: " + apName + "(" + std::to_string(apItemId) + "), sending to AP server";
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
 
