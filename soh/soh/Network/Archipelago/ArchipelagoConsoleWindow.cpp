@@ -66,6 +66,26 @@ void ArchipelagoConsoleWindow::DrawElement() {
     ImGui::EndChild();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(3);
+
+    static char textEntryBuf[1024];
+    static bool keepFocus = false;
+
+    if(keepFocus) {
+        ImGui::SetKeyboardFocusHere();
+        keepFocus = false;
+    }
+    if(ImGui::InputText("##AP_MessageField", textEntryBuf, 1023, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        ArchipelagoClient::GetInstance().SendMessage(textEntryBuf);
+        textEntryBuf[0] = '\0';
+        keepFocus = true;
+    }
+    //keepFocus = ImGui::IsItemActive();
+    ImGui::SameLine();
+    if(ImGui::Button("Send")) {
+        ArchipelagoClient::GetInstance().SendMessage(textEntryBuf);
+        textEntryBuf[0] = '\0';
+        keepFocus = true;
+    }
 };
 
 ImVec4 getColorVal(const std::string& color) {  // TODO change color strings to an enum

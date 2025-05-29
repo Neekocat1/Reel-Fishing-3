@@ -342,6 +342,14 @@ void ArchipelagoClient::SendGameWon() {
     }
 }
 
+void ArchipelagoClient::SendMessage(const char* message) {
+    if(apClient == nullptr) {
+        return;
+    }
+
+    apClient->Say(std::string(message));
+}
+
 void ArchipelagoClient::Poll() {
     if(apClient == nullptr) {
         return;
