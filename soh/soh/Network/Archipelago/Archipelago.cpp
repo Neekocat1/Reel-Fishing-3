@@ -342,7 +342,7 @@ void ArchipelagoClient::SendGameWon() {
     }
 }
 
-void ArchipelagoClient::SendMessage(const std::string message) {
+void ArchipelagoClient::SendMessageToConsole(const std::string message) {
     // local commands not implemented yet
     if(message.starts_with("/")) {
         ArchipelagoConsole_SendMessage("Ship of Harkinian does not have any local commands yet.\nUse !help\" to see server commands instead", false);

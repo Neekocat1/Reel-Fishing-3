@@ -75,14 +75,14 @@ void ArchipelagoConsoleWindow::DrawElement() {
         keepFocus = false;
     }
     if(ImGui::InputText("##AP_MessageField", textEntryBuf, 1023, ImGuiInputTextFlags_EnterReturnsTrue)) {
-        ArchipelagoClient::GetInstance().SendMessage(std::string(textEntryBuf));
+        ArchipelagoClient::GetInstance().SendMessageToConsole(std::string(textEntryBuf));
         textEntryBuf[0] = '\0';
         keepFocus = true;
     }
     //keepFocus = ImGui::IsItemActive();
     ImGui::SameLine();
     if(ImGui::Button("Send")) {
-        ArchipelagoClient::GetInstance().SendMessage(std::string(textEntryBuf));
+        ArchipelagoClient::GetInstance().SendMessageToConsole(std::string(textEntryBuf));
         textEntryBuf[0] = '\0';
         keepFocus = true;
     }
