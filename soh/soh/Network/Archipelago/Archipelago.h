@@ -58,7 +58,7 @@ class ArchipelagoClient{
         void QueueExternalCheck(int64_t apLocation);
 
         void SendGameWon();
-        void SendMessage(const char* message);
+        void SendMessage(const std::string  message);
         void Poll();
 
         std::unique_ptr<APClient> apClient;

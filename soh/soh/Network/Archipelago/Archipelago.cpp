@@ -342,12 +342,19 @@ void ArchipelagoClient::SendGameWon() {
     }
 }
 
-void ArchipelagoClient::SendMessage(const char* message) {
-    if(apClient == nullptr) {
+void ArchipelagoClient::SendMessage(const std::string message) {
+    // local commands not implemented yet
+    if(message.starts_with("/")) {
+        ArchipelagoConsole_SendMessage("Ship of Harkinian does not have any local commands yet.\nUse !help\" to see server commands instead", false);
         return;
     }
 
-    apClient->Say(std::string(message));
+    if(apClient == nullptr) {
+        ArchipelagoConsole_SendMessage("[ERROR] Could not send message. Please Connect to your slot.", false);
+        return;
+    }
+
+    apClient->Say(message);
 }
 
 void ArchipelagoClient::Poll() {
