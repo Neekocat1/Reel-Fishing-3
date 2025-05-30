@@ -29,10 +29,7 @@ ArchipelagoClient::ArchipelagoClient() {
 
     gameWon = false;
     itemQueued = false;
-
-    // call poll every frame
-    COND_HOOK(GameInteractor::OnGameFrameUpdate, true, [](){ArchipelagoClient::GetInstance().Poll();});
-    COND_HOOK(GameInteractor::OnLoadGame, true, [](int32_t file_id){ArchipelagoClient::GetInstance().GameLoaded();});
+    disconnecting = false;
 }
 
 ArchipelagoClient& ArchipelagoClient::GetInstance() {
@@ -45,6 +42,7 @@ bool ArchipelagoClient::StartClient() {
         apClient.reset();
     }
 
+    disconnecting = false;
     apClient = std::unique_ptr<APClient>(
         new APClient(uuid, AP_Client_consts::AP_GAME_NAME,
                      CVarGetString(CVAR_REMOTE_ARCHIPELAGO("ServerAddress"), "localhost:38281"), "cacert.pem"));
@@ -66,12 +64,22 @@ bool ArchipelagoClient::StartClient() {
         // if we are already in game when we connect 
         // we won't have to request an itemSynch
         if(GameInteractor::IsSaveLoaded(true)) {
+            if(!isRightSaveLoaded()) {
+                disconnecting = true;
+                ArchipelagoConsole_SendMessage("[ERROR] Connected to incorrect slot, disconnecting...");
+                return;
+            }
+
             SynchSentLocations();
-            SynchRecievedLocations();
+            SynchReceivedLocations();
         }
     });
 
     apClient->set_items_received_handler([&](const std::list<APClient::NetworkItem>& items) {
+        if(disconnecting) {
+            return;
+        }
+
         for(const APClient::NetworkItem& item : items) {
             ApItem apItem;
             const std::string game = apClient->get_player_game(item.player);
@@ -85,6 +93,10 @@ bool ArchipelagoClient::StartClient() {
     });
 
     apClient->set_location_info_handler([&](const std::list<APClient::NetworkItem>& items) {
+        if(disconnecting) {
+            return;
+        }
+
         scoutedItems.clear();
     
         for(const APClient::NetworkItem& item: items) {
@@ -108,25 +120,71 @@ bool ArchipelagoClient::StartClient() {
     });    // todo maybe move these functions to a lambda, since they don't have to be static anymore
 
     apClient->set_location_checked_handler([&](const std::list<int64_t> locations) {
+        if(disconnecting) {
+            return;
+        }
+
         for(const int64_t apLoc : locations) {
             QueueExternalCheck(apLoc);
         }
     });
 
     apClient->set_print_json_handler([&](const APClient::PrintJSONArgs& arg) {
-        std::string tag = "[" + arg.type + "] ";
-        
-        const int slot = apClient->get_player_number();
-        if(arg.type == "ItemSend") {
-            if((*arg.item).player == slot) {
-                tag = "[Found] ";
-            } else if (*arg.receiving == slot ) {
-                tag = "[Received] ";
-            }
+        if(disconnecting) {
+            return;
         }
 
-        std::string text = tag + apClient->render_json(arg.data, APClient::RenderFormat::TEXT);
-        ArchipelagoConsole_SendMessage(text.c_str(), false);
+        std::vector<ColoredTextNode> coloredNodes;
+
+        for(const APClient::TextNode& node : arg.data) {
+            APClient* client = apClient.get();
+            std::string color;
+            std::string text;
+            
+            if(node.type == "player_id") {
+                int id = std::stoi(node.text);
+                if (color.empty() && id == client->get_player_number()) color = "magenta";
+                else if(color.empty()) color = "yellow";
+                text = client->get_player_alias(id);
+            } else if (node.type == "item_id") {
+                int64_t id = std::stoll(node.text);
+                if(color.empty()) {
+                    if (node.flags & APClient::ItemFlags::FLAG_ADVANCEMENT) color = "plum";
+                    else if (node.flags & APClient::ItemFlags::FLAG_NEVER_EXCLUDE) color = "slateblue";
+                    else if (node.flags & APClient::ItemFlags::FLAG_TRAP) color = "salmon";
+                    else color = "cyan";
+                }
+                text = client->get_item_name(id, client->get_player_game(node.player));
+            } else if (node.type == "location_id") {
+                int64_t id = std::stoll(node.text);
+                if (color.empty()) color = "blue";
+                text = client->get_location_name(id, client->get_player_game(node.player));
+            } else if (node.type == "hint_status") {
+                text = node.text;
+                if (node.hintStatus == APClient::HINT_FOUND) color = "green";
+                else if (node.hintStatus == APClient::HINT_UNSPECIFIED) color = "grey";
+                else if (node.hintStatus == APClient::HINT_NO_PRIORITY) color = "slateblue";
+                else if (node.hintStatus == APClient::HINT_AVOID) color = "salmon";
+                else if (node.hintStatus == APClient::HINT_PRIORITY) color = "plum";
+                else color = "red";  // unknown status -> red
+            } else if (node.type == "ERROR") {
+                color = "ERROR";
+                text = node.text;
+            } else if (node.type == "LOG") {
+                color = "LOG";
+                text = node.text;
+            } else {
+                color = "white";
+                text = node.text;
+            }
+
+            ColoredTextNode Colornode;
+            Colornode.color = color;
+            Colornode.text = text;
+            coloredNodes.push_back(Colornode);
+        }
+
+        ArchipelagoConsole_PrintJson(coloredNodes);
     });
 
     return true;
@@ -139,7 +197,14 @@ void ArchipelagoClient::GameLoaded() {
 
     // if its not an AP save, disconnect
     if(!IS_ARCHIPELAGO) {
-        apClient->reset();
+        ArchipelagoConsole_SendMessage("[ERROR] Loaded save is not not an archipelago save, disconnecting...");
+        disconnecting = true;
+        return;
+    }
+
+    if(!isRightSaveLoaded()) {
+        ArchipelagoConsole_SendMessage("[ERROR] Loaded save is not associated with connected slot, disconnecting...");
+        disconnecting = true;
         return;
     }
 
@@ -147,7 +212,7 @@ void ArchipelagoClient::GameLoaded() {
 
     SynchItems();
     SynchSentLocations();
-    SynchRecievedLocations();
+    SynchReceivedLocations();
 }
 
 void ArchipelagoClient::StartLocationScouts() {
@@ -185,7 +250,7 @@ void ArchipelagoClient::SynchSentLocations() {
     apClient->LocationChecks(checkedLocations);
 }
 
-void ArchipelagoClient::SynchRecievedLocations() {
+void ArchipelagoClient::SynchReceivedLocations() {
     // Open checks that have been found previously but went unsaved
     for(const int64_t apLoc : apClient->get_checked_locations()) {
         QueueExternalCheck(apLoc);
@@ -196,12 +261,17 @@ void ArchipelagoClient::QueueExternalCheck(const int64_t apLocation) {
     const std::string checkName = apClient->get_location_name(apLocation, AP_Client_consts::AP_GAME_NAME);
     const uint32_t RC = static_cast<uint32_t>(Rando::StaticData::locationNameToEnum[checkName]);
 
+    if(RC == RC_UNKNOWN_CHECK) {
+        ArchipelagoConsole_SendMessage("[ERROR] Attempting to queue RC_UNKOWN_CHECK, skipping", false);
+        return;
+    }
+
     // Don't queue checks we already have
     if(Rando::Context::GetInstance()->GetItemLocation(RC)->HasObtained()) {
         return;
     }
 
-    std::string locationLog = "[LOG] Externaly checking" + checkName;
+    std::string locationLog = "[LOG] Externaly checking: " + checkName;
     ArchipelagoConsole_SendMessage(locationLog.c_str(), true);
 
     GameInteractor_ExecuteOnRandomizerExternalCheck(RC);
@@ -212,12 +282,17 @@ bool ArchipelagoClient::IsConnected() {
 }
 
 void ArchipelagoClient::CheckLocation(RandomizerCheck sohCheckId) {
+    if(sohCheckId == RC_UNKNOWN_CHECK) {
+        ArchipelagoConsole_SendMessage("[ERROR] trying to send RC_UNKNOWN_CHECK, skipping", false);
+        return;
+    }
+
     std::string apName = Rando::StaticData::GetLocation(sohCheckId)->GetName();
     if (apName.empty()) {
         return;
     }
-    int64_t apItemId = apClient->get_location_id(std::string(apName));
 
+    int64_t apItemId = apClient->get_location_id(std::string(apName));
     std::string logMessage = "[LOG] Checked: " + apName + "(" + std::to_string(apItemId) + "), sending to AP server";
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
 
@@ -234,21 +309,21 @@ void ArchipelagoClient::OnItemReceived(const ApItem apItem) {
         return;
     }
 
-    std::string logMessage = "[LOG] Recieved " + apItem.itemName;
+    std::string logMessage = "[LOG] Received " + apItem.itemName;
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
 
-    // add item to the queue
-    recieveQueue.push(apItem);
-}
-
-void ArchipelagoClient::QueueItem(const ApItem item) {
-    if(item.index < gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex) {
+    if(apItem.index < gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex) {
         // Skip queueing any items we already have
-        std::string logMessage = "[LOG] Skipping giving " + item.itemName + ". We recieved this previously.";
+        std::string logMessage = "[LOG] Skipping giving " + apItem.itemName + ". We received this previously.";
         ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
         return;
     }
 
+    // add item to the queue
+    receiveQueue.push(apItem);
+}
+
+void ArchipelagoClient::QueueItem(const ApItem item) {
     std::string logMessage = "[LOG] Giving " + item.itemName;
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
     const RandomizerGet RG = Rando::StaticData::itemNameToEnum[item.itemName];
@@ -257,7 +332,7 @@ void ArchipelagoClient::QueueItem(const ApItem item) {
     }
 
     itemQueued = true;
-    GameInteractor_ExecuteOnArchipelagoItemRecieved(static_cast<int32_t>(RG));
+    GameInteractor_ExecuteOnArchipelagoItemReceived(static_cast<int32_t>(RG));
 }
 
 void ArchipelagoClient::SendGameWon() {
@@ -267,20 +342,47 @@ void ArchipelagoClient::SendGameWon() {
     }
 }
 
+void ArchipelagoClient::SendMessage(const std::string message) {
+    // local commands not implemented yet
+    if(message.starts_with("/")) {
+        ArchipelagoConsole_SendMessage("Ship of Harkinian does not have any local commands yet.\nUse !help\" to see server commands instead", false);
+        return;
+    }
+
+    if(apClient == nullptr) {
+        ArchipelagoConsole_SendMessage("[ERROR] Could not send message. Please Connect to your slot.", false);
+        return;
+    }
+
+    apClient->Say(message);
+}
+
 void ArchipelagoClient::Poll() {
     if(apClient == nullptr) {
         return;
     }
 
-    // queue another item to be recieved
-    if(!itemQueued && recieveQueue.size() > 0) {
+    if(disconnecting) {
+        apClient->reset();
+        apClient = nullptr;
+        return;
+    }
+
+    // queue another item to be received
+    if(!itemQueued && receiveQueue.size() > 0) {
         
-        const ApItem item = recieveQueue.front();
-        recieveQueue.pop();
+        const ApItem item = receiveQueue.front();
+        receiveQueue.pop();
         QueueItem(item);
     }
     
     apClient->poll();
+}
+
+bool ArchipelagoClient::isRightSaveLoaded() const {
+    const bool seedMatch = apClient->get_seed().compare(gSaveContext.ship.quest.data.archipelago.roomHash) == 0;
+    const bool slotMatch = GetSlotName().compare(gSaveContext.ship.quest.data.archipelago.slotName) == 0;
+    return seedMatch && slotMatch;
 }
 
 const std::string ArchipelagoClient::GetSlotName() const {
@@ -301,7 +403,7 @@ const std::vector<ArchipelagoClient::ApItem>& ArchipelagoClient::GetScoutedItems
 
 const char* ArchipelagoClient::GetConnectionStatus() {
     if (!apClient) {
-        return "";
+        return "Disconnected!";
     }
 
     APClient::State clientStatus = apClient->get_state();
@@ -317,7 +419,7 @@ const char* ArchipelagoClient::GetConnectionStatus() {
             return "Socket Connected!";
         }
         case APClient::State::ROOM_INFO: {
-            return "Room info Recieved!";
+            return "Room info Received!";
         }
         case APClient::State::SLOT_CONNECTED: {
             return "Slot Connected!";
@@ -334,6 +436,12 @@ extern "C" void Archipelago_InitSaveFile() {
     gSaveContext.ship.quest.data.archipelago.deathLink = slotData["death_link"];
 
     std::vector<ArchipelagoClient::ApItem> scoutedItems = ArchipelagoClient::GetInstance().GetScoutedItems();
+
+    ArchipelagoClient& client = ArchipelagoClient::GetInstance();
+    SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.roomHash, client.apClient->get_seed(),
+                                    ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.roomHash));
+    SohUtils::CopyStringToCharArray(gSaveContext.ship.quest.data.archipelago.slotName, client.apClient->get_slot(),
+                                    ARRAY_COUNT(gSaveContext.ship.quest.data.archipelago.slotName));
 
     for (uint32_t i = 0; i < scoutedItems.size(); i++) {
         RandomizerCheck rc = Rando::StaticData::locationNameToEnum[scoutedItems[i].locationName];
@@ -411,11 +519,16 @@ void InitArchipelagoData(bool isDebug) {
 }
 
 void RegisterArchipelago() {
+    // make sure the client is constructed
+    ArchipelagoClient::GetInstance();
+
     CVarSetInteger(CVAR_REMOTE_ARCHIPELAGO("Connected"), 0);
 
+    COND_HOOK(GameInteractor::OnGameFrameUpdate, true, [](){ArchipelagoClient::GetInstance().Poll();});
+    COND_HOOK(GameInteractor::OnLoadGame, true, [](int32_t file_id){ArchipelagoClient::GetInstance().GameLoaded();});
     COND_HOOK(GameInteractor::OnRandomizerItemGivenHooks, IS_ARCHIPELAGO,
               [](uint32_t rc, GetItemEntry gi, uint8_t isGiSkipped) { 
-        if (rc == RC_ARCHIPELAGO_RECIEVED_ITEM) {
+        if (rc == RC_ARCHIPELAGO_RECEIVED_ITEM) {
             gSaveContext.ship.quest.data.archipelago.lastReceivedItemIndex++;
             ArchipelagoClient::GetInstance().itemQueued = false;
         } else {

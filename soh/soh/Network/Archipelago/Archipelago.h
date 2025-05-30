@@ -27,6 +27,11 @@ class ArchipelagoClient{
             uint64_t index;
         };
 
+        struct ColoredTextNode {
+            std::string text;
+            std::string color;
+        };
+
         static ArchipelagoClient& GetInstance();
 
         bool StartClient();
@@ -36,7 +41,7 @@ class ArchipelagoClient{
         void StartLocationScouts();
         void SynchItems();
         void SynchSentLocations();
-        void SynchRecievedLocations();
+        void SynchReceivedLocations();
 
         // getters
         const std::string GetSlotName() const;
@@ -53,11 +58,12 @@ class ArchipelagoClient{
         void QueueExternalCheck(int64_t apLocation);
 
         void SendGameWon();
-
+        void SendMessage(const std::string  message);
         void Poll();
 
         std::unique_ptr<APClient> apClient;
         bool itemQueued;
+        bool disconnecting;
 
     protected:
         ArchipelagoClient();
@@ -65,9 +71,12 @@ class ArchipelagoClient{
     private:
         ArchipelagoClient(ArchipelagoClient &) = delete;
         void operator=(const ArchipelagoClient &) = delete;
+
+        bool isRightSaveLoaded() const;
+
         std::string uuid;
 
-        static std::shared_ptr<ArchipelagoClient> instance; // is this even used?
+        static std::shared_ptr<ArchipelagoClient> instance;
         static bool initialized;
 
         bool gameWon;
@@ -75,7 +84,7 @@ class ArchipelagoClient{
         nlohmann::json slotData;
         std::set<int64_t> locations;
         std::vector<ApItem> scoutedItems;
-        std::queue<ApItem> recieveQueue;
+        std::queue<ApItem> receiveQueue;
 };
 
 void LoadArchipelagoData();

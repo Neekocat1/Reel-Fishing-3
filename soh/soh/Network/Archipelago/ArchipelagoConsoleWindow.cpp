@@ -4,7 +4,7 @@
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/OTRGlobals.h"
 
-ImVector<char*> Items;
+std::vector<std::vector<ArchipelagoClient::ColoredTextNode>> Items;
 bool autoScroll = true;
 
 using namespace UIWidgets;
@@ -19,7 +19,21 @@ void ArchipelagoConsole_SendMessage(const char* fmt, bool debugMessage, ...) {
     vsnprintf(buf, IM_ARRAYSIZE(buf), fmt, args);
     buf[IM_ARRAYSIZE(buf) - 1] = 0;
     va_end(args);
-    Items.push_back(strdup(buf));
+    ArchipelagoClient::ColoredTextNode node;
+    node.text = std::string(buf);
+    node.color = "white";
+    if (strstr(buf, "[ERROR]")) {
+        node.color = "ERROR";
+    } else if (strstr(buf, "[LOG]")) {
+        node.color = "LOG";
+    }
+    std::vector<ArchipelagoClient::ColoredTextNode> line;
+    line.push_back(node);
+    Items.push_back(line);
+}
+
+void ArchipelagoConsole_PrintJson(const std::vector<ArchipelagoClient::ColoredTextNode> nodes) {
+    Items.push_back(nodes);
 }
 
 void ArchipelagoConsoleWindow::DrawElement() {
@@ -28,57 +42,19 @@ void ArchipelagoConsoleWindow::DrawElement() {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f, 12.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 1.0f));
 
     if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, 400), ImGuiChildFlags_AlwaysUseWindowPadding,
                           ImGuiWindowFlags_HorizontalScrollbar)) {
 
-        for (int i = 0; i < Items.Size; i++) {
-            const char* item = Items[i];
-            ImVec4 color;
-            bool hasColor = false;
-            if (strstr(item, "[ERROR]")) {
-                color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
-                hasColor = true;
-            } else if (strstr(item, "[LOG]")) {
-                color = ImVec4(0.7f, 0.7f, 1.0f, 1.0f);
-                hasColor = true;
-            } else if (strstr(item, "[Found]")) {
-                color = ImVec4(0.24f, 0.64f, 0.69f, 1.00f);
-                hasColor = true;
-            } else if (strstr(item, "[Received]")) {
-                color = ImVec4(0.18f, 0.76f, 0.42f, 1.00f);
-                hasColor = true;
-            } else if (strstr(item, "[ItemCheat]")) {
-                color = ImVec4(0.97f, 0.26f, 0.26f, 1.00f);
-                hasColor = true;
-            } else if (strstr(item, "[Hint]")) {
-                color = ImVec4(0.89f, 0.45f, 1.00f, 1.00f);
-                hasColor = true;
-            } else if (strstr(item, "[Join]")) {
-                color = ImVec4(0.00f, 0.80f, 0.11f, 1.00f);
-                hasColor = true;
-            } else if (strstr(item, "[Part]")) {
-                color = ImVec4(1.00f, 0.01f, 0.01f, 1.00f);
-                hasColor = true;
-            } else if (strstr(item, "[Goal]")) {
-                color = ImVec4(0.00f, 0.70f, 0.21f, 1.00f);
-                hasColor = true;
-            } else if (strstr(item, "[Release]")) {
-                color = ImVec4(0.51f, 0.21f, 0.61f, 1.00f);
-                hasColor = true;
-            } else if (strstr(item, "[Collect]")) {
-                color = ImVec4(0.51f, 0.21f, 0.61f, 1.00f);
-                hasColor = true;
-            }
-            if (hasColor) {
-                ImGui::PushStyleColor(ImGuiCol_Text, color);
-            }
-
-            ImGui::TextUnformatted(item);
-
-            if (hasColor) {
+        for(const std::vector<ArchipelagoClient::ColoredTextNode>& line : Items) {
+            for(const ArchipelagoClient::ColoredTextNode& node : line) {
+                ImGui::PushStyleColor(ImGuiCol_Text, getColorVal(node.color));
+                ImGui::TextUnformatted(node.text.c_str());
+                ImGui::SameLine();
                 ImGui::PopStyleColor();
             }
+            ImGui::NewLine();
         }
 
         // Keep up at the bottom of the scroll region if we were already at the bottom at the beginning of the frame.
@@ -89,5 +65,58 @@ void ArchipelagoConsoleWindow::DrawElement() {
     }
     ImGui::EndChild();
     ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
+
+    static char textEntryBuf[1024];
+    static bool keepFocus = false;
+
+    if(keepFocus) {
+        ImGui::SetKeyboardFocusHere();
+        keepFocus = false;
+    }
+    if(ImGui::InputText("##AP_MessageField", textEntryBuf, 1023, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        ArchipelagoClient::GetInstance().SendMessage(std::string(textEntryBuf));
+        textEntryBuf[0] = '\0';
+        keepFocus = true;
+    }
+    //keepFocus = ImGui::IsItemActive();
+    ImGui::SameLine();
+    if(ImGui::Button("Send")) {
+        ArchipelagoClient::GetInstance().SendMessage(std::string(textEntryBuf));
+        textEntryBuf[0] = '\0';
+        keepFocus = true;
+    }
 };
+
+ImVec4 getColorVal(const std::string& color) {  // TODO change color strings to an enum
+    if (color == "ERROR") {
+        return ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
+    } else if(color =="LOG") {
+        return ImVec4(0.7f, 0.7f, 1.0f, 1.0f);
+    } else if(color == "black") {
+        return ImVec4(0.000f, 0.000f, 0.000f, 1.00f);
+    } else if(color == "red") {
+        return ImVec4(0.933f, 0.000f, 0.000f, 1.00f);
+    } else if(color == "green") {
+        return ImVec4(0.000f, 1.000f, 0.498f, 1.00f);
+    } else if(color == "yellow") {
+        return ImVec4(0.980f, 0.980f, 0.824f, 1.00f);
+    } else if(color == "blue") {
+        return ImVec4(0.392f, 0.584f, 0.929f, 1.00f);
+    } else if(color == "cyan") {
+        return ImVec4(0.000f, 0.933f, 0.933f, 1.00f);
+    } else if(color == "magenta") {
+        return ImVec4(0.933f, 0.000f, 0.933f, 1.00f);
+    } else if(color == "slateblue") {
+        return ImVec4(0.427f, 0.545f, 0.910f, 1.00f);
+    } else if(color == "plum") {
+        return ImVec4(0.686f, 0.600f, 0.937f, 1.00f);
+    } else if(color == "salmon") {
+        return ImVec4(0.980f, 0.502f, 0.447f, 1.00f);
+    } else if(color == "white") {
+        return ImVec4(0.93f, 0.93f, 0.93f, 1.00f);
+    } else if(color == "orange") {
+        return ImVec4(1.000, 0.467f, 0.000f, 1.000f);
+    }
+    return ImVec4(0.93f, 0.93f, 0.93f, 1.00f);
+}

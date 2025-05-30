@@ -3472,7 +3472,7 @@ typedef enum {
     RC_DEKU_TREE_QUEEN_GOHMA_GRASS_8,
     // End Grass
 
-    RC_ARCHIPELAGO_RECIEVED_ITEM,
+    RC_ARCHIPELAGO_RECEIVED_ITEM,
     RC_MAX
 } RandomizerCheck;
 
