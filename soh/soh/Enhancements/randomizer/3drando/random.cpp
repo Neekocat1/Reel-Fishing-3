@@ -32,6 +32,18 @@ uint32_t next32() {
     return std::rotr(xorshifted, rot);
 }
 
+void Random_InitSeed() {
+    if (!init) {
+        // No seed given, get a random number from device to seed
+#if !defined(__SWITCH__) && !defined(__WIIU__)
+        const auto seed = static_cast<uint32_t>(std::random_device{}());
+#else
+        uint32_t seed = static_cast<uint32_t>(std::hash<std::string>{}(std::to_string(rand())));
+#endif
+        Random_Init(seed);
+    }
+}
+
 // Returns a random integer in range [min, max-1]
 uint32_t Random(int min, int max) {
     if (min == max) {
@@ -49,7 +61,7 @@ uint32_t Random(int min, int max) {
     }
 }
 
-// Returns a random floating point number in [0.0, 1.0]
+// Returns a random floating point number in [0.0, 1.0)
 double RandomDouble() {
     return ldexp(next32(), -32);
 }
