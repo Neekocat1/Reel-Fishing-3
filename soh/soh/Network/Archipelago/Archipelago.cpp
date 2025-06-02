@@ -83,7 +83,7 @@ bool ArchipelagoClient::StartClient() {
         for(const APClient::NetworkItem& item : items) {
             ApItem apItem;
             const std::string game = apClient->get_player_game(item.player);
-            apItem.itemName = apClient->get_item_name(item.item, game);
+            apItem.itemName = apClient->get_item_name(item.item, AP_Client_consts::AP_GAME_NAME);
             apItem.locationName = apClient->get_location_name(item.location, game);
             apItem.playerName = apClient->get_player_alias(item.player);
             apItem.flags = item.flags;
@@ -103,7 +103,7 @@ bool ArchipelagoClient::StartClient() {
             ApItem apItem;
             const std::string game = apClient->get_player_game(item.player);
             apItem.itemName = apClient->get_item_name(item.item, game);
-            apItem.locationName = apClient->get_location_name(item.location, game);
+            apItem.locationName = apClient->get_location_name(item.location, AP_Client_consts::AP_GAME_NAME);
             apItem.playerName = apClient->get_player_alias(item.player);
             apItem.flags = item.flags;
             apItem.index = item.index;
