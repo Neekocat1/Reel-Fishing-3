@@ -278,12 +278,20 @@ void ArchipelagoClient::QueueExternalCheck(const int64_t apLocation) {
 }
 
 bool ArchipelagoClient::IsConnected() {
+    if(apClient == nullptr) {
+        return false;
+    }
+
     return apClient->get_state() == APClient::State::SLOT_CONNECTED;
 }
 
 void ArchipelagoClient::CheckLocation(RandomizerCheck sohCheckId) {
     if(sohCheckId == RC_UNKNOWN_CHECK) {
         ArchipelagoConsole_SendMessage("[ERROR] trying to send RC_UNKNOWN_CHECK, skipping", false);
+        return;
+    }
+
+    if(!IsConnected()) {
         return;
     }
 
@@ -296,9 +304,6 @@ void ArchipelagoClient::CheckLocation(RandomizerCheck sohCheckId) {
     std::string logMessage = "[LOG] Checked: " + apName + "(" + std::to_string(apItemId) + "), sending to AP server";
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
 
-    if(!IsConnected()) {
-        return;
-    }
     apClient->LocationChecks({ apItemId });
 }
 
