@@ -64,8 +64,7 @@ void ArchipelagoConsoleWindow::DrawElement() {
         }
     }
     ImGui::EndChild();
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(3);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
 
     static char textEntryBuf[1024];
     static bool keepFocus = false;
@@ -86,6 +85,10 @@ void ArchipelagoConsoleWindow::DrawElement() {
         textEntryBuf[0] = '\0';
         keepFocus = true;
     }
+    
+    
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(4);
 };
 
 ImVec4 getColorVal(const std::string& color) {  // TODO change color strings to an enum

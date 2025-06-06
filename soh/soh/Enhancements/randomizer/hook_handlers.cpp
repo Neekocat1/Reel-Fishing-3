@@ -285,7 +285,56 @@ void RandomizerOnSceneFlagSetHandler(int16_t sceneNum, int16_t flagType, int16_t
 }
 
 void RandomizerOnExternalCheckHandler(uint32_t randomizerCheck) {
-    randomizerQueuedChecks.push(static_cast<RandomizerCheck>(randomizerCheck));
+    RandomizerCheck rc = static_cast<RandomizerCheck>(randomizerCheck);
+    Rando::Location* loc = Rando::StaticData::GetLocation(rc);
+    s32 flagID = loc->GetCollectionCheck().flag;
+    SceneID scene = loc->GetScene();
+
+    bool inSameArea = false;
+    if(gPlayState != nullptr) {
+        inSameArea = scene == gPlayState->sceneNum;
+    }
+
+    std::string logMessage = "";
+
+    switch(loc->GetCollectionCheck().type) {
+        case SPOILER_CHK_CHEST:
+            if(inSameArea) {
+                Flags_SetTreasure(gPlayState, flagID);
+            } else {
+                gSaveContext.sceneFlags[scene].chest |= 1 << flagID;
+                randomizerQueuedChecks.push(rc);
+            }
+            break;
+        case SPOILER_CHK_COLLECTABLE:
+            if(inSameArea) {
+                Flags_SetCollectible(gPlayState, flagID);
+            } else {
+                gSaveContext.sceneFlags[scene].collect |= 1 << flagID;
+                randomizerQueuedChecks.push(rc);
+            }
+            break;
+        case SPOILER_CHK_RANDOMIZER_INF:
+            Flags_SetRandomizerInf(static_cast<RandomizerInf>(flagID));
+        case SPOILER_CHK_EVENT_CHK_INF:
+            Flags_SetEventChkInf(flagID);
+            break;
+        case SPOILER_CHK_ITEM_GET_INF:
+            Flags_SetItemGetInf(flagID);
+            break;
+        case SPOILER_CHK_INF_TABLE:
+            Flags_SetInfTable(flagID);
+            break;
+        case SPOILER_CHK_GOLD_SKULLTULA:
+            logMessage = "[LOG] Externaly checked golden skultulla: " + std::to_string(loc->GetActorParams()) + ", " + std::to_string(flagID);
+            ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
+            SET_GS_FLAGS((flagID & 0x1F00) >> 8, flagID & 0xFF);
+            break;
+        case SPOILER_CHK_GRAVEDIGGER:   //This enum is used nowhere in code, so i'll leave it as nothing for now
+        case SPOILER_CHK_NONE:
+            // do Nothing
+            break;
+    }
 }
 
 static Vec3f spawnPos = { 0.0f, -999.0f, 0.0f };

@@ -83,7 +83,7 @@ bool ArchipelagoClient::StartClient() {
         for(const APClient::NetworkItem& item : items) {
             ApItem apItem;
             const std::string game = apClient->get_player_game(item.player);
-            apItem.itemName = apClient->get_item_name(item.item, game);
+            apItem.itemName = apClient->get_item_name(item.item, AP_Client_consts::AP_GAME_NAME);
             apItem.locationName = apClient->get_location_name(item.location, game);
             apItem.playerName = apClient->get_player_alias(item.player);
             apItem.flags = item.flags;
@@ -103,7 +103,7 @@ bool ArchipelagoClient::StartClient() {
             ApItem apItem;
             const std::string game = apClient->get_player_game(item.player);
             apItem.itemName = apClient->get_item_name(item.item, game);
-            apItem.locationName = apClient->get_location_name(item.location, game);
+            apItem.locationName = apClient->get_location_name(item.location, AP_Client_consts::AP_GAME_NAME);
             apItem.playerName = apClient->get_player_alias(item.player);
             apItem.flags = item.flags;
             apItem.index = item.index;
@@ -278,12 +278,20 @@ void ArchipelagoClient::QueueExternalCheck(const int64_t apLocation) {
 }
 
 bool ArchipelagoClient::IsConnected() {
+    if(apClient == nullptr) {
+        return false;
+    }
+
     return apClient->get_state() == APClient::State::SLOT_CONNECTED;
 }
 
 void ArchipelagoClient::CheckLocation(RandomizerCheck sohCheckId) {
     if(sohCheckId == RC_UNKNOWN_CHECK) {
         ArchipelagoConsole_SendMessage("[ERROR] trying to send RC_UNKNOWN_CHECK, skipping", false);
+        return;
+    }
+
+    if(!IsConnected()) {
         return;
     }
 
@@ -296,9 +304,6 @@ void ArchipelagoClient::CheckLocation(RandomizerCheck sohCheckId) {
     std::string logMessage = "[LOG] Checked: " + apName + "(" + std::to_string(apItemId) + "), sending to AP server";
     ArchipelagoConsole_SendMessage(logMessage.c_str(), true);
 
-    if(!IsConnected()) {
-        return;
-    }
     apClient->LocationChecks({ apItemId });
 }
 
@@ -345,7 +350,7 @@ void ArchipelagoClient::SendGameWon() {
 void ArchipelagoClient::SendMessageToConsole(const std::string message) {
     // local commands not implemented yet
     if(message.starts_with("/")) {
-        ArchipelagoConsole_SendMessage("Ship of Harkinian does not have any local commands yet.\nUse !help\" to see server commands instead", false);
+        ArchipelagoConsole_SendMessage("Ship of Harkinian does not have any local commands yet.\nUse \"!help\" to see server commands instead", false);
         return;
     }
 

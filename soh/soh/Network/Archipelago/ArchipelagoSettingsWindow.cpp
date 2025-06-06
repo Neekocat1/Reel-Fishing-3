@@ -76,6 +76,9 @@ void ArchipelagoSettingsWindow::DrawElement() {
                               UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
             ArchipelagoClient::GetInstance().SendGameWon();
         }
+        if (UIWidgets::Button("Get Mido br chest", UIWidgets::ButtonOptions().Color(THEME_COLOR).Size(ImVec2(0.0, 0.0)))) {
+            ArchipelagoClient::GetInstance().QueueExternalCheck(16711707);
+        }
     }
 
     static bool sArchipelagoTexturesLoaded = false;
