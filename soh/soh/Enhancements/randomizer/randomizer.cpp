@@ -261,7 +261,6 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGe
 
     switch (randoGet) {
         case RG_NONE:
-        case RG_TRIFORCE:
         case RG_HINT:
         case RG_MAX:
         case RG_SOLD_OUT:
@@ -668,6 +667,7 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGe
         case RG_TREASURE_GAME_GREEN_RUPEE:
         case RG_BUY_HEART:
         case RG_TRIFORCE_PIECE:
+        case RG_TRIFORCE:
         default:
             return CAN_OBTAIN;
     }
@@ -860,6 +860,23 @@ ShopItemIdentity Randomizer::IdentifyShopItem(s32 sceneNum, u8 slotIndex) {
 
 u8 Randomizer::GetRandoSettingValue(RandomizerSettingKey randoSettingKey) {
     return Rando::Context::GetInstance()->GetOption(randoSettingKey).Get();
+}
+
+u8 Randomizer::GetTriforcePiecesRequired() {
+    u8 required = 0;
+    if (GetRandoSettingValue(RSK_RAINBOW_BRIDGE) == RO_BRIDGE_TRIFORCE_PIECES) {
+        required = std::max(required, GetRandoSettingValue(RSK_RAINBOW_BRIDGE_TRIFORCE_COUNT));
+    }
+    if (GetRandoSettingValue(RSK_GANONS_BOSS_KEY) == RO_GANON_BOSS_KEY_TRIFORCE_PIECES) {
+        required = std::max(required, GetRandoSettingValue(RSK_GBK_TRIFORCE_COUNT));
+    }
+    if (GetRandoSettingValue(RSK_GANONS_SOUL) == RO_GANONS_SOUL_TRIFORCE_PIECES) {
+        required = std::max(required, GetRandoSettingValue(RSK_GANONS_SOUL_TRIFORCE_COUNT));
+    }
+    if (GetRandoSettingValue(RSK_WINCON) == RO_WINCON_TRIFORCE_PIECES) {
+        required = std::max(required, GetRandoSettingValue(RSK_WINCON_TRIFORCE_COUNT));
+    }
+    return required;
 }
 
 GetItemEntry Randomizer::GetItemFromKnownCheck(RandomizerCheck randomizerCheck, GetItemID ogItemId,
@@ -1291,22 +1308,14 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
                 Rupees_ChangeBy(999);
             }
             break;
+        case RG_TRIFORCE:
+            GameInteractor_SetTriforceHuntCreditsWarpActive(true);
+            break;
         case RG_TRIFORCE_PIECE:
             gSaveContext.ship.quest.data.randomizer.triforcePiecesCollected++;
             GameInteractor_SetTriforceHuntPieceGiven(true);
-
-            // Give Ganon's Boss Key and teleport to credits if set to Win when goal is reached.
-            if (gSaveContext.ship.quest.data.randomizer.triforcePiecesCollected ==
-                (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT_PIECES_REQUIRED) + 1)) {
-                Flags_SetRandomizerInf(RAND_INF_GRANT_GANONS_BOSSKEY);
-
-                if (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT) ==
-                    RO_TRIFORCE_HUNT_WIN) {
-                    // Save and warp are deferred until item queue drains
-                    GameInteractor_SetTriforceHuntCreditsWarpActive(true);
-                }
-            }
-
+            // Reward/win triggers (Ganon's Boss Key, Ganon's Soul, win condition) are evaluated by
+            // CheckTriggers() on item receive, so Triforce Piece thresholds are handled there.
             break;
         case RG_PROGRESSIVE_BOMBCHU_BAG:
             OTRGlobals::Instance->gRandoContext->HandleGetBombchuBag();
