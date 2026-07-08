@@ -6638,10 +6638,9 @@ s32 Player_SetStartingMovement(PlayState* play, Player* this, f32 arg2) {
 
     ySurface = this->actor.world.pos.y;
     if (WaterBox_GetSurface1(play, &play->colCtx, this->actor.world.pos.x, this->actor.world.pos.z, &ySurface,
-                             &waterbox) &&
-        GameInteractor_Should(VB_LAKE_HYLIA_PREVENT_DOMAIN_SWIM, true, this)) {
+                             &waterbox)) {
         ySurface -= this->actor.world.pos.y;
-        if (this->ageProperties->unk_24 <= ySurface) {
+        if (GameInteractor_Should(VB_PLAYER_SPAWN_SWIMMING, this->ageProperties->unk_24 <= ySurface, this)) {
             Player_SetupAction(play, this, Player_Action_8084D7C4, 0);
             Player_AnimChangeLoopSlowMorph(play, this, &gPlayerAnim_link_swimer_swim);
             this->stateFlags1 |= PLAYER_STATE1_IN_WATER | PLAYER_STATE1_IN_CUTSCENE;
