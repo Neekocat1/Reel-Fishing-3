@@ -272,7 +272,7 @@ void EnWallmas_SetupTakePlayer(EnWallmas* this, PlayState* play) {
 
     this->yTarget = this->actor.yDistToPlayer;
     Player_SetCsAction(play, &this->actor, 0x25);
-    OnePointCutscene_Init(play, 9500, 9999, &this->actor, MAIN_CAM);
+    OnePointCutscene_Init(play, 9500, 9999, &this->actor, CAM_ID_MAIN);
 }
 
 void EnWallmas_ProximityOrSwitchInit(EnWallmas* this) {
