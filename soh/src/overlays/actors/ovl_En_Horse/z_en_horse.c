@@ -2519,14 +2519,17 @@ void EnHorse_UpdateHorsebackArchery(EnHorse* this, PlayState* play) {
     if (this->animationIdx == ENHORSE_ANIM_WALK) {
         EnHorse_PlayWalkingSfx(this);
     }
-    if (play->interfaceCtx.hbaAmmo == 0) {
+
+    if (GameInteractor_Should(VB_PREVENT_HBA_FANFARE_SOFTLOCK_TIMER, play->interfaceCtx.hbaAmmo == 0, this)) {
         this->hbaTimer++;
     }
 
     isFanfarePlaying = Audio_IsSequencePlaying(NA_BGM_HORSE_GOAL);
+
     EnHorse_UpdateHbaRaceInfo(this, play, &sHbaInfo);
     if (this->hbaFlags & 1 || this->hbaTimer >= 46) {
-        if (isFanfarePlaying != 1 && gSaveContext.minigameState != 3) {
+        if (GameInteractor_Should(VB_PREVENT_HBA_FANFARE_SOFTLOCK_BUTTONS,
+                                  (isFanfarePlaying != 1 && gSaveContext.minigameState != 3), this)) {
             gSaveContext.cutsceneIndex = 0;
             play->nextEntranceIndex = ENTR_GERUDOS_FORTRESS_16;
             play->transitionTrigger = TRANS_TRIGGER_START;
