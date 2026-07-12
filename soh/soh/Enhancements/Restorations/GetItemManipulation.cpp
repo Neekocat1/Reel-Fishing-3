@@ -5,6 +5,7 @@
 #include "soh/ShipInit.hpp"
 
 extern "C" {
+#include "z64.h"
 #include "macros.h"
 #include "variables.h"
 extern PlayState* gPlayState;
