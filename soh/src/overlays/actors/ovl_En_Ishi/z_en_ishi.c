@@ -9,6 +9,7 @@
 #include "objects/gameplay_field_keep/gameplay_field_keep.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #include "vt.h"
 
@@ -31,8 +32,14 @@ void EnIshi_SpawnFragmentsLarge(EnIshi* this, PlayState* play);
 void EnIshi_SpawnDustSmall(EnIshi* this, PlayState* play);
 void EnIshi_SpawnDustLarge(EnIshi* this, PlayState* play);
 
-s16 sRockRotSpeedX = 0;
-s16 sRockRotSpeedY = 0;
+static s16 sRockRotSpeedX = 0;
+static s16 sRockRotSpeedY = 0;
+
+#define EN_ISHI_SHIP_SAVESTATE_FIELDS(F) \
+    F(sRockRotSpeedX)                    \
+    F(sRockRotSpeedY)
+
+SHIP_SAVESTATE_DEFINE(EnIshi, EN_ISHI_SHIP_SAVESTATE_FIELDS)
 
 const ActorInit En_Ishi_InitVars = {
     ACTOR_EN_ISHI,

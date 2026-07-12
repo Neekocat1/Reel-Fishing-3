@@ -13,6 +13,7 @@
 #include "soh/frame_interpolation.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/savestate_serialize.h"
 #include <libultraship/bridge/resourcebridge.h>
 
 #include <string.h>
@@ -112,17 +113,27 @@ static ColliderCylinderInit sLightBallCylinderInit = {
 static u8 D_808E4C58[] = { 0, 12, 10, 12, 14, 16, 12, 14, 16, 12, 14, 16, 12, 14, 16, 10, 16, 14 };
 static Vec3f sZeroVec = { 0.0f, 0.0f, 0.0f };
 
-EnGanonMant* sBossGanonCape;
+static EnGanonMant* sBossGanonCape;
 
-s32 sBossGanonSeed1;
-s32 sBossGanonSeed3;
-s32 sBossGanonSeed2;
+static s32 sBossGanonSeed1;
+static s32 sBossGanonSeed3;
+static s32 sBossGanonSeed2;
 
-BossGanon* sBossGanonGanondorf;
+static BossGanon* sBossGanonGanondorf;
 
-EnZl3* sBossGanonZelda;
+static EnZl3* sBossGanonZelda;
 
-GanondorfEffect sBossGanonEffectBuf[200];
+static GanondorfEffect sBossGanonEffectBuf[200];
+
+#define BOSS_GANON_SHIP_SAVESTATE_FIELDS(F) \
+    F(sBossGanonSeed1)                      \
+    F(sBossGanonSeed2)                      \
+    F(sBossGanonSeed3)                      \
+    F(sBossGanonGanondorf)                  \
+    F(sBossGanonZelda)                      \
+    F(sBossGanonCape)                       \
+    F(sBossGanonEffectBuf)
+SHIP_SAVESTATE_DEFINE(BossGanon, BOSS_GANON_SHIP_SAVESTATE_FIELDS)
 
 static u8 sWindowShatterTex[2048] = { { 0 } };
 

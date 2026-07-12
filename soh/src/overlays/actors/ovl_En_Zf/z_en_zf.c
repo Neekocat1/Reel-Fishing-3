@@ -8,6 +8,7 @@
 #include "objects/object_zf/object_zf.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
 
@@ -99,8 +100,14 @@ static Vec3f sPlatformPositions[] = {
 };
 
 // These seem to relate to the tagging in/out the minibosses do
-s16 D_80B4A1B0 = 0;
-s16 D_80B4A1B4 = 1;
+static s16 D_80B4A1B0 = 0;
+static s16 D_80B4A1B4 = 1;
+
+#define EN_ZF_SHIP_SAVESTATE_FIELDS(F) \
+    F(D_80B4A1B0)                      \
+    F(D_80B4A1B4)
+
+SHIP_SAVESTATE_DEFINE(EnZf, EN_ZF_SHIP_SAVESTATE_FIELDS)
 
 const ActorInit En_Zf_InitVars = {
     ACTOR_EN_ZF,

@@ -14,6 +14,7 @@
 #include "soh/OTRGlobals.h"
 #include "soh/SaveManager.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 // #region SOH [NTSC] - Allows custom messages to work on japanese
 static bool sDisplayNextMessageAsEnglish = false;
@@ -23,27 +24,27 @@ static u16 sTextBoxNum = 0;
 
 s16 sTextFade = false; // original name: key_off_flag ?
 
-u8 D_8014B2F4 = 0;
+static u8 D_8014B2F4 = 0;
 
-s16 sOcarinaNoteBufPos = 0;
+static s16 sOcarinaNoteBufPos = 0;
 
-s16 sOcarinaNoteBufLen = 0;
+static s16 sOcarinaNoteBufLen = 0;
 
-u8 sTextboxSkipped = false;
+static u8 sTextboxSkipped = false;
 
-u16 sNextTextId = 0;
+static u16 sNextTextId = 0;
 
 s16 sTextIsCredits = false;
 
 UNK_TYPE D_8014B30C = 0;
 
-s16 sLastPlayedSong = 0xFF; // last played song?
+static s16 sLastPlayedSong = 0xFF; // last played song?
 
-s16 sHasSunsSong = false;
+static s16 sHasSunsSong = false;
 
 s16 sMessageHasSetSfx = false;
 
-u16 sOcarinaSongBitFlags = 0; // ocarina bit flags
+static u16 sOcarinaSongBitFlags = 0; // ocarina bit flags
 
 MessageTableEntry* sNesMessageEntryTablePtr = NULL;
 MessageTableEntry* sGerMessageEntryTablePtr = NULL;
@@ -71,7 +72,7 @@ s16 sTextboxBackgroundYOffsets[] = {
 };
 
 // original name: onpu_buff
-u8 sOcarinaNoteBuf[12] = { 0 };
+static u8 sOcarinaNoteBuf[12] = { 0 };
 
 s16 sOcarinaNotesAlphaValues[9] = { 0 };
 
@@ -4706,3 +4707,17 @@ UNK_TYPE D_80153D7C = 0x00000000;
 // This should be part of z_game_over.c, but cannot be moved there as the entire
 // late_rodata section of this file is in the way
 s16 gGameOverTimer = 0;
+
+#define MESSAGE_PAL_SHIP_SAVESTATE_FIELDS(F) \
+    F(sOcarinaNoteBufPos)                    \
+    F(sOcarinaNoteBufLen)                    \
+    F(sOcarinaNoteBuf)                       \
+    F(D_8014B2F4)                            \
+    F(sTextboxSkipped)                       \
+    F(sNextTextId)                           \
+    F(sLastPlayedSong)                       \
+    F(sHasSunsSong)                          \
+    F(sMessageHasSetSfx)                     \
+    F(sOcarinaSongBitFlags)                  \
+    F(gGameOverTimer)
+SHIP_SAVESTATE_DEFINE(MessagePAL, MESSAGE_PAL_SHIP_SAVESTATE_FIELDS)

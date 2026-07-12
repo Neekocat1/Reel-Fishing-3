@@ -9,6 +9,7 @@
 #include "objects/object_bw/object_bw.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
 
@@ -124,7 +125,11 @@ static DamageTable sDamageTable = {
     /* Unknown 2     */ DMG_ENTRY(0, 0x0),
 };
 
-s32 sSlugGroup = 0;
+static s32 sSlugGroup = 0;
+
+#define EN_BW_SHIP_SAVESTATE_FIELDS(F) F(sSlugGroup)
+
+SHIP_SAVESTATE_DEFINE(EnBw, EN_BW_SHIP_SAVESTATE_FIELDS)
 
 void EnBw_SetupAction(EnBw* this, EnBwActionFunc actionFunc) {
     this->actionFunc = actionFunc;

@@ -5,6 +5,7 @@
 #include <assert.h>
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS                                                                                  \
     (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY | ACTOR_FLAG_UPDATE_CULLING_DISABLED | \
@@ -89,7 +90,7 @@ sEnFrPointers.flags = 12
      - Deactivate frogs, frogs will jump back into the water
 */
 
-EnFrPointers sEnFrPointers = {
+static EnFrPointers sEnFrPointers = {
     0x00,
     {
         NULL,
@@ -99,6 +100,10 @@ EnFrPointers sEnFrPointers = {
         NULL,
     },
 };
+
+#define EN_FR_SHIP_SAVESTATE_FIELDS(F) F(sEnFrPointers)
+
+SHIP_SAVESTATE_DEFINE(EnFr, EN_FR_SHIP_SAVESTATE_FIELDS)
 
 // Flags for gSaveContext.eventChkInf[13]
 static u16 sSongIndex[] = {

@@ -2,6 +2,7 @@
 #include "objects/object_warp1/object_warp1.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS 0
 
@@ -55,7 +56,10 @@ static InitChainEntry sInitChain[] = {
     ICHAIN_F32(uncullZoneDownward, 4000, ICHAIN_STOP),
 };
 
-s16 sWarpTimerTarget;
+static s16 sWarpTimerTarget;
+
+#define DOOR_WARP1_SHIP_SAVESTATE_FIELDS(F) F(sWarpTimerTarget)
+SHIP_SAVESTATE_DEFINE(DoorWarp1, DOOR_WARP1_SHIP_SAVESTATE_FIELDS)
 
 void DoorWarp1_SetupAction(DoorWarp1* this, DoorWarp1ActionFunc actionFunc) {
     this->actionFunc = actionFunc;

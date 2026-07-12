@@ -10,6 +10,7 @@
 #include "vt.h"
 #include "soh/frame_interpolation.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_THROW_ONLY)
 
@@ -37,7 +38,7 @@ void EnNiw_FeatherSpawn(EnNiw* this, Vec3f* pos, Vec3f* vel, Vec3f* accel, f32 s
 void EnNiw_FeatherUpdate(EnNiw* this, PlayState* play);
 void EnNiw_FeatherDraw(EnNiw* this, PlayState* play);
 
-s16 D_80AB85E0 = 0;
+static s16 D_80AB85E0 = 0;
 
 const ActorInit En_Niw_InitVars = {
     ACTOR_EN_NIW,
@@ -72,9 +73,16 @@ static s16 sKakarikoFlagList[] = {
     0x0200, 0x0400, 0x0800, 0x1000, 0x2000, 0x4000, 0x8000,
 };
 
-u8 sLowerRiverSpawned = false;
+static u8 sLowerRiverSpawned = false;
 
-u8 sUpperRiverSpawned = false;
+static u8 sUpperRiverSpawned = false;
+
+#define EN_NIW_SHIP_SAVESTATE_FIELDS(F) \
+    F(D_80AB85E0)                       \
+    F(sLowerRiverSpawned)               \
+    F(sUpperRiverSpawned)
+
+SHIP_SAVESTATE_DEFINE(EnNiw, EN_NIW_SHIP_SAVESTATE_FIELDS)
 
 static ColliderCylinderInit sCylinderInit1 = {
     {

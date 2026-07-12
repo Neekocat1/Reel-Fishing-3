@@ -7,6 +7,7 @@
 #include "z_bg_dodoago.h"
 #include "overlays/actors/ovl_En_Bom/z_en_bom.h"
 #include "objects/object_ddan_objects/object_ddan_objects.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS 0
 
@@ -74,13 +75,20 @@ static ColliderCylinderInit sColCylinderInitLeftRight = {
     { 50, 60, 280, { 0, 0, 0 } },
 };
 
-s16 sBgDodoagoFirstExplosiveFlag = false;
+static s16 sBgDodoagoFirstExplosiveFlag = false;
 
-u8 sBgDodoagoDisableBombCatcher;
+static u8 sBgDodoagoDisableBombCatcher;
 
 // static u8 sUnused[90]; // unknown length
 
-s32 sBgDodoagoTimer;
+static s32 sBgDodoagoTimer;
+
+#define BG_DODOAGO_SHIP_SAVESTATE_FIELDS(F) \
+    F(sBgDodoagoFirstExplosiveFlag)         \
+    F(sBgDodoagoDisableBombCatcher)         \
+    F(sBgDodoagoTimer)
+
+SHIP_SAVESTATE_DEFINE(BgDodoago, BG_DODOAGO_SHIP_SAVESTATE_FIELDS)
 
 void BgDodoago_SetupAction(BgDodoago* this, BgDodoagoActionFunc actionFunc) {
     this->actionFunc = actionFunc;

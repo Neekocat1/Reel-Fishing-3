@@ -8,6 +8,7 @@
 #include "vt.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS 0
 
@@ -33,9 +34,16 @@ void EnInsect_Drown(EnInsect* this, PlayState* play);
 void EnInsect_SetupDropped(EnInsect* this);
 void EnInsect_Dropped(EnInsect* this, PlayState* play);
 
-f32 D_80A7DEB0 = 0.0f;
-s16 D_80A7DEB4 = 0;
-s16 D_80A7DEB8 = 0;
+static f32 D_80A7DEB0 = 0.0f;
+static s16 D_80A7DEB4 = 0;
+s16 D_80A7DEB8 = 0; // not static: read by NoBugsDespawn.cpp
+
+#define EN_INSECT_SHIP_SAVESTATE_FIELDS(F) \
+    F(D_80A7DEB0)                          \
+    F(D_80A7DEB4)                          \
+    F(D_80A7DEB8)
+
+SHIP_SAVESTATE_DEFINE(EnInsect, EN_INSECT_SHIP_SAVESTATE_FIELDS)
 
 const ActorInit En_Insect_InitVars = {
     ACTOR_EN_INSECT,

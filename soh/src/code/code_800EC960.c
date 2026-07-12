@@ -5,6 +5,7 @@
 #include "soh/Enhancements/audio/AudioEditor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 // TODO: can these macros be shared between files? code_800F9280 seems to use
 // versions without any casts...
@@ -848,24 +849,24 @@ s32 sOcarinaB4BtnMap = BTN_CLEFT;
 s32 sOcarinaA4BtnMap = BTN_CRIGHT;
 s32 sOcarinaF4BtnMap = BTN_CDOWN;
 s32 sOcarinaD4BtnMap = BTN_A;
-u8 sOcarinaInpEnabled = 0;
-s8 D_80130F10 = 0; // "OCA", ocarina active?
-u8 sCurOcarinaBtnVal = 0xFF;
-u8 sPrevOcarinaNoteVal = 0;
-u8 sCurOcarinaBtnIdx = 0; // note index?
-u8 sLearnSongLastBtn = 0;
-f32 D_80130F24 = 1.0f;
+static u8 sOcarinaInpEnabled = 0;
+static s8 D_80130F10 = 0; // "OCA", ocarina active?
+static u8 sCurOcarinaBtnVal = 0xFF;
+static u8 sPrevOcarinaNoteVal = 0;
+static u8 sCurOcarinaBtnIdx = 0; // note index?
+static u8 sLearnSongLastBtn = 0;
+static f32 D_80130F24 = 1.0f;
 f32 D_80130F28 = 87.0f / 127.0f;
-s8 D_80130F2C = 0; // pitch?
-s8 D_80130F30 = 0x57;
-s8 D_80130F34 = 0;
-u8 sPlaybackState = 0; // 80130F38
-u32 D_80130F3C = 0;    // "SEQ"
-u32 sNotePlaybackTimer = 0;
-u16 sPlaybackNotePos = 0;
-u16 sStaffPlaybackPos = 0;
+static s8 D_80130F2C = 0; // pitch?
+static s8 D_80130F30 = 0x57;
+static s8 D_80130F34 = 0;
+static u8 sPlaybackState = 0; // 80130F38
+static u32 D_80130F3C = 0;    // "SEQ"
+static u32 sNotePlaybackTimer = 0;
+static u16 sPlaybackNotePos = 0;
+static u16 sStaffPlaybackPos = 0;
 u16 D_80130F4C = 0;
-u8 sDisplayedNoteValue = 0xFF; // Note to display on screen?
+static u8 sDisplayedNoteValue = 0xFF; // Note to display on screen?
 u8 sNotePlaybackVolume = 0;
 u8 sNotePlaybackVibrato = 0;
 s8 sNotePlaybackTone = 0;
@@ -1231,25 +1232,64 @@ typedef struct {
     s8 y;
 } OcarinaStick;
 OcarinaStick sCurOcaStick;
-u32 sCurOcarinaBtnPress;
-u32 D_8016BA10;
-u32 sPrevOcarinaBtnPress;
-s32 D_8016BA18;
-s32 D_8016BA1C;
-u8 sCurOcarinaSong[8];
-u8 sOcarinaSongAppendPos;
-u8 sOcarinaHasStartedSong;
-u8 sOcarinaSongNoteStartIdx;
-u8 sOcarinaSongCnt;
-u16 sOcarinaAvailSongs;
-u8 sStaffPlayingPos;
-u16 sLearnSongPos[0x10];
-u16 D_8016BA50[0x10];
-u16 D_8016BA70[0x10];
-u8 sLearnSongExpectedNote[0x10];
-OcarinaNote D_8016BAA0;
-u8 sAudioHasMalonBgm;
-f32 sAudioMalonBgmDist;
+static u32 sCurOcarinaBtnPress;
+static u32 D_8016BA10;
+static u32 sPrevOcarinaBtnPress;
+static s32 D_8016BA18;
+static s32 D_8016BA1C;
+static u8 sCurOcarinaSong[8];
+static u8 sOcarinaSongAppendPos;
+static u8 sOcarinaHasStartedSong;
+static u8 sOcarinaSongNoteStartIdx;
+static u8 sOcarinaSongCnt;
+static u16 sOcarinaAvailSongs;
+static u8 sStaffPlayingPos;
+static u16 sLearnSongPos[0x10];
+static u16 D_8016BA50[0x10];
+static u16 D_8016BA70[0x10];
+static u8 sLearnSongExpectedNote[0x10];
+static OcarinaNote D_8016BAA0;
+static u8 sAudioHasMalonBgm;
+static f32 sAudioMalonBgmDist;
+
+#define AUDIO_OCA_SHIP_SAVESTATE_FIELDS(F) \
+    F(sOcarinaInpEnabled)                  \
+    F(D_80130F10)                          \
+    F(sCurOcarinaBtnVal)                   \
+    F(sPrevOcarinaNoteVal)                 \
+    F(sCurOcarinaBtnIdx)                   \
+    F(sLearnSongLastBtn)                   \
+    F(D_80130F24)                          \
+    F(D_80130F28)                          \
+    F(D_80130F2C)                          \
+    F(D_80130F30)                          \
+    F(D_80130F34)                          \
+    F(sPlaybackState)                      \
+    F(D_80130F3C)                          \
+    F(sNotePlaybackTimer)                  \
+    F(sPlaybackNotePos)                    \
+    F(sStaffPlaybackPos)                   \
+    F(sCurOcarinaBtnPress)                 \
+    F(D_8016BA10)                          \
+    F(sPrevOcarinaBtnPress)                \
+    F(D_8016BA18)                          \
+    F(D_8016BA1C)                          \
+    F(sCurOcarinaSong)                     \
+    F(sOcarinaSongAppendPos)               \
+    F(sOcarinaHasStartedSong)              \
+    F(sOcarinaSongNoteStartIdx)            \
+    F(sOcarinaSongCnt)                     \
+    F(sOcarinaAvailSongs)                  \
+    F(sStaffPlayingPos)                    \
+    F(sLearnSongPos)                       \
+    F(D_8016BA50)                          \
+    F(D_8016BA70)                          \
+    F(sLearnSongExpectedNote)              \
+    F(D_8016BAA0)                          \
+    F(sAudioHasMalonBgm)                   \
+    F(sAudioMalonBgmDist)                  \
+    F(sDisplayedNoteValue)
+SHIP_SAVESTATE_DEFINE(AudioOca, AUDIO_OCA_SHIP_SAVESTATE_FIELDS)
 
 // Start debug bss
 u32 sDebugPadHold;

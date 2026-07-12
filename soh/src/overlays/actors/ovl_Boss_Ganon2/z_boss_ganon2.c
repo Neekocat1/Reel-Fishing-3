@@ -10,6 +10,7 @@
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #include <string.h>
 
@@ -56,23 +57,36 @@ const ActorInit Boss_Ganon2_InitVars = {
 
 #include "z_boss_ganon2_data.c"
 
-Vec3f D_8090EB20;
+static Vec3f D_8090EB20;
 
-EnZl3* sBossGanon2Zelda;
+static EnZl3* sBossGanon2Zelda;
 
-Actor* D_8090EB30;
+static Actor* D_8090EB30;
 
-BossGanon2Effect sBossGanon2Particles[100];
+static BossGanon2Effect sBossGanon2Particles[100];
 
-s32 sBossGanon2Seed1;
-s32 sBossGanon2Seed2;
-s32 sBossGanon2Seed3;
+static s32 sBossGanon2Seed1;
+static s32 sBossGanon2Seed2;
+static s32 sBossGanon2Seed3;
 
-Vec3f D_809105D8[4];
+static Vec3f D_809105D8[4];
 
-Vec3f D_80910608[4];
+static Vec3f D_80910608[4];
 
-s8 D_80910638;
+static s8 D_80910638;
+
+#define BOSS_GANON2_SHIP_SAVESTATE_FIELDS(F) \
+    F(D_8090EB20)                            \
+    F(D_80910638)                            \
+    F(sBossGanon2Zelda)                      \
+    F(D_8090EB30)                            \
+    F(sBossGanon2Seed1)                      \
+    F(sBossGanon2Seed2)                      \
+    F(sBossGanon2Seed3)                      \
+    F(D_809105D8)                            \
+    F(D_80910608)                            \
+    F(sBossGanon2Particles)
+SHIP_SAVESTATE_DEFINE(BossGanon2, BOSS_GANON2_SHIP_SAVESTATE_FIELDS)
 
 void BossGanon2_InitRand(s32 seedInit0, s32 seedInit1, s32 seedInit2) {
     sBossGanon2Seed1 = seedInit0;

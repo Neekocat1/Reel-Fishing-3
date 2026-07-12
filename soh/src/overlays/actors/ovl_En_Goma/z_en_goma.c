@@ -5,6 +5,7 @@
 #include "overlays/effects/ovl_Effect_Ss_Hahen/z_eff_ss_hahen.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS                                                                                 \
     (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED | \
@@ -100,8 +101,12 @@ static ColliderCylinderInit D_80A4B7CC = {
     { 15, 30, 10, { 0, 0, 0 } },
 };
 
-u8 sSpawnNum = 0;
+static u8 sSpawnNum = 0;
 static Vec3f sDeadEffectVel = { 0.0f, 0.0f, 0.0f };
+
+#define EN_GOMA_SHIP_SAVESTATE_FIELDS(F) F(sSpawnNum)
+
+SHIP_SAVESTATE_DEFINE(EnGoma, EN_GOMA_SHIP_SAVESTATE_FIELDS)
 
 static InitChainEntry sInitChain[] = {
     ICHAIN_U8(targetMode, 3, ICHAIN_CONTINUE),

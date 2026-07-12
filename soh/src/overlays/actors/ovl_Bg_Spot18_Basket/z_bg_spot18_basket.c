@@ -2,6 +2,7 @@
 #include "objects/object_spot18_obj/object_spot18_obj.h"
 #include "vt.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
 
@@ -85,7 +86,12 @@ void BgSpot18Basket_InitColliderJntSph(Actor* thisx, PlayState* play) {
     this->dyna.actor.colChkInfo.mass = MASS_IMMOVABLE;
 }
 
-s16 D_808B85D0 = 0;
+static s16 D_808B85D0 = 0;
+
+#define BG_SPOT18_BASKET_SHIP_SAVESTATE_FIELDS(F) F(D_808B85D0)
+
+SHIP_SAVESTATE_DEFINE(BgSpot18Basket, BG_SPOT18_BASKET_SHIP_SAVESTATE_FIELDS)
+
 void BgSpot18Basket_SpawnDustClouds(BgSpot18Basket* this, PlayState* play, f32 arg2) {
     Vec3f acceleration;
     Vec3f velocity;

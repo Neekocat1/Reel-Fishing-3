@@ -8,6 +8,7 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 typedef enum {
     /* 0 */ LENS_FLARE_CIRCLE0,
@@ -58,6 +59,9 @@ u8 D_8011FB38 = 0;
 u8 gSkyboxBlendingEnabled = false;
 
 u16 gTimeIncrement = 0;
+
+#define ENVIRONMENT_SHIP_SAVESTATE_FIELDS(F) F(gTimeIncrement)
+SHIP_SAVESTATE_DEFINE(Environment, ENVIRONMENT_SHIP_SAVESTATE_FIELDS)
 
 u16 D_8011FB44 = 0xFFFC;
 

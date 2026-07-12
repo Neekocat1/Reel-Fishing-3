@@ -8,6 +8,7 @@
 #include "objects/object_po_sisters/object_po_sisters.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS 0
 
@@ -82,11 +83,11 @@ static ColliderTrisInit sTrisInit = {
     sTrisElementsInit,
 };
 
-u8 sBgPoEventBlocksAtRest = 0;
+static u8 sBgPoEventBlocksAtRest = 0;
 
 static Vec3f sZeroVec = { 0.0f, 0.0f, 0.0f };
 
-u8 sBgPoEventPuzzleState;
+static u8 sBgPoEventPuzzleState;
 
 void BgPoEvent_InitPaintings(BgPoEvent* this, PlayState* play) {
     static s16 paintingPosX[] = { -1302, -866, 1421, 985 };
@@ -382,7 +383,15 @@ void BgPoEvent_BlockIdle(BgPoEvent* this, PlayState* play) {
     }
 }
 
-f32 sBgPoEventblockPushDist = 0.0f;
+static f32 sBgPoEventblockPushDist = 0.0f;
+
+#define BG_PO_EVENT_SHIP_SAVESTATE_FIELDS(F) \
+    F(sBgPoEventBlocksAtRest)                \
+    F(sBgPoEventPuzzleState)                 \
+    F(sBgPoEventblockPushDist)
+
+SHIP_SAVESTATE_DEFINE(BgPoEvent, BG_PO_EVENT_SHIP_SAVESTATE_FIELDS)
+
 void BgPoEvent_BlockPush(BgPoEvent* this, PlayState* play) {
     f32 displacement;
     s32 blockStop;

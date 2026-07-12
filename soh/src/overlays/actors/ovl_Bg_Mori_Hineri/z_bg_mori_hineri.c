@@ -12,6 +12,7 @@
 #include "objects/object_mori_hineri2/object_mori_hineri2.h"
 #include "objects/object_mori_hineri2a/object_mori_hineri2a.h"
 #include "objects/object_mori_tex/object_mori_tex.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED)
 
@@ -30,7 +31,11 @@ void func_808A3D58(BgMoriHineri* this, PlayState* play);
 
 s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
 
-s16 sBgMoriHineriNextCamIdx = SUBCAM_NONE;
+static s16 sBgMoriHineriNextCamIdx = SUBCAM_NONE;
+
+#define BG_MORI_HINERI_SHIP_SAVESTATE_FIELDS(F) F(sBgMoriHineriNextCamIdx)
+
+SHIP_SAVESTATE_DEFINE(BgMoriHineri, BG_MORI_HINERI_SHIP_SAVESTATE_FIELDS)
 
 const ActorInit Bg_Mori_Hineri_InitVars = {
     ACTOR_BG_MORI_HINERI,
