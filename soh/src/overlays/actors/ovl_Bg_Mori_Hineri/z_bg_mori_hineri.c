@@ -31,9 +31,9 @@ void func_808A3D58(BgMoriHineri* this, PlayState* play);
 
 s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
 
-static s16 sBgMoriHineriNextCamIdx = SUBCAM_NONE;
+static s16 sSubCamId = SUBCAM_NONE;
 
-#define BG_MORI_HINERI_SHIP_SAVESTATE_FIELDS(F) F(sBgMoriHineriNextCamIdx)
+#define BG_MORI_HINERI_SHIP_SAVESTATE_FIELDS(F) F(sSubCamId)
 
 SHIP_SAVESTATE_DEFINE(BgMoriHineri, BG_MORI_HINERI_SHIP_SAVESTATE_FIELDS)
 
@@ -208,29 +208,28 @@ void func_808A3D58(BgMoriHineri* this, PlayState* play) {
             OnePointCutscene_EndCutscene(play, mainCamChildIdx);
         }
         OnePointCutscene_Init(play, 3260, 40, &this->dyna.actor, CAM_ID_MAIN);
-        sBgMoriHineriNextCamIdx = OnePointCutscene_Init(play, 3261, 40, &this->dyna.actor, CAM_ID_MAIN);
+        sSubCamId = OnePointCutscene_Init(play, 3261, 40, &this->dyna.actor, CAM_ID_MAIN);
     }
 }
 
 void func_808A3E54(BgMoriHineri* this, PlayState* play) {
     s8 objBankIndex;
 
-    if (play->activeCamera == sBgMoriHineriNextCamIdx) {
-        if (sBgMoriHineriNextCamIdx != CAM_ID_MAIN) {
+    if (play->activeCamera == sSubCamId) {
+        if (sSubCamId != CAM_ID_MAIN) {
             objBankIndex = this->dyna.actor.objBankIndex;
             this->dyna.actor.objBankIndex = this->moriHineriObjIdx;
             this->moriHineriObjIdx = objBankIndex;
             this->dyna.actor.params ^= 1;
-            sBgMoriHineriNextCamIdx = CAM_ID_MAIN;
+            sSubCamId = CAM_ID_MAIN;
             Sfx_PlaySfxCentered(NA_SE_SY_TRE_BOX_APPEAR);
         } else {
             this->dyna.actor.draw = NULL;
             this->actionFunc = func_808A3D58;
-            sBgMoriHineriNextCamIdx = SUBCAM_NONE;
+            sSubCamId = SUBCAM_NONE;
         }
     }
-    if ((sBgMoriHineriNextCamIdx >= CAM_ID_SUB_FIRST) &&
-        ((GET_ACTIVE_CAM(play)->eye.z - this->dyna.actor.world.pos.z) < 1100.0f)) {
+    if ((sSubCamId >= CAM_ID_SUB_FIRST) && ((GET_ACTIVE_CAM(play)->eye.z - this->dyna.actor.world.pos.z) < 1100.0f)) {
         Actor_PlaySfx_FlaggedCentered2(&this->dyna.actor, NA_SE_EV_FLOOR_ROLLING - SFX_FLAG);
     }
 }
@@ -272,5 +271,5 @@ void BgMoriHineri_DrawHallAndRoom(Actor* thisx, PlayState* play) {
 }
 
 void BgMoriHineri_Reset() {
-    sBgMoriHineriNextCamIdx = SUBCAM_NONE;
+    sSubCamId = SUBCAM_NONE;
 }

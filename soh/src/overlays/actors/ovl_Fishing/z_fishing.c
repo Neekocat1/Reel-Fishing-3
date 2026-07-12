@@ -897,7 +897,7 @@ void Fishing_Init(Actor* thisx, PlayState* play2) {
 
         sOwnerTheftTimer = 20;
         play->specialEffects = sFishingEffects;
-        gTimeIncrement = 1;
+        gTimeSpeed = 1;
         sFishingPlayingState = 0;
         sFishingMusicDelay = 10;
 

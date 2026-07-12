@@ -61,11 +61,11 @@ const ActorInit Object_Kankyo_InitVars = {
     (ActorResetFunc)ObjectKankyo_Reset,
 };
 
-static u8 sKankyoIsSpawned = false;
+static u8 sIsSpawned = false;
 static s16 sTrailingFairies = 0;
 
 #define OBJECT_KANKYO_SHIP_SAVESTATE_FIELDS(F) \
-    F(sKankyoIsSpawned)                        \
+    F(sIsSpawned)                              \
     F(sTrailingFairies)
 
 SHIP_SAVESTATE_DEFINE(ObjectKankyo, OBJECT_KANKYO_SHIP_SAVESTATE_FIELDS)
@@ -86,18 +86,18 @@ void ObjectKankyo_Init(Actor* thisx, PlayState* play) {
     this->actor.room = -1;
     switch (this->actor.params) {
         case 0:
-            if (!sKankyoIsSpawned) {
+            if (!sIsSpawned) {
                 ObjectKankyo_SetupAction(this, ObjectKankyo_Fairies);
-                sKankyoIsSpawned = true;
+                sIsSpawned = true;
             } else {
                 Actor_Kill(&this->actor);
             }
             break;
 
         case 3:
-            if (!sKankyoIsSpawned) {
+            if (!sIsSpawned) {
                 ObjectKankyo_SetupAction(this, ObjectKankyo_Snow);
-                sKankyoIsSpawned = true;
+                sIsSpawned = true;
             } else {
                 Actor_Kill(&this->actor);
             }
@@ -954,6 +954,6 @@ void ObjectKankyo_DrawBeams(ObjectKankyo* this2, PlayState* play2) {
 }
 
 void ObjectKankyo_Reset(void) {
-    sKankyoIsSpawned = false;
+    sIsSpawned = false;
     sTrailingFairies = 0;
 }

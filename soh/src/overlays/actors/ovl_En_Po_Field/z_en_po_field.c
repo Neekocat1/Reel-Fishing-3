@@ -131,7 +131,7 @@ static DamageTable sDamageTable = {
     /* Unknown 2     */ DMG_ENTRY(0, 0x0),
 };
 
-static s32 sEnPoFieldNumSpawned = 0;
+static s32 sNumSpawned = 0;
 
 static Vec3f sFieldMiddle = { -1000.0f, 0.0f, 6500.0f };
 
@@ -150,14 +150,14 @@ static EnPoFieldInfo sPoFieldInfo[2] = {
 
 static Vec3f D_80AD714C = { 0.0f, 1400.0f, 0.0f };
 
-static Vec3s sEnPoFieldSpawnPositions[10];
-static u8 sEnPoFieldSpawnSwitchFlags[10];
+static Vec3s sSpawnPositions[10];
+static u8 sSpawnSwitchFlags[10];
 static MtxF sLimb7Mtx;
 
 #define EN_PO_FIELD_SHIP_SAVESTATE_FIELDS(F) \
-    F(sEnPoFieldNumSpawned)                  \
-    F(sEnPoFieldSpawnPositions)              \
-    F(sEnPoFieldSpawnSwitchFlags)
+    F(sNumSpawned)                           \
+    F(sSpawnPositions)                       \
+    F(sSpawnSwitchFlags)
 
 SHIP_SAVESTATE_DEFINE(EnPoField, EN_PO_FIELD_SHIP_SAVESTATE_FIELDS)
 
@@ -165,14 +165,14 @@ void EnPoField_Init(Actor* thisx, PlayState* play) {
     EnPoField* this = (EnPoField*)thisx;
     s32 pad;
 
-    if (sEnPoFieldNumSpawned != 10) {
-        sEnPoFieldSpawnPositions[sEnPoFieldNumSpawned].x = this->actor.world.pos.x;
-        sEnPoFieldSpawnPositions[sEnPoFieldNumSpawned].y = this->actor.world.pos.y;
-        sEnPoFieldSpawnPositions[sEnPoFieldNumSpawned].z = this->actor.world.pos.z;
-        sEnPoFieldSpawnSwitchFlags[sEnPoFieldNumSpawned] = this->actor.params & 0xFF;
-        sEnPoFieldNumSpawned++;
+    if (sNumSpawned != 10) {
+        sSpawnPositions[sNumSpawned].x = this->actor.world.pos.x;
+        sSpawnPositions[sNumSpawned].y = this->actor.world.pos.y;
+        sSpawnPositions[sNumSpawned].z = this->actor.world.pos.z;
+        sSpawnSwitchFlags[sNumSpawned] = this->actor.params & 0xFF;
+        sNumSpawned++;
     }
-    if (sEnPoFieldNumSpawned >= 2) {
+    if (sNumSpawned >= 2) {
         this->actor.params = 0xFF;
         Actor_Kill(&this->actor);
         return;
@@ -422,10 +422,10 @@ void EnPoField_WaitForSpawn(EnPoField* this, PlayState* play) {
         this->actionTimer--;
     }
     if (this->actionTimer == 0) {
-        for (i = 0; i < sEnPoFieldNumSpawned; i++) {
-            if (fabsf(sEnPoFieldSpawnPositions[i].x - player->actor.world.pos.x) < 150.0f &&
-                fabsf(sEnPoFieldSpawnPositions[i].z - player->actor.world.pos.z) < 150.0f) {
-                if (Flags_GetSwitch(play, sEnPoFieldSpawnSwitchFlags[i])) {
+        for (i = 0; i < sNumSpawned; i++) {
+            if (fabsf(sSpawnPositions[i].x - player->actor.world.pos.x) < 150.0f &&
+                fabsf(sSpawnPositions[i].z - player->actor.world.pos.z) < 150.0f) {
+                if (Flags_GetSwitch(play, sSpawnSwitchFlags[i])) {
                     if (player->stateFlags1 & PLAYER_STATE1_ON_HORSE) { // Player riding Epona
                         return;
                     } else {
@@ -723,7 +723,7 @@ void EnPoField_SoulInteract(EnPoField* this, PlayState* play) {
                     } else if (GameInteractor_Should(VB_BOTTLE_BIG_POE, true, this)) {
                         this->actor.textId = 0x508F;
                         Item_Give(play, ITEM_BIG_POE);
-                        Flags_SetSwitch(play, sEnPoFieldSpawnSwitchFlags[this->spawnFlagIndex]);
+                        Flags_SetSwitch(play, sSpawnSwitchFlags[this->spawnFlagIndex]);
                     }
                 } else {
                     Audio_PlayActorSound2(&this->actor, NA_SE_EN_PO_LAUGH);
@@ -1014,8 +1014,8 @@ void EnPoField_DrawSoul(Actor* thisx, PlayState* play) {
 }
 
 void EnPoField_Reset(void) {
-    sEnPoFieldNumSpawned = 0;
+    sNumSpawned = 0;
 
-    memset(sEnPoFieldSpawnPositions, 0, sizeof(sEnPoFieldSpawnPositions));
-    memset(sEnPoFieldSpawnSwitchFlags, 0, sizeof(sEnPoFieldSpawnSwitchFlags));
+    memset(sSpawnPositions, 0, sizeof(sSpawnPositions));
+    memset(sSpawnSwitchFlags, 0, sizeof(sSpawnSwitchFlags));
 }

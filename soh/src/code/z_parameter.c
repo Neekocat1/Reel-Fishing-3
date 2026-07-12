@@ -6476,7 +6476,7 @@ void Interface_DrawTotalGameplayTimer(PlayState* play) {
 
 void Interface_Update(PlayState* play) {
     static u8 D_80125B60 = 0;
-    static s16 sPrevTimeIncrement = 0;
+    static s16 sPrevTimeSpeed = 0;
     MessageContext* msgCtx = &play->msgCtx;
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
     Player* player = GET_PLAYER(play);
@@ -6848,17 +6848,17 @@ void Interface_Update(PlayState* play) {
                 }
 
                 gSaveContext.sunsSongState = SUNSSONG_SPEED_TIME;
-                sPrevTimeIncrement = gTimeIncrement;
-                gTimeIncrement = 400;
+                sPrevTimeSpeed = gTimeSpeed;
+                gTimeSpeed = 400;
             } else if (D_80125B60 == 0) {
                 if ((gSaveContext.dayTime >= 0x4555) && (gSaveContext.dayTime <= 0xC001)) {
                     gSaveContext.sunsSongState = SUNSSONG_INACTIVE;
-                    gTimeIncrement = sPrevTimeIncrement;
+                    gTimeSpeed = sPrevTimeSpeed;
                     play->msgCtx.ocarinaMode = OCARINA_MODE_04;
                 }
             } else if (gSaveContext.dayTime > 0xC001) {
                 gSaveContext.sunsSongState = SUNSSONG_INACTIVE;
-                gTimeIncrement = sPrevTimeIncrement;
+                gTimeSpeed = sPrevTimeSpeed;
                 play->msgCtx.ocarinaMode = OCARINA_MODE_04;
             }
         } else if ((play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_1) &&

@@ -29,7 +29,7 @@ void BgHakaTrap_FireBarrier_Idle(BgHakaTrap* this, PlayState* play);
 void BgHakaTrap_FireBarrier_UpdateLayout(BgHakaTrap* this, PlayState* play);
 void BgHakaTrap_GetSwitchFlag(BgHakaTrap* this);
 
-static UNK_TYPE D_80880F30 = 0;
+static UNK_TYPE sIsSpikeWallBurning = 0;
 
 const ActorInit Bg_Haka_Trap_InitVars = {
     ACTOR_BG_HAKA_TRAP,
@@ -108,11 +108,11 @@ static InitChainEntry sInitChain[] = {
     ICHAIN_VEC3F_DIV1000(scale, 100, ICHAIN_STOP),
 };
 
-static UNK_TYPE D_80881014 = 0;
+static UNK_TYPE sSpikedCrusherFlip = 0;
 
 #define BG_HAKA_TRAP_SHIP_SAVESTATE_FIELDS(F) \
-    F(D_80880F30)                             \
-    F(D_80881014)
+    F(sIsSpikeWallBurning)                    \
+    F(sSpikedCrusherFlip)
 
 SHIP_SAVESTATE_DEFINE(BgHakaTrap, BG_HAKA_TRAP_SHIP_SAVESTATE_FIELDS)
 
@@ -147,11 +147,11 @@ void BgHakaTrap_Init(Actor* thisx, PlayState* play) {
                 CollisionHeader_GetVirtual(&object_haka_objects_Col_009CD0, &colHeader);
                 this->timer = 30;
 
-                if (D_80881014 != 0) {
+                if (sSpikedCrusherFlip != 0) {
                     this->actionFunc = BgHakaTrap_SpikedCrusher_Lift;
-                    D_80881014 = 0;
+                    sSpikedCrusherFlip = 0;
                 } else {
-                    D_80881014 = 1;
+                    sSpikedCrusherFlip = 1;
                     this->actionFunc = BgHakaTrap_SpikedCrusher_Fall;
                     thisx->velocity.y = 0.5f;
                 }
@@ -236,17 +236,17 @@ void BgHakaTrap_UpdateBodyColliderPos(BgHakaTrap* this, PlayState* play) {
     this->colliderCylinder.dim.pos.z = this->dyna.actor.world.pos.z + sp28.x * sine + sp28.z * cosine;
 }
 
-static UNK_TYPE D_80881018 = 0;
+static UNK_TYPE sSpikedWallFlags = 0;
 void BgHakaTrap_SpikedWall_CloseIn(BgHakaTrap* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
-    if ((D_80880F30 == 0) && (!Player_InCsMode(play))) {
+    if ((sIsSpikeWallBurning == 0) && (!Player_InCsMode(play))) {
         if (!Math_StepToF(&this->dyna.actor.world.pos.x, this->dyna.actor.home.pos.x, 0.5f)) {
             Actor_PlaySfx_Flagged(&this->dyna.actor, NA_SE_EV_TRAP_OBJ_SLIDE - SFX_FLAG);
         } else if (this->dyna.actor.params == HAKA_TRAP_SPIKED_WALL) {
-            D_80881018 |= 1;
+            sSpikedWallFlags |= 1;
         } else if (this->dyna.actor.params == HAKA_TRAP_SPIKED_WALL_2) {
-            D_80881018 |= 2;
+            sSpikedWallFlags |= 2;
         }
     }
 
@@ -254,10 +254,10 @@ void BgHakaTrap_SpikedWall_CloseIn(BgHakaTrap* this, PlayState* play) {
 
     if (this->colliderSpikes.base.acFlags & AC_HIT) {
         this->timer = 20;
-        D_80880F30 = 1;
+        sIsSpikeWallBurning = 1;
         this->actionFunc = BgHakaTrap_SpikedWall_Burn;
-    } else if (D_80881018 == 3) {
-        D_80881018 = 4;
+    } else if (sSpikedWallFlags == 3) {
+        sSpikedWallFlags = 4;
         player->actor.bgCheckFlags |= 0x100;
     }
 }
@@ -287,7 +287,7 @@ void BgHakaTrap_SpikedWall_Burn(BgHakaTrap* this, PlayState* play) {
     }
 
     if (this->timer == 0) {
-        D_80880F30 = 0;
+        sIsSpikeWallBurning = 0;
         Actor_Kill(&this->dyna.actor);
     }
 }
@@ -559,7 +559,7 @@ void BgHakaTrap_Draw(Actor* thisx, PlayState* play) {
 }
 
 void BgHakaTrap_Reset(void) {
-    D_80880F30 = 0;
-    D_80881014 = 0;
-    D_80881018 = 0;
+    sIsSpikeWallBurning = 0;
+    sSpikedCrusherFlip = 0;
+    sSpikedWallFlags = 0;
 }

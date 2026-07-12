@@ -35,13 +35,13 @@ void EnInsect_SetupDropped(EnInsect* this);
 void EnInsect_Dropped(EnInsect* this, PlayState* play);
 
 static f32 D_80A7DEB0 = 0.0f;
-static s16 D_80A7DEB4 = 0;
-s16 D_80A7DEB8 = 0; // not static: read by NoBugsDespawn.cpp
+static s16 sCaughtCount = 0;
+s16 sDroppedCount = 0; // not static: read by NoBugsDespawn.cpp
 
 #define EN_INSECT_SHIP_SAVESTATE_FIELDS(F) \
     F(D_80A7DEB0)                          \
-    F(D_80A7DEB4)                          \
-    F(D_80A7DEB8)
+    F(sCaughtCount)                        \
+    F(sDroppedCount)
 
 SHIP_SAVESTATE_DEFINE(EnInsect, EN_INSECT_SHIP_SAVESTATE_FIELDS)
 
@@ -220,7 +220,7 @@ void EnInsect_Init(Actor* thisx, PlayState* play2) {
 
         EnInsect_SetupDropped(this);
 
-        D_80A7DEB8++;
+        sDroppedCount++;
     } else {
         rand = Rand_ZeroOne();
 
@@ -240,8 +240,8 @@ void EnInsect_Destroy(Actor* thisx, PlayState* play) {
 
     temp_v0 = this->actor.params & 3;
     Collider_DestroyJntSph(play, &this->collider);
-    if ((temp_v0 == 2 || temp_v0 == 3) && D_80A7DEB8 > 0) {
-        D_80A7DEB8--;
+    if ((temp_v0 == 2 || temp_v0 == 3) && sDroppedCount > 0) {
+        sDroppedCount--;
     }
 
     ResourceMgr_UnregisterSkeleton(&this->skelAnime);
@@ -274,7 +274,7 @@ void EnInsect_SlowDown(EnInsect* this, PlayState* play) {
 
     if (((this->insectFlags & 4) && this->lifeTimer <= 0) ||
         ((sp2E == 2 || sp2E == 3) && (this->insectFlags & 1) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
-         D_80A7DEB8 >= 4)) {
+         sDroppedCount >= 4)) {
         EnInsect_SetupDig(this);
     } else if ((this->insectFlags & 1) && (this->actor.bgCheckFlags & 0x40)) {
         EnInsect_SetupWalkOnWater(this);
@@ -318,7 +318,7 @@ void EnInsect_Crawl(EnInsect* this, PlayState* play) {
 
     if (((this->insectFlags & 4) && this->lifeTimer <= 0) ||
         ((sp34 == 2 || sp34 == 3) && (this->insectFlags & 1) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
-         D_80A7DEB8 >= 4)) {
+         sDroppedCount >= 4)) {
         EnInsect_SetupDig(this);
     } else if ((this->insectFlags & 1) && (this->actor.bgCheckFlags & 0x40)) {
         EnInsect_SetupWalkOnWater(this);
@@ -524,7 +524,7 @@ void EnInsect_WalkOnWater(EnInsect* this, PlayState* play) {
     }
 
     if (this->actionTimer <= 0 || ((this->insectFlags & 4) && this->lifeTimer <= 0) ||
-        ((sp4E == 2 || sp4E == 3) && (this->insectFlags & 1) && D_80A7DEB8 >= 4)) {
+        ((sp4E == 2 || sp4E == 3) && (this->insectFlags & 1) && sDroppedCount >= 4)) {
         EnInsect_SetupDrown(this);
     } else if (!(this->actor.bgCheckFlags & 0x40)) {
         if (this->insectFlags & 0x10) {
@@ -703,7 +703,7 @@ void EnInsect_Dropped(EnInsect* this, PlayState* play) {
         if (sp40 < 9.0f) {
             EnInsect_SetupDig(this);
         } else if (this->actionTimer <= 0 || this->lifeTimer <= 0 ||
-                   ((this->insectFlags & 1) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && D_80A7DEB8 >= 4 &&
+                   ((this->insectFlags & 1) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && sDroppedCount >= 4 &&
                     (sp3A == 2 || sp3A == 3))) {
             EnInsect_SetupDig(this);
         } else {
@@ -789,10 +789,10 @@ void EnInsect_Update(Actor* thisx, PlayState* play) {
                 CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
             }
 
-            if (!(this->insectFlags & 8) && D_80A7DEB4 < 4 && EnInsect_InBottleRange(this, play) &&
+            if (!(this->insectFlags & 8) && sCaughtCount < 4 && EnInsect_InBottleRange(this, play) &&
                 // GI_MAX in this case allows the player to catch the actor in a bottle
                 Actor_OfferGetItem(&this->actor, play, GI_MAX, 60.0f, 30.0f)) {
-                D_80A7DEB4++;
+                sCaughtCount++;
             }
         }
 
@@ -806,11 +806,11 @@ void EnInsect_Draw(Actor* thisx, PlayState* play) {
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     SkelAnime_DrawSkeletonOpa(play, &this->skelAnime, NULL, NULL, NULL);
     Collider_UpdateSpheres(0, &this->collider);
-    D_80A7DEB4 = 0;
+    sCaughtCount = 0;
 }
 
 void EnInsect_Reset(void) {
     D_80A7DEB0 = 0.0f;
-    D_80A7DEB4 = 0;
-    D_80A7DEB8 = 0;
+    sCaughtCount = 0;
+    sDroppedCount = 0;
 }

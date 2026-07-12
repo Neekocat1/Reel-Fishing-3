@@ -364,7 +364,7 @@ void Scene_CommandTimeSettings(PlayState* play, SceneCmd* cmd) {
     }
 
     if (gSaveContext.sunsSongState == SUNSSONG_INACTIVE) {
-        gTimeIncrement = play->envCtx.timeIncrement;
+        gTimeSpeed = play->envCtx.timeIncrement;
     }
 
     play->envCtx.sunPos.x = -(Math_SinS(((void)0, gSaveContext.dayTime) - 0x8000) * 120.0f) * 25.0f;

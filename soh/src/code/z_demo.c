@@ -421,9 +421,9 @@ void func_80064824(PlayState* play, CutsceneContext* csCtx, CsCmdBase* cmd) {
             break;
         case 34:
             if (IS_DAY) {
-                gSaveContext.dayTime -= gTimeIncrement;
+                gSaveContext.dayTime -= gTimeSpeed;
             } else {
-                gSaveContext.dayTime -= gTimeIncrement * 2;
+                gSaveContext.dayTime -= gTimeSpeed * 2;
             }
             break;
         case 35:

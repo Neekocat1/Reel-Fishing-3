@@ -239,20 +239,20 @@ void BgSpot00Hanebasi_Update(Actor* thisx, PlayState* play) {
             u16 dayTime;
             s32 tmp;
 
-            if (gTimeIncrement == 50) {
+            if (gTimeSpeed == 50) {
                 tmp = 0xD556;
 
                 if (gSaveContext.dayTime >= 0xD557) {
                     tmp = 0x1D556;
                 }
 
-                gTimeIncrement = (tmp - gSaveContext.dayTime) * (1.0f / 350.0f);
+                gTimeSpeed = (tmp - gSaveContext.dayTime) * (1.0f / 350.0f);
             }
 
             dayTime = gSaveContext.dayTime;
 
             if ((dayTime >= 0x2AAC) && (dayTime < 0x3000) && (gSaveContext.sceneLayer == 5)) {
-                gTimeIncrement = 0;
+                gTimeSpeed = 0;
             }
         }
     }

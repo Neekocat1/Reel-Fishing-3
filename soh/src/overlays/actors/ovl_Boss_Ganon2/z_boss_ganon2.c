@@ -59,15 +59,15 @@ const ActorInit Boss_Ganon2_InitVars = {
 
 static Vec3f D_8090EB20;
 
-static EnZl3* sBossGanon2Zelda;
+static EnZl3* sZelda;
 
 static Actor* D_8090EB30;
 
-static BossGanon2Effect sBossGanon2Particles[100];
+static BossGanon2Effect sEffects[100];
 
-static s32 sBossGanon2Seed1;
-static s32 sBossGanon2Seed2;
-static s32 sBossGanon2Seed3;
+static s32 sSeed1;
+static s32 sSeed2;
+static s32 sSeed3;
 
 static Vec3f D_809105D8[4];
 
@@ -78,31 +78,31 @@ static s8 D_80910638;
 #define BOSS_GANON2_SHIP_SAVESTATE_FIELDS(F) \
     F(D_8090EB20)                            \
     F(D_80910638)                            \
-    F(sBossGanon2Zelda)                      \
+    F(sZelda)                                \
     F(D_8090EB30)                            \
-    F(sBossGanon2Seed1)                      \
-    F(sBossGanon2Seed2)                      \
-    F(sBossGanon2Seed3)                      \
+    F(sSeed1)                                \
+    F(sSeed2)                                \
+    F(sSeed3)                                \
     F(D_809105D8)                            \
     F(D_80910608)                            \
-    F(sBossGanon2Particles)
+    F(sEffects)
 SHIP_SAVESTATE_DEFINE(BossGanon2, BOSS_GANON2_SHIP_SAVESTATE_FIELDS)
 
 void BossGanon2_InitRand(s32 seedInit0, s32 seedInit1, s32 seedInit2) {
-    sBossGanon2Seed1 = seedInit0;
-    sBossGanon2Seed2 = seedInit1;
-    sBossGanon2Seed3 = seedInit2;
+    sSeed1 = seedInit0;
+    sSeed2 = seedInit1;
+    sSeed3 = seedInit2;
 }
 
 f32 BossGanon2_RandZeroOne(void) {
     // Wichmann-Hill algorithm
     f32 randFloat;
 
-    sBossGanon2Seed1 = (sBossGanon2Seed1 * 171) % 30269;
-    sBossGanon2Seed2 = (sBossGanon2Seed2 * 172) % 30307;
-    sBossGanon2Seed3 = (sBossGanon2Seed3 * 170) % 30323;
+    sSeed1 = (sSeed1 * 171) % 30269;
+    sSeed2 = (sSeed2 * 172) % 30307;
+    sSeed3 = (sSeed3 * 170) % 30323;
 
-    randFloat = (sBossGanon2Seed1 / 30269.0f) + (sBossGanon2Seed2 / 30307.0f) + (sBossGanon2Seed3 / 30323.0f);
+    randFloat = (sSeed1 / 30269.0f) + (sSeed2 / 30307.0f) + (sSeed3 / 30323.0f);
     while (randFloat >= 1.0f) {
         randFloat -= 1.0f;
     }
@@ -153,7 +153,7 @@ void func_808FD27C(PlayState* play, Vec3f* position, Vec3f* velocity, f32 scale)
     BossGanon2Effect* effect = play->specialEffects;
     s16 i;
 
-    for (i = 0; i < ARRAY_COUNT(sBossGanon2Particles); i++, effect++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++, effect++) {
         if (effect->type == 0) {
             effect->type = 2;
             effect->position = *position;
@@ -177,10 +177,10 @@ void BossGanon2_Init(Actor* thisx, PlayState* play) {
     s32 pad;
     s16 i;
 
-    play->specialEffects = sBossGanon2Particles;
+    play->specialEffects = sEffects;
 
-    for (i = 0; i < ARRAY_COUNT(sBossGanon2Particles); i++) {
-        sBossGanon2Particles[i].type = 0;
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
+        sEffects[i].type = 0;
     }
 
     this->actor.colChkInfo.mass = MASS_IMMOVABLE;
@@ -250,13 +250,13 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
                 this->subCamId = Play_CreateSubCamera(play);
                 Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_WAIT);
                 Play_ChangeCameraStatus(play, this->subCamId, CAM_STAT_ACTIVE);
-                sBossGanon2Zelda = (EnZl3*)Actor_SpawnAsChild(&play->actorCtx, &this->actor, play, ACTOR_EN_ZL3, 970.0f,
-                                                              1086.0f, -200.0f, 0, 0, 0, 1);
-                sBossGanon2Zelda->unk_3C8 = 0;
-                sBossGanon2Zelda->actor.world.pos.x = 970.0f;
-                sBossGanon2Zelda->actor.world.pos.y = 1086.0f;
-                sBossGanon2Zelda->actor.world.pos.z = -214.0f;
-                sBossGanon2Zelda->actor.shape.rot.y = -0x7000;
+                sZelda = (EnZl3*)Actor_SpawnAsChild(&play->actorCtx, &this->actor, play, ACTOR_EN_ZL3, 970.0f, 1086.0f,
+                                                    -200.0f, 0, 0, 0, 1);
+                sZelda->unk_3C8 = 0;
+                sZelda->actor.world.pos.x = 970.0f;
+                sZelda->actor.world.pos.y = 1086.0f;
+                sZelda->actor.world.pos.z = -214.0f;
+                sZelda->actor.shape.rot.y = -0x7000;
 
                 // In rando, skip past the cutscene to the part where the player takes control again.
                 if (!IS_RANDO && !IS_BOSS_RUSH) {
@@ -265,7 +265,7 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
                 } else {
                     this->csState = 4;
                     this->csTimer = 99;
-                    sBossGanon2Zelda->unk_3C8 = 4;
+                    sZelda->unk_3C8 = 4;
                 }
 
                 this->subCamUp.x = 0.0f;
@@ -314,20 +314,20 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
             player->actor.world.pos.x = 970.0f;
             player->actor.world.pos.y = 1086.0f;
             player->actor.world.pos.z = -166.0f;
-            sBossGanon2Zelda->actor.world.pos.x = 974.0f;
-            sBossGanon2Zelda->actor.world.pos.y = 1086.0f;
-            sBossGanon2Zelda->actor.world.pos.z = -186.0f;
+            sZelda->actor.world.pos.x = 974.0f;
+            sZelda->actor.world.pos.y = 1086.0f;
+            sZelda->actor.world.pos.z = -186.0f;
             player->actor.shape.rot.y = -0x5000;
-            sBossGanon2Zelda->actor.shape.rot.y = -0x5000;
+            sZelda->actor.shape.rot.y = -0x5000;
             if (this->csTimer == 60) {
                 Message_StartTextbox(play, 0x70D4, NULL);
             }
             if (this->csTimer == 40) {
-                sBossGanon2Zelda->unk_3C8 = 1;
+                sZelda->unk_3C8 = 1;
                 Player_SetCsActionWithHaltedActors(play, &this->actor, 0x4E);
             }
             if (this->csTimer == 85) {
-                sBossGanon2Zelda->unk_3C8 = 2;
+                sZelda->unk_3C8 = 2;
                 Player_SetCsActionWithHaltedActors(play, &this->actor, 0x4F);
             }
             this->subCamEye.x = 930.0f;
@@ -356,14 +356,14 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
                 Audio_QueueSeqCmd(SEQ_PLAYER_BGM_MAIN << 24 | NA_BGM_STOP);
             }
             if (this->csTimer == 20) {
-                sBossGanon2Zelda->unk_3C8 = 3;
+                sZelda->unk_3C8 = 3;
                 Player_SetCsActionWithHaltedActors(play, &this->actor, 0x50);
             }
             if (this->csTimer == 55) {
                 this->csState = 4;
                 this->csTimer = 0;
                 this->unk_410.x = 0.0f;
-                sBossGanon2Zelda->unk_3C8 = 4;
+                sZelda->unk_3C8 = 4;
                 Player_SetCsActionWithHaltedActors(play, &this->actor, 0x50);
             }
             break;
@@ -403,11 +403,11 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
             player->actor.world.pos.x = 490.0f;
             player->actor.world.pos.y = 1086.0f;
             player->actor.world.pos.z = -166.0f;
-            sBossGanon2Zelda->actor.world.pos.x = 724.0f;
-            sBossGanon2Zelda->actor.world.pos.y = 1086.0f;
-            sBossGanon2Zelda->actor.world.pos.z = -186.0f;
+            sZelda->actor.world.pos.x = 724.0f;
+            sZelda->actor.world.pos.y = 1086.0f;
+            sZelda->actor.world.pos.z = -186.0f;
             player->actor.shape.rot.y = -0x4000;
-            sBossGanon2Zelda->actor.shape.rot.y = -0x5000;
+            sZelda->actor.shape.rot.y = -0x5000;
             this->subCamEye.x = 410.0f;
             this->subCamEye.y = 1096.0f;
             this->subCamEye.z = -110.0f;
@@ -426,7 +426,7 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
                 this->unk_339 = 4;
             }
             if (this->csTimer == 30) {
-                sBossGanon2Zelda->unk_3C8 = 5;
+                sZelda->unk_3C8 = 5;
                 Player_SetCsActionWithHaltedActors(play, &this->actor, 0x51);
             }
             if (this->csTimer == 50) {
@@ -440,11 +440,11 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
             player->actor.world.pos.x = 490.0f;
             player->actor.world.pos.y = 1086.0f;
             player->actor.world.pos.z = -166.0f;
-            sBossGanon2Zelda->actor.world.pos.x = 724.0f;
-            sBossGanon2Zelda->actor.world.pos.y = 1086.0f;
-            sBossGanon2Zelda->actor.world.pos.z = -186.0f;
+            sZelda->actor.world.pos.x = 724.0f;
+            sZelda->actor.world.pos.y = 1086.0f;
+            sZelda->actor.world.pos.z = -186.0f;
             player->actor.shape.rot.y = -0x4000;
-            sBossGanon2Zelda->actor.shape.rot.y = -0x5000;
+            sZelda->actor.shape.rot.y = -0x5000;
             this->subCamEye.x = 450.0f;
             this->subCamEye.y = 1121.0f;
             this->subCamEye.z = -158.0f;
@@ -513,9 +513,9 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
             player->actor.world.pos.y = 1086.0f;
             player->actor.world.pos.z = -266.0f;
             player->actor.shape.rot.y = -0x4000;
-            sBossGanon2Zelda->actor.world.pos.x = 724.0f;
-            sBossGanon2Zelda->actor.world.pos.y = 1086.0f;
-            sBossGanon2Zelda->actor.world.pos.z = -186.0f;
+            sZelda->actor.world.pos.x = 724.0f;
+            sZelda->actor.world.pos.y = 1086.0f;
+            sZelda->actor.world.pos.z = -186.0f;
             this->subCamEye.x = this->actor.world.pos.x + -10.0f;
             this->subCamEye.y = this->actor.world.pos.y + 80.0f;
             this->subCamEye.z = this->actor.world.pos.z + 50.0f;
@@ -834,9 +834,9 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
                 BossGanon2Effect* effect = play->specialEffects;
 
                 effect->unk_2E = 1;
-                effect->position.x = sBossGanon2Zelda->actor.world.pos.x + 50.0f + 10.0f;
-                effect->position.y = sBossGanon2Zelda->actor.world.pos.y + 350.0f;
-                effect->position.z = sBossGanon2Zelda->actor.world.pos.z - 25.0f;
+                effect->position.x = sZelda->actor.world.pos.x + 50.0f + 10.0f;
+                effect->position.y = sZelda->actor.world.pos.y + 350.0f;
+                effect->position.z = sZelda->actor.world.pos.z - 25.0f;
                 effect->velocity.x = 0.0f;
                 effect->velocity.z = 0.0f;
                 effect->velocity.y = -30.0f;
@@ -846,15 +846,15 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
                 break;
             }
         case 26:
-            this->subCamEye.x = sBossGanon2Zelda->actor.world.pos.x + 100.0f + 30.0f;
-            this->subCamEye.y = sBossGanon2Zelda->actor.world.pos.y + 10.0f;
-            this->subCamEye.z = sBossGanon2Zelda->actor.world.pos.z + 5.0f;
-            this->subCamAt.x = sBossGanon2Zelda->actor.world.pos.x;
-            this->subCamAt.y = sBossGanon2Zelda->actor.world.pos.y + 30.0f;
-            this->subCamAt.z = sBossGanon2Zelda->actor.world.pos.z - 20.0f;
+            this->subCamEye.x = sZelda->actor.world.pos.x + 100.0f + 30.0f;
+            this->subCamEye.y = sZelda->actor.world.pos.y + 10.0f;
+            this->subCamEye.z = sZelda->actor.world.pos.z + 5.0f;
+            this->subCamAt.x = sZelda->actor.world.pos.x;
+            this->subCamAt.y = sZelda->actor.world.pos.y + 30.0f;
+            this->subCamAt.z = sZelda->actor.world.pos.z - 20.0f;
             this->subCamUp.z = -0.5f;
             if (this->csTimer == 13) {
-                sBossGanon2Zelda->unk_3C8 = 6;
+                sZelda->unk_3C8 = 6;
             }
             if (this->csTimer == 50) {
                 this->csState = 27;
@@ -943,7 +943,7 @@ void func_808FD5F4(BossGanon2* this, PlayState* play) {
                 func_808FFDB0(this, play);
                 this->unk_1A2[1] = 50;
                 this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED;
-                sBossGanon2Zelda->unk_3C8 = 7;
+                sZelda->unk_3C8 = 7;
             }
             break;
     }
@@ -1387,12 +1387,12 @@ void func_80900890(BossGanon2* this, PlayState* play) {
             break;
         case 2:
             this->unk_1A2[0] = 300;
-            this->subCamEye.x = sBossGanon2Zelda->actor.world.pos.x - 100.0f;
-            this->subCamEye.y = sBossGanon2Zelda->actor.world.pos.y + 30.0f;
-            this->subCamEye.z = (sBossGanon2Zelda->actor.world.pos.z + 30.0f) - 60.0f;
-            this->subCamAt.x = sBossGanon2Zelda->actor.world.pos.x;
-            this->subCamAt.y = sBossGanon2Zelda->actor.world.pos.y + 30.0f;
-            this->subCamAt.z = sBossGanon2Zelda->actor.world.pos.z - 10.0f;
+            this->subCamEye.x = sZelda->actor.world.pos.x - 100.0f;
+            this->subCamEye.y = sZelda->actor.world.pos.y + 30.0f;
+            this->subCamEye.z = (sZelda->actor.world.pos.z + 30.0f) - 60.0f;
+            this->subCamAt.x = sZelda->actor.world.pos.x;
+            this->subCamAt.y = sZelda->actor.world.pos.y + 30.0f;
+            this->subCamAt.z = sZelda->actor.world.pos.z - 10.0f;
             Math_ApproachZeroF(&this->unk_324, 1.0f, 5.0f);
             Math_ApproachF(&play->envCtx.unk_D8, 1.0f, 1.0f, 1.0f / 51);
             if (this->unk_1A2[1] == 80) {
@@ -1420,8 +1420,8 @@ void func_80900890(BossGanon2* this, PlayState* play) {
             Player_SetCsActionWithHaltedActors(play, &this->actor, 0x60);
             this->csTimer = 0;
         case 11:
-            player->actor.world.pos.x = sBossGanon2Zelda->actor.world.pos.x + 50.0f + 10.0f;
-            player->actor.world.pos.z = sBossGanon2Zelda->actor.world.pos.z - 25.0f;
+            player->actor.world.pos.x = sZelda->actor.world.pos.x + 50.0f + 10.0f;
+            player->actor.world.pos.z = sZelda->actor.world.pos.z - 25.0f;
             player->actor.shape.rot.y = -0x8000;
             this->subCamEye.x = (player->actor.world.pos.x + 100.0f) - 80.0f;
             this->subCamEye.y = (player->actor.world.pos.y + 60.0f) - 40.0f;
@@ -1556,7 +1556,7 @@ void func_8090120C(BossGanon2* this, PlayState* play) {
             Player_SetCsActionWithHaltedActors(play, &this->actor, 8);
             this->csState = 1;
             this->csTimer = 0;
-            sBossGanon2Zelda->unk_3C8 = 9;
+            sZelda->unk_3C8 = 9;
             this->unk_31C = 0;
             this->unk_1A2[2] = 0;
             this->unk_336 = 0;
@@ -1596,9 +1596,9 @@ void func_8090120C(BossGanon2* this, PlayState* play) {
             player->actor.shape.rot.y = -0x4000;
             player->actor.world.pos.x = 200.0f;
             player->actor.world.pos.z = 30.0f;
-            sBossGanon2Zelda->actor.world.pos.x = 340.0f;
-            sBossGanon2Zelda->actor.world.pos.z = -250.0f;
-            sBossGanon2Zelda->actor.world.rot.y = sBossGanon2Zelda->actor.shape.rot.y = -0x2000;
+            sZelda->actor.world.pos.x = 340.0f;
+            sZelda->actor.world.pos.z = -250.0f;
+            sZelda->actor.world.rot.y = sZelda->actor.shape.rot.y = -0x2000;
             this->subCamEye.x = 250;
             this->subCamEye.y = 1150.0f;
             this->subCamEye.z = 0.0f;
@@ -1617,9 +1617,9 @@ void func_8090120C(BossGanon2* this, PlayState* play) {
             this->subCamEye.x = 250;
             this->subCamEye.y = 1150.0f;
             this->subCamEye.z = 0.0f;
-            Math_ApproachF(&this->subCamAt.x, sBossGanon2Zelda->actor.world.pos.x, 0.2f, 20.0f);
-            Math_ApproachF(&this->subCamAt.y, sBossGanon2Zelda->actor.world.pos.y + 50.0f, 0.2f, 10.0f);
-            Math_ApproachF(&this->subCamAt.z, sBossGanon2Zelda->actor.world.pos.z, 0.2f, 20.0f);
+            Math_ApproachF(&this->subCamAt.x, sZelda->actor.world.pos.x, 0.2f, 20.0f);
+            Math_ApproachF(&this->subCamAt.y, sZelda->actor.world.pos.y + 50.0f, 0.2f, 10.0f);
+            Math_ApproachF(&this->subCamAt.z, sZelda->actor.world.pos.z, 0.2f, 20.0f);
             if (this->csTimer == 50) {
                 this->csState = 3;
                 this->csTimer = 0;
@@ -1631,9 +1631,9 @@ void func_8090120C(BossGanon2* this, PlayState* play) {
             this->subCamEye.x = 330.0f;
             this->subCamEye.y = 1120.0f;
             this->subCamEye.z = -150.0f;
-            this->subCamAt.x = sBossGanon2Zelda->actor.world.pos.x;
-            this->subCamAt.y = sBossGanon2Zelda->actor.world.pos.y + 40.0f;
-            this->subCamAt.z = sBossGanon2Zelda->actor.world.pos.z;
+            this->subCamAt.x = sZelda->actor.world.pos.x;
+            this->subCamAt.y = sZelda->actor.world.pos.y + 40.0f;
+            this->subCamAt.z = sZelda->actor.world.pos.z;
             if (this->csTimer == 10) {
                 Message_StartTextbox(play, 0x70D8, NULL);
             }
@@ -1646,7 +1646,7 @@ void func_8090120C(BossGanon2* this, PlayState* play) {
             if (this->csTimer > 10) {
                 Math_ApproachZeroF(&this->unk_37C, 1.0f, 10.0f);
                 if (this->csTimer == 30) {
-                    sBossGanon2Zelda->unk_3C8 = 10;
+                    sZelda->unk_3C8 = 10;
                 }
                 this->unk_339 = 23;
                 Math_ApproachZeroF(&play->envCtx.unk_D8, 1.0f, 0.05f);
@@ -1822,7 +1822,7 @@ void func_8090120C(BossGanon2* this, PlayState* play) {
             if (this->csTimer == 40) {
                 this->csState = 9;
                 this->csTimer = 0;
-                sBossGanon2Zelda->unk_3C8 = 11;
+                sZelda->unk_3C8 = 11;
                 Message_StartTextbox(play, 0x70D9, NULL);
                 this->unk_336 = 0;
                 play->envCtx.unk_D8 = 0.0f;
@@ -1833,9 +1833,9 @@ void func_8090120C(BossGanon2* this, PlayState* play) {
             this->subCamEye.x = 330.0f;
             this->subCamEye.y = 1120.0f;
             this->subCamEye.z = -150.0f;
-            this->subCamAt.x = sBossGanon2Zelda->actor.world.pos.x;
-            this->subCamAt.y = sBossGanon2Zelda->actor.world.pos.y + 40.0f;
-            this->subCamAt.z = sBossGanon2Zelda->actor.world.pos.z;
+            this->subCamAt.x = sZelda->actor.world.pos.x;
+            this->subCamAt.y = sZelda->actor.world.pos.y + 40.0f;
+            this->subCamAt.z = sZelda->actor.world.pos.z;
             if (this->csTimer > 60) {
                 this->csState = 10;
                 this->csTimer = 0;
@@ -1850,26 +1850,26 @@ void func_8090120C(BossGanon2* this, PlayState* play) {
             if ((this->csTimer >= 40) && (this->csTimer <= 110)) {
                 Math_ApproachF(&play->envCtx.unk_D8, 1.0f, 1.0f, 0.02f);
                 Math_ApproachF(&this->unk_384, 10.0f, 0.1f, 0.2f);
-                Audio_PlayActorSound2(&sBossGanon2Zelda->actor, NA_SE_EV_GOD_LIGHTBALL_2 - SFX_FLAG);
+                Audio_PlayActorSound2(&sZelda->actor, NA_SE_EV_GOD_LIGHTBALL_2 - SFX_FLAG);
             } else {
                 Math_ApproachZeroF(&this->unk_384, 1.0f, 0.2f);
             }
             if (this->csTimer > 130) {
-                Math_ApproachF(&this->subCamAt.y, (sBossGanon2Zelda->actor.world.pos.y + 40.0f + 10.0f) - 20.0f, 0.1f,
+                Math_ApproachF(&this->subCamAt.y, (sZelda->actor.world.pos.y + 40.0f + 10.0f) - 20.0f, 0.1f,
                                this->unk_410.x);
             } else {
-                Math_ApproachF(&this->subCamAt.y, sBossGanon2Zelda->actor.world.pos.y + 40.0f + 10.0f, 0.05f,
+                Math_ApproachF(&this->subCamAt.y, sZelda->actor.world.pos.y + 40.0f + 10.0f, 0.05f,
                                this->unk_410.x * 0.25f);
             }
             Math_ApproachF(&this->unk_410.x, 1.0f, 1.0f, 0.01f);
             if (this->csTimer == 10) {
-                sBossGanon2Zelda->unk_3C8 = 12;
+                sZelda->unk_3C8 = 12;
             }
             if (this->csTimer == 110) {
-                sBossGanon2Zelda->unk_3C8 = 13;
+                sZelda->unk_3C8 = 13;
             }
             if (this->csTimer == 140) {
-                Audio_PlayActorSound2(&sBossGanon2Zelda->actor, NA_SE_EV_HUMAN_BOUND);
+                Audio_PlayActorSound2(&sZelda->actor, NA_SE_EV_HUMAN_BOUND);
             }
             if (this->csTimer < 160) {
                 break;
@@ -1925,7 +1925,7 @@ void func_80902348(BossGanon2* this, PlayState* play) {
 
                 Actor_SetPlayerKnockbackLarge(play, &this->actor, 15.0f, this->actor.yawTowardsPlayer + phi_v0_2, 2.0f,
                                               0);
-                sBossGanon2Zelda->unk_3C8 = 8;
+                sZelda->unk_3C8 = 8;
                 this->unk_316 = 10;
                 break;
             }
@@ -1944,7 +1944,7 @@ void func_80902348(BossGanon2* this, PlayState* play) {
 
             player->bodyIsBurning = true;
             Actor_SetPlayerKnockbackLarge(play, &this->actor, 10.0f, Math_Atan2S(temp_f12, temp_f2), 0.0f, 0x10);
-            sBossGanon2Zelda->unk_3C8 = 8;
+            sZelda->unk_3C8 = 8;
         }
     }
 }
@@ -2246,7 +2246,7 @@ void BossGanon2_Update(Actor* thisx, PlayState* play) {
     if (D_80906D78 != 0) {
         D_80906D78 = 0;
 
-        for (i2 = 0; i2 < ARRAY_COUNT(sBossGanon2Particles); i2++) {
+        for (i2 = 0; i2 < ARRAY_COUNT(sEffects); i2++) {
             angle = Rand_ZeroFloat(2 * M_PI);
             sp44 = Rand_ZeroFloat(40.0f) + 10.0f;
             sp58 = this->actor.world.pos;
@@ -2716,8 +2716,8 @@ void func_80904FC8(BossGanon2* this, PlayState* play) {
         gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 255, 255, 255, 200);
         gDPSetEnvColor(POLY_XLU_DISP++, 255, 200, 0, 0);
         gSPDisplayList(POLY_XLU_DISP++, gGanonLightOrbMaterialDL);
-        Matrix_Translate(sBossGanon2Zelda->actor.world.pos.x, sBossGanon2Zelda->actor.world.pos.y + 80.0f,
-                         sBossGanon2Zelda->actor.world.pos.z, MTXMODE_NEW);
+        Matrix_Translate(sZelda->actor.world.pos.x, sZelda->actor.world.pos.y + 80.0f, sZelda->actor.world.pos.z,
+                         MTXMODE_NEW);
         Matrix_ReplaceRotation(&play->billboardMtxF);
         Matrix_Scale(this->unk_384, this->unk_384, this->unk_384, MTXMODE_APPLY);
         Matrix_RotateZ(this->unk_388, MTXMODE_APPLY);
@@ -2803,9 +2803,8 @@ void func_80905674(BossGanon2* this, PlayState* play) {
                                       this->unk_19C * -8, 32, 32, -8, 0, -4, -8));
         gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 255, 255, 170, (s16)this->unk_37C);
         gDPSetEnvColor(POLY_XLU_DISP++, 255, 200, 0, 128);
-        Matrix_Translate(sBossGanon2Zelda->actor.world.pos.x + 100.0f,
-                         sBossGanon2Zelda->actor.world.pos.y + 35.0f + 7.0f,
-                         sBossGanon2Zelda->actor.world.pos.z - 100.0f, MTXMODE_NEW);
+        Matrix_Translate(sZelda->actor.world.pos.x + 100.0f, sZelda->actor.world.pos.y + 35.0f + 7.0f,
+                         sZelda->actor.world.pos.z - 100.0f, MTXMODE_NEW);
         Matrix_RotateY(-M_PI / 4.0f, MTXMODE_APPLY);
         Matrix_Scale(0.040000003f, 0.040000003f, this->unk_380, MTXMODE_APPLY);
         Matrix_RotateX(M_PI / 2.0f, MTXMODE_APPLY);
@@ -2898,7 +2897,7 @@ void BossGanon2_UpdateEffects(BossGanon2* this, PlayState* play) {
     Vec3f sp78;
     s16 i;
 
-    for (i = 0; i < ARRAY_COUNT(sBossGanon2Particles); i++, effect++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++, effect++) {
         if (effect->type != 0) {
             effect->position.x += effect->velocity.x;
             effect->position.y += effect->velocity.y;
@@ -3018,7 +3017,7 @@ void BossGanon2_DrawEffects(PlayState* play) {
 
     effect = effects;
 
-    for (i = 0; i < ARRAY_COUNT(sBossGanon2Particles); i++, effect++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++, effect++) {
         if (effect->type == 2) {
             FrameInterpolation_RecordOpenChild("Ganon 809060E8 1", i);
 
@@ -3166,12 +3165,12 @@ void BossGanon2_Reset(void) {
     D_8090EB20.y = 0;
     D_8090EB20.z = 0;
     D_80910638 = 0;
-    sBossGanon2Zelda = NULL;
+    sZelda = NULL;
     D_8090EB30 = NULL;
-    sBossGanon2Seed1 = 0;
-    sBossGanon2Seed2 = 0;
-    sBossGanon2Seed3 = 0;
+    sSeed1 = 0;
+    sSeed2 = 0;
+    sSeed3 = 0;
     memset(D_809105D8, 0, sizeof(D_809105D8));
     memset(D_80910608, 0, sizeof(D_80910608));
-    memset(sBossGanon2Particles, 0, sizeof(sBossGanon2Particles));
+    memset(sEffects, 0, sizeof(sEffects));
 }

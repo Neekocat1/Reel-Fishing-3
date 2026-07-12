@@ -166,7 +166,7 @@ static Vec3f sTwinrovaPillarPos[] = {
     { 0.0f, 380.0f, -580.0f },
 };
 
-static u8 sTwInitalized = false;
+static u8 sTwInitialized = false;
 
 static InitChainEntry sInitChain[] = {
     ICHAIN_U8(targetMode, 5, ICHAIN_CONTINUE),
@@ -199,11 +199,11 @@ static u8 D_8094C878;
 static s16 D_8094C87A;
 static s16 D_8094C87C;
 static u8 D_8094C87E;
-static BossTwEffect sTwEffects[150];
+static BossTwEffect sEffects[150];
 
 #define BOSS_TW_SHIP_SAVESTATE_FIELDS(F) \
-    F(sTwInitalized)                     \
-    F(sTwEffects)
+    F(sTwInitialized)                    \
+    F(sEffects)
 
 SHIP_SAVESTATE_DEFINE(BossTw, BOSS_TW_SHIP_SAVESTATE_FIELDS)
 
@@ -274,7 +274,7 @@ void BossTw_AddPlayerFreezeEffect(PlayState* play, Actor* target) {
     BossTwEffect* eff;
     s16 i;
 
-    for (eff = play->specialEffects, i = 0; i < ARRAY_COUNT(sTwEffects); i++, eff++) {
+    for (eff = play->specialEffects, i = 0; i < ARRAY_COUNT(sEffects); i++, eff++) {
         if (eff->type == TWEFF_NONE) {
             eff->type = TWEFF_PLYR_FRZ;
             eff->curSpeed = sZeroVector;
@@ -298,7 +298,7 @@ void BossTw_AddFlameEffect(PlayState* play, Vec3f* initalPos, Vec3f* initalSpeed
     s16 i;
     BossTwEffect* eff;
 
-    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sTwEffects); i++, eff++) {
+    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sEffects); i++, eff++) {
         if (eff->type == TWEFF_NONE) {
             eff->type = TWEFF_FLAME;
             eff->pos = *initalPos;
@@ -318,7 +318,7 @@ void BossTw_AddMergeFlameEffect(PlayState* play, Vec3f* initialPos, f32 scale, f
     s16 i;
     BossTwEffect* eff;
 
-    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sTwEffects); i++, eff++) {
+    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sEffects); i++, eff++) {
         if (eff->type == TWEFF_NONE) {
             eff->type = TWEFF_MERGEFLAME;
             eff->pos = *initialPos;
@@ -341,7 +341,7 @@ void BossTw_AddShieldBlastEffect(PlayState* play, Vec3f* initalPos, Vec3f* inita
     s16 i;
     BossTwEffect* eff;
 
-    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sTwEffects); i++, eff++) {
+    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sEffects); i++, eff++) {
         if (eff->type == TWEFF_NONE) {
             eff->type = TWEFF_SHLD_BLST;
             eff->pos = *initalPos;
@@ -368,7 +368,7 @@ void BossTw_AddShieldDeflectEffect(PlayState* play, f32 arg1, s16 arg2) {
     sShieldHitYaw = player->actor.shape.rot.y;
 
     for (i = 0; i < 8; i++) {
-        for (eff = play->specialEffects, j = 0; j < ARRAY_COUNT(sTwEffects); j++, eff++) {
+        for (eff = play->specialEffects, j = 0; j < ARRAY_COUNT(sEffects); j++, eff++) {
             if (eff->type == TWEFF_NONE) {
                 eff->type = TWEFF_SHLD_DEFL;
                 eff->pos = sShieldHitPos;
@@ -398,7 +398,7 @@ void BossTw_AddShieldHitEffect(PlayState* play, f32 arg1, s16 arg2) {
     sShieldHitYaw = player->actor.shape.rot.y;
 
     for (i = 0; i < 8; i++) {
-        for (eff = play->specialEffects, j = 0; j < ARRAY_COUNT(sTwEffects); j++, eff++) {
+        for (eff = play->specialEffects, j = 0; j < ARRAY_COUNT(sEffects); j++, eff++) {
             if (eff->type == TWEFF_NONE) {
                 eff->type = TWEFF_SHLD_HIT;
                 eff->pos = sShieldHitPos;
@@ -462,8 +462,8 @@ void BossTw_Init(Actor* thisx, PlayState* play2) {
     this->actor.colChkInfo.health = 0;
     Collider_InitCylinder(play, &this->collider);
 
-    if (!sTwInitalized) {
-        sTwInitalized = true;
+    if (!sTwInitialized) {
+        sTwInitialized = true;
         play->envCtx.unk_BF = 1;
         play->envCtx.unk_BE = 1;
         play->envCtx.unk_BD = 1;
@@ -475,11 +475,11 @@ void BossTw_Init(Actor* thisx, PlayState* play2) {
 
         D_8094C858 = D_8094C854 = 0.0f;
         sFixedBlastType = Rand_ZeroFloat(1.99f);
-        play->specialEffects = sTwEffects;
+        play->specialEffects = sEffects;
 
-        for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
-            sTwEffects[i].type = TWEFF_NONE;
-            sTwEffects[i].epoch++;
+        for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
+            sEffects[i].type = TWEFF_NONE;
+            sEffects[i].epoch++;
         }
     }
 
@@ -580,7 +580,7 @@ void BossTw_Destroy(Actor* thisx, PlayState* play) {
     }
 
     if (thisx->params == TW_TWINROVA) {
-        sTwInitalized = false;
+        sTwInitialized = false;
     }
 }
 
@@ -715,7 +715,7 @@ void BossTw_SpawnGroundBlast(BossTw* this, PlayState* play, s16 blastType) {
     Vec3f velocity;
     Vec3f accel;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         velocity.x = Rand_CenteredFloat(20.0f);
         velocity.y = Rand_ZeroFloat(10.0f);
         velocity.z = Rand_CenteredFloat(20.0f);
@@ -1078,7 +1078,7 @@ void BossTw_ShootBeam(BossTw* this, PlayState* play) {
                         Vec3f velocity;
                         Vec3f accel = { 0.0f, 0.0f, 0.0f };
 
-                        for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+                        for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
                             velocity.x = Rand_CenteredFloat(15.0f);
                             velocity.y = Rand_CenteredFloat(15.0f);
                             velocity.z = Rand_CenteredFloat(15.0f);
@@ -4571,7 +4571,7 @@ void BossTw_UpdateEffects(PlayState* play) {
     f32 phi_f0;
     Actor* unk44;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (eff->type != 0) {
             eff->pos.x += eff->curSpeed.x;
             eff->pos.y += eff->curSpeed.y;
@@ -4903,7 +4903,7 @@ void BossTw_DrawEffects(PlayState* play) {
 
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (currentEffect->type == 1) {
             FrameInterpolation_RecordOpenChild(currentEffect, currentEffect->epoch);
 
@@ -4928,7 +4928,7 @@ void BossTw_DrawEffects(PlayState* play) {
     sp18F = 0;
     currentEffect = effectHead;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (currentEffect->type == 3) {
             FrameInterpolation_RecordOpenChild(currentEffect, currentEffect->epoch);
 
@@ -4956,7 +4956,7 @@ void BossTw_DrawEffects(PlayState* play) {
     sp18F = 0;
     currentEffect = effectHead;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (currentEffect->type == 2) {
             FrameInterpolation_RecordOpenChild(currentEffect, currentEffect->epoch);
 
@@ -4986,7 +4986,7 @@ void BossTw_DrawEffects(PlayState* play) {
     sp18F = 0;
     currentEffect = effectHead;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (currentEffect->type == 4) {
             FrameInterpolation_RecordOpenChild(currentEffect, currentEffect->epoch);
 
@@ -5034,7 +5034,7 @@ void BossTw_DrawEffects(PlayState* play) {
     sp18F = 0;
     currentEffect = effectHead;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         Actor* actor;
         Vec3f off;
 
@@ -5083,7 +5083,7 @@ void BossTw_DrawEffects(PlayState* play) {
     sp18F = 0;
     currentEffect = effectHead;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (currentEffect->type >= 6) {
             FrameInterpolation_RecordOpenChild(currentEffect, currentEffect->epoch);
 
@@ -5474,6 +5474,6 @@ void BossTw_TwinrovaLaugh(BossTw* this, PlayState* play) {
 }
 
 void BossTw_Reset(void) {
-    sTwInitalized = false;
-    memset(sTwEffects, 0, sizeof(sTwEffects));
+    sTwInitialized = false;
+    memset(sEffects, 0, sizeof(sEffects));
 }

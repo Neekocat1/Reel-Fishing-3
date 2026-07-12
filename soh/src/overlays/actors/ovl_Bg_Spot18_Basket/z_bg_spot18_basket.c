@@ -86,9 +86,9 @@ void BgSpot18Basket_InitColliderJntSph(Actor* thisx, PlayState* play) {
     this->dyna.actor.colChkInfo.mass = MASS_IMMOVABLE;
 }
 
-static s16 D_808B85D0 = 0;
+static s16 spawnPos = 0;
 
-#define BG_SPOT18_BASKET_SHIP_SAVESTATE_FIELDS(F) F(D_808B85D0)
+#define BG_SPOT18_BASKET_SHIP_SAVESTATE_FIELDS(F) F(spawnPos)
 
 SHIP_SAVESTATE_DEFINE(BgSpot18Basket, BG_SPOT18_BASKET_SHIP_SAVESTATE_FIELDS)
 
@@ -105,10 +105,10 @@ void BgSpot18Basket_SpawnDustClouds(BgSpot18Basket* this, PlayState* play, f32 a
     for (i = 0, count = 2; i != count; i++) {
         if (play) {}
         if (!(arg2 < Rand_ZeroOne())) {
-            D_808B85D0 += 0x7530;
+            spawnPos += 0x7530;
 
-            sinValue = Math_SinS(D_808B85D0);
-            cosValue = Math_CosS(D_808B85D0);
+            sinValue = Math_SinS(spawnPos);
+            cosValue = Math_CosS(spawnPos);
 
             randomValue = (Rand_ZeroOne() * 35.0f) + 35.0f;
 
@@ -464,5 +464,5 @@ void BgSpot18Basket_Draw(Actor* thisx, PlayState* play) {
 }
 
 void BgSpot18Basket_Reset(void) {
-    D_808B85D0 = 0;
+    spawnPos = 0;
 }

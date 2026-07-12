@@ -529,17 +529,17 @@ void EnXc_SetColossusWindSFX(PlayState* play) {
     }
 }
 
-static s32 sEnXcFlameSpawned = false;
+static s32 sFlameSpawned = false;
 void EnXc_SpawnFlame(EnXc* this, PlayState* play) {
 
-    if (!sEnXcFlameSpawned) {
+    if (!sFlameSpawned) {
         CsCmdActorCue* npcAction = EnXc_GetCsCmd(play, 0);
         f32 xPos = npcAction->startPos.x;
         f32 yPos = npcAction->startPos.y;
         f32 zPos = npcAction->startPos.z;
 
         this->flameActor = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_LIGHT, xPos, yPos, zPos, 0, 0, 0, 5);
-        sEnXcFlameSpawned = true;
+        sFlameSpawned = true;
     }
 }
 
@@ -1447,7 +1447,7 @@ static s32 D_80B41DAC = 1;
 
 #define EN_XC_SHIP_SAVESTATE_FIELDS(F) \
     F(D_80B41D90)                      \
-    F(sEnXcFlameSpawned)               \
+    F(sFlameSpawned)                   \
     F(D_80B41DA8)                      \
     F(D_80B41DAC)
 
@@ -2489,7 +2489,7 @@ const ActorInit En_Xc_InitVars = {
 
 void EnXc_Reset(void) {
     D_80B41D90 = 0;
-    sEnXcFlameSpawned = false;
+    sFlameSpawned = false;
     D_80B41DA8 = 1;
     D_80B41DAC = 1;
 }

@@ -22,7 +22,7 @@ typedef enum {
 
     // #### `result`
     // ```c
-    // sBgPoEventPuzzleState == 0xF
+    // sPuzzleState == 0xF
     // ```
     // #### `args`
     // - None
