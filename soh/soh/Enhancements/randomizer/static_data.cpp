@@ -220,7 +220,7 @@ StaticData::PopulateTranslationMap(const std::unordered_map<uint32_t, CustomMess
     std::unordered_map<std::string, uint32_t> output = {};
     for (const auto& [key, message] : input) {
         std::vector<std::string> strings = message.GetAllMessages(MF_CLEAN);
-        for (std::string string : strings) {
+        for (const std::string& string : strings) {
             if (output.contains(string)) {
                 if (output[string] != key) {
                     // RANDOTODO should this cause an error of some kind?
@@ -239,7 +239,7 @@ StaticData::PopulateTranslationMap(const std::unordered_map<uint32_t, Randomizer
     std::unordered_map<std::string, uint32_t> output = {};
     for (const auto& [key, text] : input) {
         std::vector<std::string> strings = hintTextTable[text].GetClear().GetAllMessages(MF_CLEAN);
-        for (std::string string : strings) {
+        for (const std::string& string : strings) {
             if (output.contains(string)) {
                 if (output[string] != key) {
                     // RANDOTODO should this cause an error of some kind?
