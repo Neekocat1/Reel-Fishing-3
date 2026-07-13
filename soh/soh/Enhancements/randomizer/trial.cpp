@@ -77,7 +77,7 @@ void Trials::ParseJson(nlohmann::json spoilerFileJson) {
     for (auto& trial : mTrials) {
         trial.SetAsSkipped();
 
-        for (auto nameInLang : trial.GetName().GetAllMessages()) {
+        for (auto nameInLang : trial.GetName().GetAllMessages(MF_CLEAN)) {
             if (std::find(trialsJson.begin(), trialsJson.end(), nameInLang) != trialsJson.end()) {
                 trial.SetAsRequired();
             }

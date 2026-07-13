@@ -216,10 +216,10 @@ std::unordered_map<RandomizerHint, StaticHintInfo> StaticData::staticHintInfoMap
 };
 
 std::unordered_map<std::string, uint32_t>
-StaticData::PopulateTranslationMap(std::unordered_map<uint32_t, CustomMessage> input) {
+StaticData::PopulateTranslationMap(const std::unordered_map<uint32_t, CustomMessage>& input) {
     std::unordered_map<std::string, uint32_t> output = {};
     for (const auto& [key, message] : input) {
-        std::vector<std::string> strings = message.GetAllMessages();
+        std::vector<std::string> strings = message.GetAllMessages(MF_CLEAN);
         for (std::string string : strings) {
             if (output.contains(string)) {
                 if (output[string] != key) {
@@ -235,10 +235,10 @@ StaticData::PopulateTranslationMap(std::unordered_map<uint32_t, CustomMessage> i
 }
 
 std::unordered_map<std::string, uint32_t>
-StaticData::PopulateTranslationMap(std::unordered_map<uint32_t, RandomizerHintTextKey> input) {
+StaticData::PopulateTranslationMap(const std::unordered_map<uint32_t, RandomizerHintTextKey>& input) {
     std::unordered_map<std::string, uint32_t> output = {};
     for (const auto& [key, text] : input) {
-        std::vector<std::string> strings = hintTextTable[text].GetClear().GetAllMessages();
+        std::vector<std::string> strings = hintTextTable[text].GetClear().GetAllMessages(MF_CLEAN);
         for (std::string string : strings) {
             if (output.contains(string)) {
                 if (output[string] != key) {
