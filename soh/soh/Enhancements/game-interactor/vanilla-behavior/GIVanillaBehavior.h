@@ -3387,6 +3387,26 @@ typedef enum {
     // #### `args`
     // - None
     VB_TEMP_B_RESTORE_SWORDLESS,
+
+    // #### `result`
+    // ```c
+    // true
+    // // ```
+    // Hook to override the save menu for a message box allowing you to
+    // Continue, Reset, and Reset to Spawn after saving (only from the pause menu, not the
+    // game over screen).
+    // #### `args`
+    // - `*PlayState`
+    VB_LOAD_SAVE_MENU,
+
+    // #### `result`
+    // ```c
+    // pauseCtx->state == 7
+    // ```
+    // Hook to override the drawing/loading textures for the save menu so that
+    // a textbox can be rendered instead. Pause screen only, Game Over version left
+    // intact.
+    VB_DRAW_SAVE_MENU,
 } GIVanillaBehavior;
 
 #endif
