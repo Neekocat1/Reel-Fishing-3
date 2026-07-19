@@ -95,7 +95,7 @@ void RegionTable_Init_CastleGrounds() {
         ENTRANCE(RR_HC_MOAT,      true),
     });
 
-    areaTable[RR_HC_MOAT] = Region("Hyrule Castle Grounds", SCENE_HYRULE_CASTLE, {}, {
+    areaTable[RR_HC_MOAT] = Region("Hyrule Castle Moat", SCENE_HYRULE_CASTLE, {}, {
         //Locations
         LOCATION(RC_HC_GRASS_1,             logic->CanCutShrubs()),
         LOCATION(RC_HC_GRASS_2,             logic->CanCutShrubs()),
