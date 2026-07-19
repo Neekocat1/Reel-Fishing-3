@@ -11437,6 +11437,8 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
         this->prevFloorType = sFloorType;
         this->floorTypeTimer = 0;
     }
+
+    GameInteractor_Should(VB_AFTER_PROCESS_SCENE_COLLISION, true);
 }
 
 void Player_UpdateCamAndSeqModes(PlayState* play, Player* this) {
