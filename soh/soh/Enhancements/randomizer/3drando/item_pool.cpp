@@ -4,7 +4,7 @@
 #include "fill.hpp"
 #include "../static_data.h"
 #include "../SeedContext.h"
-#include "random.hpp"
+#include "../rng.h"
 #include "soh/Enhancements/randomizer/Traps.h"
 #include <algorithm>
 #include <spdlog/spdlog.h>

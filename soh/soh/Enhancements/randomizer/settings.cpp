@@ -2,7 +2,7 @@
 #include "trial.h"
 #include "dungeon.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
-#include "soh/Enhancements/randomizer/3drando/random.hpp"
+#include "soh/Enhancements/randomizer/rng.h"
 #include "soh/OTRGlobals.h"
 
 #include <spdlog/spdlog.h>
