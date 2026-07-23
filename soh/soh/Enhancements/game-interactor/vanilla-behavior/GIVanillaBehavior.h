@@ -1688,7 +1688,7 @@ typedef enum {
     // this->getItemId != GI_NONE
     // ```
     // #### `args`
-    // - `None`
+    // - `*EnBox`
     VB_OPEN_CHEST,
 
     // #### `result`
