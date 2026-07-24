@@ -3394,6 +3394,25 @@ typedef enum {
     VB_PREVENT_HOOKSHOT_PARENT_SOFTLOCK,
 
     // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - none
+    VB_PUTAWAY_BECAUSE_DISABLED_ITEM_BUTTONS,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `s32* i` (button index)
+    // - `Player*`
+    // - `s32* item`
+    VB_OVERRIDE_BUTTON_ITEM_USED,
+
+    // #### `result`
+    // ```c
     // true if Goron Link is talking
     // ```
     // #### `args`
