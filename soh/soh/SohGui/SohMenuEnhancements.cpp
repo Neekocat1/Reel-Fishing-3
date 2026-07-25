@@ -1692,6 +1692,13 @@ void SohMenu::AddMenuEnhancements() {
                                            "fixing a vanilla bug. Always enabled in randomizer."));
 
     AddWidget(path, "Multiple Prizes", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "Dampe's Race", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DampeBothPrizes"))
+        .PreFunc([](WidgetInfo& info) {
+            info.options->disabled = IS_RANDO && GameInteractor::IsSaveLoaded(true);
+            info.options->disabledTooltip = "This setting is forcefully enabled when you are playing a Randomizer.";
+        })
+        .Options(CheckboxOptions().Tooltip("Dampe awards both prizes on the first race, not just the Hookshot."));
     AddWidget(path, "Horseback Archery", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("HorsebackArcheryBothPrizes"))
         .Options(CheckboxOptions().Tooltip("Link can win both Horseback Archery prizes in one attempt"));
