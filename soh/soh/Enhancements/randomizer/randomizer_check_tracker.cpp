@@ -24,6 +24,7 @@
 #include <sstream>
 #include <vector>
 #include <set>
+#include <spdlog/common.h>
 #include <libultraship/controller/controldeck/ControlDeck.h>
 #include "location.h"
 #include "item_location.h"
@@ -2305,7 +2306,8 @@ void DrawLocation(RandomizerCheck rc) {
                     }
                     if (itemLoc->CanBePurchased() && IsVisibleInCheckTracker(rc) && status == RCSHOW_IDENTIFIED) {
                         auto price = OTRGlobals::Instance->gRandoContext->GetItemLocation(rc)->GetPrice();
-                        txt = !txt.empty() ? fmt::format("{} - {}", txt, price) : fmt::format("{}", price);
+                        txt = !txt.empty() ? spdlog::fmt_lib::format("{} - {}", txt, price)
+                                           : spdlog::fmt_lib::format("{}", price);
                     }
                 } else {
                     if (IsHeartPiece((GetItemID)Rando::StaticData::RetrieveItem(loc->GetVanillaItem()).GetItemID())) {
