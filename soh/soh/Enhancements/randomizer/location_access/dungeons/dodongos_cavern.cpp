@@ -548,7 +548,7 @@ void RegionTable_Init_DodongosCavern() {
         LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_POT_3,     logic->CanBreakPots()),
         LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_POT_4,     logic->CanBreakPots()),
         LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_BOULDER_1, logic->BlastOrSmash() || logic->HasItem(RG_GORONS_BRACELET) || logic->CanUse(RG_DINS_FIRE) || (ctx->GetTrickOption(RT_BOULDER_COLLISION) && logic->CanUse(RG_FAIRY_BOW))),
-        LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_BOULDER_2, logic->CanDetonateBombFlowers() || logic->HasItem(RG_GORONS_BRACELET) || (ctx->GetTrickOption(RT_BLUE_FIRE_MUD_WALLS) && logic->CanUse(RG_BOTTLE_WITH_BLUE_FIRE) && (logic->EffectiveHealth() != 1 || logic->CanUse(RG_NAYRUS_LOVE)))),
+        LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_BOULDER_2, logic->CanDetonateBombFlowers() || logic->HasItem(RG_GORONS_BRACELET) || (ctx->GetTrickOption(RT_BLUE_FIRE_MUD_WALLS) && logic->CanUse(RG_BOTTLE_WITH_BLUE_FIRE) && (logic->EffectiveHealth() > 8 || logic->CanUse(RG_NAYRUS_LOVE)))),
     }, {
         //Exits
         ENTRANCE(RR_DODONGOS_CAVERN_MQ_LOBBY,                  true),

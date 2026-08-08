@@ -1078,7 +1078,7 @@ bool Logic::CanKillEnemy(RandomizerEnemy enemy, EnemyDistance distance, bool wal
                    CanUse(RG_STICKS) || CanUse(RG_DINS_FIRE) || (TakeDamage() && CanUseSword());
         case RE_SHABOM:
             return CanUse(RG_BOOMERANG) || CanUse(RG_NUTS) || CanJumpslash() || CanUse(RG_DINS_FIRE) ||
-                   CanUse(RG_ICE_ARROWS) || EffectiveHealth() * 2 > quantity;
+                   CanUse(RG_ICE_ARROWS) || EffectiveHealth() > quantity * 4;
         case RE_OCTOROK:
             return CanReflectNuts() || HookshotOrBoomerang() || CanUse(RG_FAIRY_BOW) || CanUse(RG_FAIRY_SLINGSHOT) ||
                    CanUse(RG_BOMB_BAG) || (wallOrFloor && CanUse(RG_BOMBCHU_5));
@@ -1304,7 +1304,7 @@ bool Logic::CanDetonateBombFlowers() {
 bool Logic::CanDetonateUprightBombFlower() {
     return CanDetonateBombFlowers() || HasItem(RG_GORONS_BRACELET) ||
            (ctx->GetTrickOption(RT_BLUE_FIRE_MUD_WALLS) && CanUse(RG_BOTTLE_WITH_BLUE_FIRE) &&
-            (EffectiveHealth() != 1 || CanUse(RG_NAYRUS_LOVE)));
+            (EffectiveHealth() > 8 || CanUse(RG_NAYRUS_LOVE)));
 }
 
 bool Logic::CanHammerRecoilHover(bool needShield) {
@@ -1614,31 +1614,24 @@ bool Logic::CallGossipFairy() {
     return CallGossipFairyExceptSuns() || CanUse(RG_SUNS_SONG);
 }
 
-// the number returned by this is in half heart hits taken.
-// RANDOTODO work in OoT side health instead for greater applicability (16 per heart)
-uint8_t Logic::EffectiveHealth() {
-    /* Multiplier will be:
-    0 for half daamge
-    1 for normal damage
-    2 for double damage
-    3 for quad damage
-    4 for 8* damage
-    5 for 16* damage
-    10 for OHKO.
-    This is the number of shifts to apply, not a real multiplier
-    */
-    uint8_t Multiplier =
-        (ctx->GetOption(RSK_DAMAGE_MULTIPLIER).Get() < 6) ? ctx->GetOption(RSK_DAMAGE_MULTIPLIER).Get() : 10;
-    //(Hearts() << (2 + HasItem(RG_DOUBLE_DEFENSE))) is quarter hearts after DD
-    //>> Multiplier halves on normal and does nothing on half, meaning we're working with half hearts on normal damage
-    return ((Hearts() << (2 + HasItem(RG_DOUBLE_DEFENSE))) >> Multiplier) +
-           // As 1 is a quarter heart, (1 << Multiplier) is effectivly half-hearts of unmodified damage
-           // Adds an extra hit if the damage is not exact lethal
-           ((Hearts() << (2 + HasItem(RG_DOUBLE_DEFENSE))) % (1 << Multiplier) > 0);
+// Our health pool in OoT health units (16 per heart). Environmental damage, such as the hot/cold and
+// underwater timers, is subtracted from health directly, so it ignores the multiplier and double defense
+uint16_t Logic::Health() {
+    return GetSaveContext()->healthCapacity;
 }
 
-uint8_t Logic::Hearts() {
-    return GetSaveContext()->healthCapacity / 16;
+// Our health pool in OoT health units (16 per heart), scaled by how much damage taking a hit costs us
+uint16_t Logic::EffectiveHealth() {
+    uint8_t Multiplier = ctx->GetOption(RSK_DAMAGE_MULTIPLIER).Get();
+    // any damage at all is lethal on OHKO
+    if (Multiplier >= RO_DAMAGE_MULTIPLIER_OHKO) {
+        return 1;
+    }
+    // Double defense halves the damage we take, which is the same as doubling the health it has to chew through.
+    // The extra shift up cancels out the -1 in the multiplier's exponent.
+    uint32_t health = Health() << (1 + HasItem(RG_DOUBLE_DEFENSE));
+    // round up, as damage that leaves us on exactly 0 health still kills
+    return (health + (1 << Multiplier) - 1) >> Multiplier;
 }
 
 uint8_t Logic::DungeonCount() {
@@ -1667,18 +1660,36 @@ uint8_t Logic::MedallionCount() {
            HasItem(RG_SPIRIT_MEDALLION) + HasItem(RG_SHADOW_MEDALLION) + HasItem(RG_LIGHT_MEDALLION);
 }
 
-uint8_t Logic::FireTimer() {
-    return CanUse(RG_GORON_TUNIC) ? 255 : (ctx->GetTrickOption(RT_FEWER_TUNIC_REQUIREMENTS)) ? (Hearts() * 8) : 0;
+uint16_t Logic::FireTimer() {
+    if (CanUse(RG_GORON_TUNIC)) {
+        return UINT16_MAX;
+    }
+    return ctx->GetTrickOption(RT_FEWER_TUNIC_REQUIREMENTS) ? Health() / 2 : 0;
 }
 
 // Tunic is not required if you are using irons to do something that a simple gold scale dive could do, and you are not
 // in water temple. (celing swimming and long walks through water do not count)
-uint8_t Logic::WaterTimer() {
-    return CanUse(RG_ZORA_TUNIC) ? 255 : (ctx->GetTrickOption(RT_FEWER_TUNIC_REQUIREMENTS)) ? (Hearts() * 8) : 0;
+uint16_t Logic::WaterTimer() {
+    if (CanUse(RG_ZORA_TUNIC)) {
+        return UINT16_MAX;
+    }
+    return ctx->GetTrickOption(RT_FEWER_TUNIC_REQUIREMENTS) ? Health() / 2 : 0;
 }
 
 bool Logic::TakeDamage() {
-    return CanUse(RG_BOTTLE_WITH_FAIRY) || EffectiveHealth() != 1 || CanUse(RG_NAYRUS_LOVE);
+    return CanUse(RG_BOTTLE_WITH_FAIRY) || EffectiveHealth() > 8 || CanUse(RG_NAYRUS_LOVE);
+}
+
+// Voiding out, be it swimming too far or falling in a pit, costs a heart.
+// Void damage skips damage multiplier, but double defense still halves it & OHKO still kills.
+bool Logic::CanVoid() {
+    if (HasItem(RG_BOTTLE_WITH_FAIRY)) {
+        return true;
+    }
+    if (ctx->GetOption(RSK_DAMAGE_MULTIPLIER).Is(RO_DAMAGE_MULTIPLIER_OHKO)) {
+        return false;
+    }
+    return Health() > (FULL_HEART_HEALTH >> (HasItem(RG_DOUBLE_DEFENSE) ? 1 : 0));
 }
 
 bool Logic::CanOpenBombGrotto() {
@@ -3070,8 +3081,6 @@ void Logic::Reset(bool resetSaveContext /*= true*/) {
 
     Bottles = 0;
     NumBottles = 0;
-    PieceOfHeart = 0;
-    HeartContainer = 0;
 
     IsChild = false;
     IsAdult = false;
@@ -3083,6 +3092,8 @@ void Logic::Reset(bool resetSaveContext /*= true*/) {
     AtNight = false;
     if (resetSaveContext) {
         GetSaveContext()->linkAge = !ctx->GetOption(RSK_SELECTED_STARTING_AGE).Get();
+        GetSaveContext()->healthCapacity = BaseHearts * FULL_HEART_HEALTH;
+        GetSaveContext()->health = GetSaveContext()->healthCapacity;
     }
 
     CalculatingAvailableChecks = false;
