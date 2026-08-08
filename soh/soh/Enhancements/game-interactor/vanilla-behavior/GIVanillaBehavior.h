@@ -2579,7 +2579,7 @@ typedef enum {
     // BgCheck_SphVsFirstPoly(&play->colCtx, &rodCheckPos, 20.0f)
     // ```
     // #### `args`
-    // - `*f32`
+    // - `*Vec3f`
     VB_NOT_CAST_FISHING,
 
     // #### `result`
@@ -3076,7 +3076,7 @@ typedef enum {
 
     // #### `result`
     // ```c
-    // true
+    // varies
     // ```
     // #### `args`
     // - `*Actor`
