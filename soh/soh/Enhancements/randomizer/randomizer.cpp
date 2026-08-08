@@ -472,7 +472,10 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGe
             return Inventory_HasEmptyBottle() ? CAN_OBTAIN : CANT_OBTAIN_NEED_EMPTY_BOTTLE;
 
         // Trade Items
-        // case RG_PROGRESSIVE_GORONSWORD:
+        // Giant's Knife and Biggoron's Sword share a slot, bgsFlag marks the final upgrade.
+        // Giant's Knife itself stays obtainable, Medigoron replaces broken ones.
+        case RG_PROGRESSIVE_GORONSWORD:
+            return !gSaveContext.bgsFlag ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
         // case RG_GIANTS_KNIFE:
 
         // Misc Items

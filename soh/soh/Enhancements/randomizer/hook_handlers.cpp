@@ -1495,6 +1495,9 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
                     Flags_UnsetInfTable(INFTABLE_B1);
                     *should = true;
                 }
+            } else if (id == VB_BE_ELIGIBLE_FOR_GIANTS_KNIFE_PURCHASE && RAND_GET_OPTION(RSK_PROGRESSIVE_GORON_SWORD)) {
+                // the progressive sword carries the first knife, leaving Medigoron to replace broken ones
+                *should = false;
             }
             break;
         }

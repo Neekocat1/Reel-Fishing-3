@@ -73,10 +73,13 @@ bool Logic::HasItem(RandomizerGet itemName) {
         case RG_IRON_BOOTS:
         case RG_HOVER_BOOTS:
             return CheckEquipment(RandoGetToEquipFlag.at(itemName));
+        case RG_PROGRESSIVE_GORONSWORD:
         case RG_GIANTS_KNIFE:
-            return CheckEquipment(RandoGetToEquipFlag.at(itemName)) || Get(LOGIC_MEDIGORON);
+            // progressive leaves Medigoron replacing broken knives, so the first one has to be found
+            return CheckEquipment(EQUIP_FLAG_SWORD_BGS) ||
+                   (!ctx->GetOption(RSK_PROGRESSIVE_GORON_SWORD) && Get(LOGIC_MEDIGORON));
         case RG_BIGGORON_SWORD:
-            return CheckEquipment(RandoGetToEquipFlag.at(itemName)) && mSaveContext->bgsFlag;
+            return CheckEquipment(EQUIP_FLAG_SWORD_BGS) && mSaveContext->bgsFlag;
         case RG_GORONS_BRACELET:
             return CurrentUpgrade(UPG_STRENGTH);
         case RG_SILVER_GAUNTLETS:
@@ -335,6 +338,7 @@ bool Logic::ItemUseAllowed(RandomizerGet itemName) {
     switch (itemName) {
         case RG_KOKIRI_SWORD:
         case RG_MASTER_SWORD:
+        case RG_PROGRESSIVE_GORONSWORD:
         case RG_GIANTS_KNIFE:
         case RG_BIGGORON_SWORD:
             return BAllowed();
@@ -578,6 +582,7 @@ bool Logic::CanUse(RandomizerGet itemName) {
             return IsAdult; // || MirrorShieldAsChild;
         case RG_MASTER_SWORD:
             return IsAdult; // || MasterSwordAsChild;
+        case RG_PROGRESSIVE_GORONSWORD:
         case RG_GIANTS_KNIFE:
         case RG_BIGGORON_SWORD:
             return IsAdult; // || BiggoronSwordAsChild;
@@ -2262,6 +2267,15 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                     }
                     SetInventory(ITEM_BOMBCHU, (!state ? ITEM_NONE : ITEM_BOMBCHU));
                 } break;
+                case RG_PROGRESSIVE_GORONSWORD:
+                    if (state ? CheckEquipment(EQUIP_FLAG_SWORD_BGS) : mSaveContext->bgsFlag) {
+                        mSaveContext->bgsFlag = state;
+                    } else if (state) {
+                        mSaveContext->inventory.equipment |= EQUIP_FLAG_SWORD_BGS;
+                    } else {
+                        mSaveContext->inventory.equipment &= ~EQUIP_FLAG_SWORD_BGS;
+                    }
+                    break;
                 case RG_PROGRESSIVE_MAGIC_METER: {
                     auto realGI = item.GetGIEntry();
                     if (realGI->itemId == RG_MAGIC_INF && realGI->modIndex == MOD_RANDOMIZER) {

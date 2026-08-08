@@ -860,6 +860,12 @@ void Settings::CreateOptionDescriptions() {
                                                     "\n"
                                                     "If you have Bombchu Bag disabled, you will need a Bomb Bag "
                                                     "and existing Bombchus for Bombchus to drop.";
+    mOptionDescriptions[RSK_PROGRESSIVE_GORON_SWORD] =
+        "Giant's Knife and Biggoron's Sword are shuffled as one progressive item: the first copy is the "
+        "breakable Giant's Knife, the second is Biggoron's Sword.\n"
+        "\n"
+        "Starting with Biggoron's Sword still starts you with both.\n"
+        "Medigoron only repairs broken Giant's Knife.";
     mOptionDescriptions[RSK_BLUE_FIRE_ARROWS] =
         "Ice Arrows act like Blue Fire, making them able to melt red ice. "
         "Item placement logic will respect this option, so it might be required to use this to progress.";

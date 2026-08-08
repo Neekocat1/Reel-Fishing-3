@@ -423,6 +423,7 @@ void Settings::CreateOptions() {
     });
     OPT_U8(RSK_BOMBCHU_BAG, "Bombchu Bag", {"None", "Single Bag", "Progressive Bags"}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("BombchuBag"), mOptionDescriptions[RSK_BOMBCHU_BAG], WIDGET_CVAR_COMBOBOX, RO_BOMBCHU_BAG_NONE);
     OPT_U8(RSK_ENABLE_BOMBCHU_DROPS, "Bombchu Drops", {"No", "Yes"}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("EnableBombchuDrops"), mOptionDescriptions[RSK_ENABLE_BOMBCHU_DROPS], WIDGET_CVAR_COMBOBOX, RO_AMMO_DROPS_ON);
+    OPT_BOOL(RSK_PROGRESSIVE_GORON_SWORD, "Progressive Goron Sword", CVAR_RANDOMIZER_SETTING("ProgressiveGoronSword"), mOptionDescriptions[RSK_PROGRESSIVE_GORON_SWORD]);
     // TODO: AmmoDrops and/or HeartDropRefill, combine with/separate Ammo Drops from Bombchu Drops?
     // Triforce Hunt: the total piece count is the on/off control. Zero disables the hunt entirely; any
     // positive value adds that many Triforce Pieces to the pool and unlocks the pieces-location option.
@@ -2116,6 +2117,7 @@ void Settings::CreateOptions() {
                                                                                  &mOptions[RSK_ROCS_FEATHER],
                                                                                  &mOptions[RSK_BOMBCHU_BAG],
                                                                                  &mOptions[RSK_ENABLE_BOMBCHU_DROPS],
+                                                                                 &mOptions[RSK_PROGRESSIVE_GORON_SWORD],
                                                                                  &mOptions[RSK_INFINITE_UPGRADES],
                                                                                  &mOptions[RSK_SKELETON_KEY],
                                                                              },
@@ -2305,6 +2307,7 @@ void Settings::CreateOptions() {
                                             &mOptions[RSK_SHUFFLE_100_GS_REWARD],
                                             &mOptions[RSK_SHUFFLE_BEAN_SOULS],
                                             &mOptions[RSK_ROCS_FEATHER],
+                                            &mOptions[RSK_PROGRESSIVE_GORON_SWORD],
                                             &mOptions[RSK_SHUFFLE_BOSS_SOULS],
                                             &mOptions[RSK_SHUFFLE_DEKU_STICK_BAG],
                                             &mOptions[RSK_SHUFFLE_DEKU_NUT_BAG],
