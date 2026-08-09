@@ -392,7 +392,7 @@ void RegionTable_Init_DodongosCavern() {
         LOCATION(RC_DODONGOS_CAVERN_MQ_STAIRCASE_UPPER_CRATE_3, logic->CanBreakCrates()),
         LOCATION(RC_DODONGOS_CAVERN_MQ_STAIRCASE_UPPER_CRATE_4, logic->CanBreakCrates()),
         LOCATION(RC_DODONGOS_CAVERN_MQ_LOWER_2F_CRATE_SILVER,   logic->CanBreakCrates() || (ctx->GetTrickOption(RT_VISIBLE_COLLISION) && (logic->IsChild || logic->CanUse(RG_HOOKSHOT)))),
-        // possible with the hookshot method and longshot, but precise and would be it's own trick
+        // possible with the hookshot method and longshot, but precise and would be its own trick
         LOCATION(RC_DODONGOS_CAVERN_MQ_UPPER_2F_CRATE_SILVER,   logic->CanBreakCrates() || (ctx->GetTrickOption(RT_VISIBLE_COLLISION) && logic->IsChild)),
     }, {
         //Exits

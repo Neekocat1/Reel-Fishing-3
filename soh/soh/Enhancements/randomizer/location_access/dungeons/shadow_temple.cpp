@@ -664,7 +664,7 @@ void RegionTable_Init_ShadowTemple() {
         ENTRANCE(RR_SHADOW_TEMPLE_MQ_STONE_UMBRELLA_ROOM, true),
     });
 
-    //For this room, logic assumes you can either take damage, wear passive spike resistence (Goron tunic or hovers) or see the spikes to navigate across the floor
+    //For this room, logic assumes you can either take damage, wear passive spike resistance (Goron tunic or hovers) or see the spikes to navigate across the floor
     //As this only matters with 1 heart/OHKO logic, which is already a trick-level setting, using Hook and Longshot to reach rupees without moving is allowed
     areaTable[RR_SHADOW_TEMPLE_MQ_FLOOR_SPIKES_S_DOOR] = Region("Shadow Temple MQ Floor Spikes South Door", SCENE_SHADOW_TEMPLE, {}, {
         //Locations
@@ -817,7 +817,7 @@ void RegionTable_Init_ShadowTemple() {
         //Locations
         LOCATION(RC_SHADOW_TEMPLE_MQ_AFTER_WIND_ENEMY_CHEST,  logic->CanKillEnemy(RE_GIBDO) && logic->HasItem(RG_OPEN_CHEST)),
         LOCATION(RC_SHADOW_TEMPLE_MQ_AFTER_WIND_HIDDEN_CHEST, logic->HasExplosives() && (ctx->GetTrickOption(RT_LENS_SHADOW_MQ) || logic->CanUse(RG_LENS_OF_TRUTH)) && logic->HasItem(RG_OPEN_CHEST)),
-        //The various methods for this can be a bit specific, might be worthy of it's own trick when it becomes relevant with dungeon shortcut settings.
+        //The various methods for this can be a bit specific, might be worthy of its own trick when it becomes relevant with dungeon shortcut settings.
         LOCATION(RC_SHADOW_TEMPLE_MQ_GS_AFTER_WIND,           logic->HasExplosives() || (ctx->GetTrickOption(RT_VISIBLE_COLLISION) && logic->CanGetEnemyDrop(RE_GOLD_SKULLTULA))),
         LOCATION(RC_SHADOW_TEMPLE_MQ_BEFORE_BOAT_POT_1,       logic->CanBreakPots()),
         LOCATION(RC_SHADOW_TEMPLE_MQ_BEFORE_BOAT_POT_2,       logic->CanBreakPots()),

@@ -1395,7 +1395,7 @@ void DrawFlagArrayWithTooltips(const std::string& name, T& flags, Colors color, 
     ImGui::PopID();
 }
 
-// Draw a flag bitfield as an grid of checkboxes
+// Draw a flag bitfield as a grid of checkboxes
 void DrawFlagTableArray16(const FlagTable& flagTable, uint16_t row, uint16_t& flags) {
     ImGui::PushID((std::to_string(row) + flagTable.name).c_str());
     for (int32_t flagIndex = 15; flagIndex >= 0; flagIndex--) {
