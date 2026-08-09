@@ -1117,7 +1117,7 @@ void GenerateItemPool() {
     if (junkToAdd > 0) {
         if (ctx->GetOption(RSK_ICE_TRAP_PERCENT).Is(100)) {
             iceTrapstoAdd = static_cast<int>(junkToAdd);
-        } else if (ctx->GetOption(RSK_ICE_TRAP_PERCENT).Get() >= 0) {
+        } else if (ctx->GetOption(RSK_ICE_TRAP_PERCENT).Get() > 0) {
             for (size_t count = 0; count < junkToAdd; count++) {
                 if (Random(0, 101) < ctx->GetOption(RSK_ICE_TRAP_PERCENT).Get()) {
                     iceTrapstoAdd++;

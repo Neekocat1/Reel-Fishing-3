@@ -2296,7 +2296,7 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                     mSaveContext->magicLevel += (!state ? -1 : 1);
                 } break;
                 case RG_PROGRESSIVE_OCARINA: {
-                    uint8_t i;
+                    int32_t i;
                     for (i = 0; i < 3; i++) {
                         if (CurrentInventory(ITEM_OCARINA_FAIRY) == OcarinaLookup[i]) {
                             break;
@@ -2325,7 +2325,7 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                 case RG_FIRE_ARROWS:
                 case RG_ICE_ARROWS:
                 case RG_LIGHT_ARROWS:
-                    SetInventory(item.GetGIEntry()->itemId, (!state ? ITEM_NONE : item.GetGIEntry()->itemId));
+                    SetInventory(item.GetGIEntry()->itemId, (!state ? (uint16_t)ITEM_NONE : item.GetGIEntry()->itemId));
                     break;
                 case RG_MAGIC_BEAN:
                 case RG_MAGIC_BEAN_PACK: {

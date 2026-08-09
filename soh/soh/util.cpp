@@ -688,7 +688,7 @@ std::array<std::string, RA_MAX> rcareaPrefixes = {
 };
 
 const std::string& SohUtils::GetSceneName(int32_t scene) {
-    if (scene > sceneNames.size()) {
+    if (scene < 0 || static_cast<size_t>(scene) >= sceneNames.size()) {
         SPDLOG_WARN("Passed invalid scene id to SohUtils::GetSceneName: ({})", scene);
         assert(false);
         return invalidString;
@@ -713,7 +713,7 @@ const std::string& SohUtils::GetItemName(int32_t item) {
             break;
     }
 
-    if (item >= currentItemNames->size()) {
+    if (item < 0 || static_cast<size_t>(item) >= currentItemNames->size()) {
         SPDLOG_WARN("Passed invalid item id to SohUtils::GetItemName: ({})", item);
         assert(false);
         return invalidString;
@@ -737,7 +737,7 @@ const std::string& SohUtils::GetQuestItemName(int32_t item) {
             currentQuestItemNames = &questItemNamesEng;
             break;
     }
-    if (item > questItemNamesEng.size()) {
+    if (item < 0 || static_cast<size_t>(item) >= questItemNamesEng.size()) {
         SPDLOG_WARN("Passed invalid quest item id to SohUtils::GetQuestItemName: ({})", item);
         assert(false);
         return invalidString;
@@ -747,7 +747,7 @@ const std::string& SohUtils::GetQuestItemName(int32_t item) {
 }
 
 const std::string& SohUtils::GetRandomizerCheckAreaPrefix(int32_t rcarea) {
-    if (rcarea > rcareaPrefixes.size()) {
+    if (rcarea < 0 || static_cast<size_t>(rcarea) >= rcareaPrefixes.size()) {
         SPDLOG_WARN("Passed invalid rcarea to SohUtils::GetRandomizerCheckAreaPrefix: ({})", rcarea);
         assert(false);
         return invalidString;

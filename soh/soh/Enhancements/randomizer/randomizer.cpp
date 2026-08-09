@@ -107,7 +107,7 @@ std::unordered_map<std::string, SceneID> spoilerFileDungeonToScene = {
 
 #ifdef _MSC_VER
 #pragma optimize("", off)
-#else
+#elif defined(__GNUC__) && !defined(__clang__)
 #pragma GCC push_options
 #pragma GCC optimize("O0")
 #endif
@@ -183,7 +183,7 @@ bool Randomizer::SpoilerFileExists(const char* spoilerFileName) {
 }
 #ifdef _MSC_VER
 #pragma optimize("", on)
-#else
+#elif defined(__GNUC__) && !defined(__clang__)
 #pragma GCC pop_options
 #endif
 
@@ -1033,14 +1033,16 @@ void JoinRandoGenerationThread() {
 
 class ExtendedVanillaTableInvalidItemIdException : public std::exception {
   private:
-    s16 itemID;
+    std::string message;
 
   public:
-    ExtendedVanillaTableInvalidItemIdException(s16 itemID) : itemID(itemID) {
+    ExtendedVanillaTableInvalidItemIdException(s16 itemID)
+        : message(std::to_string(itemID) +
+                  " is not a valid ItemID for the extendedVanillaGetItemTable. If you are adding a new "
+                  "item, try adding it to randoGetItemTable instead.") {
     }
-    std::string what() {
-        return itemID + " is not a valid ItemID for the extendedVanillaGetItemTable. If you are adding a new"
-                        "item, try adding it to randoGetItemTable instead.";
+    const char* what() const noexcept override {
+        return message.c_str();
     }
 };
 

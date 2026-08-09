@@ -923,9 +923,9 @@ void ActorViewerWindow::DrawElement() {
 
         PushStyleCombobox(THEME_COLOR);
         if (ImGui::BeginCombo("Actor Type", acMapping[category])) {
-            for (int i = 0; i < acMapping.size(); i++) {
+            for (size_t i = 0; i < acMapping.size(); i++) {
                 if (ImGui::Selectable(acMapping[i])) {
-                    category = i;
+                    category = static_cast<int>(i);
                     PopulateActorDropdown(category, list);
                     break;
                 }
@@ -938,7 +938,7 @@ void ActorViewerWindow::DrawElement() {
         }
 
         if (ImGui::BeginCombo("Actor", filler.c_str())) {
-            for (int i = 0; i < list.size(); i++) {
+            for (size_t i = 0; i < list.size(); i++) {
                 std::string label = std::to_string(i) + ": " + ActorDB::Instance->RetrieveEntry(list[i]->id).name;
                 std::string description = GetActorDescription(list[i]->id);
                 if (description != "")

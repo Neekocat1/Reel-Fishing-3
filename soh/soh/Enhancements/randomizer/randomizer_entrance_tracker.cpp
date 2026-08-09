@@ -898,6 +898,9 @@ void EntranceTrackerWindow::DrawElement() {
             case ENTRANCE_DESTINATION_TYPE:
                 entranceList = destListSortedByType;
                 break;
+            default:
+                assert(false);
+                return;
         }
 
         // Begin tracker list

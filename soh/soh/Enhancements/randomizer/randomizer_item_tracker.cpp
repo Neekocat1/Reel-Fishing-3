@@ -51,8 +51,6 @@ std::vector<ItemTrackerItem> mainWindowItems = {};
 
 static WidgetInfo backgroundColor;
 static WidgetInfo windowTypeWidget;
-static WidgetInfo enableDraggingWidget;
-static WidgetInfo onlyPausedWidget;
 static WidgetInfo ammoTracking;
 static WidgetInfo keyTracking;
 static WidgetInfo triforcePieceCount;
@@ -876,7 +874,7 @@ void DrawItemCount(ItemTrackerItem item, bool hideMax) {
         ImGui::PopStyleColor();
     } else {
         ImGui::SetCursorScreenPos(ImVec2(p.x, p.y - 14));
-        ImGui::Text("");
+        ImGui::TextUnformatted("");
     }
 }
 
@@ -926,7 +924,7 @@ bool HasBossSoul(RandomizerInf bossSoul) {
 
 void DrawItem(ItemTrackerItem item) {
     uint32_t actualItemId =
-        GameInteractor::IsSaveLoaded() && item.kind == ITEM_KIND_ITEM ? INV_CONTENT(item.id) : ITEM_NONE;
+        GameInteractor::IsSaveLoaded() && item.kind == ITEM_KIND_ITEM ? INV_CONTENT(item.id) : (uint8_t)ITEM_NONE;
     float iconSize = static_cast<float>(CVarGetInteger(CVAR_TRACKER_ITEM("IconSize"), 36));
     bool hasItem = actualItemId != ITEM_NONE;
     bool hideMax = false;
@@ -2235,8 +2233,6 @@ void RegisterItemTrackerWidgets() {
                      .ComboMap(windowType))
         .Callback([](WidgetInfo& info) { RefreshItemTrackerMainWindow(); });
     SohGui::mSohMenu->AddSearchWidget({ windowTypeWidget, "Randomizer", "Item Tracker", "General Settings" });
-    enableDraggingWidget;
-    onlyPausedWidget;
 
     ammoTracking = { .name = "Ammo/Capacity Tracking", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
     ammoTracking.CVar(CVAR_TRACKER_ITEM("ItemCountType"))

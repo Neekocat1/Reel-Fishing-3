@@ -145,7 +145,7 @@ void Settings::HandleKeyringUI() {
     const bool chestGameKeyring =
         CVarGetInteger(CVAR_RANDOMIZER_SETTING("ShuffleChestMinigame"), RO_GENERIC_OFF) != RO_GENERIC_OFF;
     const uint8_t maxKeyringCount = 8 + fortressKeyring + chestGameKeyring;
-    if (mOptions[RSK_KEYRINGS_RANDOM_COUNT].GetOptionCount() != maxKeyringCount + 1) {
+    if (mOptions[RSK_KEYRINGS_RANDOM_COUNT].GetOptionCount() != static_cast<size_t>(maxKeyringCount) + 1) {
         mOptions[RSK_KEYRINGS_RANDOM_COUNT].ChangeOptions(NumOpts(0, maxKeyringCount));
     }
     if (fortressKeyring) {
@@ -435,16 +435,16 @@ void Settings::CreateOptions() {
         } else {
             mOptions[RSK_TRIFORCE_HUNT_PIECES_LOCATION].Unhide();
         }
-        if (mOptions[RSK_RAINBOW_BRIDGE_TRIFORCE_COUNT].GetOptionCount() != triforceTotal + 1) {
+        if (mOptions[RSK_RAINBOW_BRIDGE_TRIFORCE_COUNT].GetOptionCount() != static_cast<size_t>(triforceTotal) + 1) {
             mOptions[RSK_RAINBOW_BRIDGE_TRIFORCE_COUNT].ChangeOptions(NumOpts(0, triforceTotal));
         }
-        if (mOptions[RSK_GBK_TRIFORCE_COUNT].GetOptionCount() != triforceTotal + 1) {
+        if (mOptions[RSK_GBK_TRIFORCE_COUNT].GetOptionCount() != static_cast<size_t>(triforceTotal) + 1) {
             mOptions[RSK_GBK_TRIFORCE_COUNT].ChangeOptions(NumOpts(0, triforceTotal));
         }
-        if (mOptions[RSK_GANONS_SOUL_TRIFORCE_COUNT].GetOptionCount() != triforceTotal + 1) {
+        if (mOptions[RSK_GANONS_SOUL_TRIFORCE_COUNT].GetOptionCount() != static_cast<size_t>(triforceTotal) + 1) {
             mOptions[RSK_GANONS_SOUL_TRIFORCE_COUNT].ChangeOptions(NumOpts(0, triforceTotal));
         }
-        if (mOptions[RSK_WINCON_TRIFORCE_COUNT].GetOptionCount() != triforceTotal + 1) {
+        if (mOptions[RSK_WINCON_TRIFORCE_COUNT].GetOptionCount() != static_cast<size_t>(triforceTotal) + 1) {
             mOptions[RSK_WINCON_TRIFORCE_COUNT].ChangeOptions(NumOpts(0, triforceTotal));
         }
     });

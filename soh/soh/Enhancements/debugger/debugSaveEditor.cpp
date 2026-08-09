@@ -320,7 +320,8 @@ static void DrawButtonItemSelector(const char* label, int buttonIndex, UIWidgets
                         Player* player = GET_PLAYER(gPlayState);
                         if (player != nullptr) {
                             // Check item type and update corresponding equipment
-                            if (slotEntry.id >= ITEM_SWORD_KOKIRI && slotEntry.id <= ITEM_SWORD_BROKEN) {
+                            if ((slotEntry.id >= ITEM_SWORD_KOKIRI && slotEntry.id <= ITEM_SWORD_BGS) ||
+                                slotEntry.id == ITEM_SWORD_BROKEN) {
                                 player->currentSwordItemId = slotEntry.id;
                             } else if (slotEntry.id >= ITEM_SHIELD_DEKU && slotEntry.id <= ITEM_SHIELD_MIRROR) {
                                 if (slotEntry.id == ITEM_SHIELD_DEKU)
@@ -1901,7 +1902,7 @@ void DrawUpgradeIcon(const std::string& categoryName, int32_t categoryId, const 
 
     PushStyleButton(Colors::DarkGray);
     auto value = (size_t)CUR_UPG_VALUE(categoryId);
-    uint8_t item = value < items.size() ? items[value] : ITEM_NONE;
+    uint8_t item = value < items.size() ? items[value] : (uint8_t)ITEM_NONE;
     const ItemMapEntry& slotEntry = itemMapping[item];
     if (ImGui::ImageButton(
             slotEntry.name.c_str(),
@@ -1996,11 +1997,11 @@ void DrawEquipmentTab() {
         if (i < 4) {
             isEquipped = (currentSword == equipmentValues[i]);
         } else if (i < 8) {
-            isEquipped = (currentShield == (PLAYER_SHIELD_DEKU + (i - 4)));
+            isEquipped = (currentShield == static_cast<int8_t>(PLAYER_SHIELD_DEKU + (i - 4)));
         } else if (i < 12) {
-            isEquipped = (currentTunic == (PLAYER_TUNIC_KOKIRI + (i - 8)));
+            isEquipped = (currentTunic == static_cast<int8_t>(PLAYER_TUNIC_KOKIRI + (i - 8)));
         } else {
-            isEquipped = (currentBoots == (PLAYER_BOOTS_KOKIRI + (i - 12)));
+            isEquipped = (currentBoots == static_cast<int8_t>(PLAYER_BOOTS_KOKIRI + (i - 12)));
         }
 
         PushStyleButton(Colors::DarkGray);
@@ -2439,7 +2440,7 @@ void DrawDungeonItemsTab() {
         }
 
         UIWidgets::BeginCard(SohUtils::GetSceneName(dungeonIndex).c_str());
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), SohUtils::GetSceneName(dungeonIndex).c_str());
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", SohUtils::GetSceneName(dungeonIndex).c_str());
 
         // Map, Compass, Small Key, Boss Key (new order)
         DrawDungeonItemButton(ITEM_DUNGEON_MAP, dungeonIndex);

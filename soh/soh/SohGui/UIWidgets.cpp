@@ -1319,7 +1319,7 @@ void BeginCardLayout(const CardLayoutOptions& options) {
 
     // First pass: calculate fixed widths and count auto-sized columns
     for (int i = 0; i < columnsPerRow; i++) {
-        if (i < options.fixedColumnWidths.size() && options.fixedColumnWidths[i] > 0.0f) {
+        if (static_cast<size_t>(i) < options.fixedColumnWidths.size() && options.fixedColumnWidths[i] > 0.0f) {
             columnWidths[i] = options.fixedColumnWidths[i];
             totalFixedWidth += columnWidths[i];
         } else {
@@ -1336,7 +1336,7 @@ void BeginCardLayout(const CardLayoutOptions& options) {
 
     // Second pass: assign auto-width to columns that need it
     for (int i = 0; i < columnsPerRow; i++) {
-        if (i >= options.fixedColumnWidths.size() || options.fixedColumnWidths[i] <= 0.0f) {
+        if (static_cast<size_t>(i) >= options.fixedColumnWidths.size() || options.fixedColumnWidths[i] <= 0.0f) {
             columnWidths[i] = autoWidth;
         }
     }
