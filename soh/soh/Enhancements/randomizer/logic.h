@@ -60,6 +60,7 @@ class Logic {
     bool CanHitEyeTargets();
     bool CanDetonateBombFlowers();
     bool CanDetonateUprightBombFlower();
+    bool BeanPlanted(LogicVal beanEvent);
     bool CanHammerRecoilHover(bool needShield = false);
     bool Water3FCentralToHighEmblem();
     bool WaterRisingTargetTo3FCentral();

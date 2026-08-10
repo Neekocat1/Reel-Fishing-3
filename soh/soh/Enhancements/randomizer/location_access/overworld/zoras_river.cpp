@@ -38,7 +38,8 @@ void RegionTable_Init_ZoraRiver() {
 
     areaTable[RR_ZORAS_RIVER] = Region("Zora River", SCENE_ZORAS_RIVER, {
         //Events
-        EVENT_ACCESS(LOGIC_FAIRY_ACCESS, logic->CallGossipFairy() || (logic->IsChild && logic->CanUse(RG_STICKS)) || (logic->IsChild && logic->CanUse(RG_MAGIC_BEAN) && logic->HasItem(RG_ZORAS_RIVER_BEAN_SOUL) && logic->CanUse(RG_SONG_OF_STORMS))),
+        EVENT_ACCESS(LOGIC_PLANT_ZORAS_RIVER_BEAN, CanPlantBean(RG_ZORAS_RIVER_BEAN_SOUL)),
+        EVENT_ACCESS(LOGIC_FAIRY_ACCESS,           logic->CallGossipFairy() || (logic->IsChild && logic->CanUse(RG_STICKS)) || (logic->IsChild && logic->BeanPlanted(LOGIC_PLANT_ZORAS_RIVER_BEAN) && logic->CanUse(RG_SONG_OF_STORMS))),
     }, {
         //Locations
         LOCATION(RC_ZR_MAGIC_BEAN_SALESMAN,                  logic->IsChild && logic->HasItem(RG_SPEAK_HYLIAN) && GetCheckPrice() <= GetWalletCapacity()),
@@ -54,9 +55,9 @@ void RegionTable_Init_ZoraRiver() {
         LOCATION(RC_ZR_GS_LADDER,                            logic->IsChild && logic->CanKillEnemy(RE_GOLD_SKULLTULA, ED_SHORT_JUMPSLASH) && logic->CanGetNightTimeGS()),
         LOCATION(RC_ZR_GS_NEAR_RAISED_GROTTOS,               logic->IsAdult && logic->CanGetEnemyDrop(RE_GOLD_SKULLTULA, ED_LONGSHOT) && logic->CanGetNightTimeGS()),
         LOCATION(RC_ZR_GS_ABOVE_BRIDGE,                      logic->IsAdult && logic->CanGetEnemyDrop(RE_GOLD_SKULLTULA, ED_HOOKSHOT) && logic->CanGetNightTimeGS()),
-        LOCATION(RC_ZR_BEAN_SPROUT_FAIRY_1,                  logic->IsChild && logic->CanUse(RG_MAGIC_BEAN) && logic->HasItem(RG_ZORAS_RIVER_BEAN_SOUL) && logic->CanUse(RG_SONG_OF_STORMS)),
-        LOCATION(RC_ZR_BEAN_SPROUT_FAIRY_2,                  logic->IsChild && logic->CanUse(RG_MAGIC_BEAN) && logic->HasItem(RG_ZORAS_RIVER_BEAN_SOUL) && logic->CanUse(RG_SONG_OF_STORMS)),
-        LOCATION(RC_ZR_BEAN_SPROUT_FAIRY_3,                  logic->IsChild && logic->CanUse(RG_MAGIC_BEAN) && logic->HasItem(RG_ZORAS_RIVER_BEAN_SOUL) && logic->CanUse(RG_SONG_OF_STORMS)),
+        LOCATION(RC_ZR_BEAN_SPROUT_FAIRY_1,                  logic->IsChild && logic->BeanPlanted(LOGIC_PLANT_ZORAS_RIVER_BEAN) && logic->CanUse(RG_SONG_OF_STORMS)),
+        LOCATION(RC_ZR_BEAN_SPROUT_FAIRY_2,                  logic->IsChild && logic->BeanPlanted(LOGIC_PLANT_ZORAS_RIVER_BEAN) && logic->CanUse(RG_SONG_OF_STORMS)),
+        LOCATION(RC_ZR_BEAN_SPROUT_FAIRY_3,                  logic->IsChild && logic->BeanPlanted(LOGIC_PLANT_ZORAS_RIVER_BEAN) && logic->CanUse(RG_SONG_OF_STORMS)),
         LOCATION(RC_ZR_NEAR_DOMAIN_GOSSIP_STONE_FAIRY,       logic->CallGossipFairy()),
         LOCATION(RC_ZR_NEAR_DOMAIN_GOSSIP_STONE_FAIRY_BIG,   logic->CanUse(RG_SONG_OF_STORMS)),
         LOCATION(RC_ZR_BENEATH_WATERFALL_LEFT_RUPEE,         logic->IsAdult && (logic->HasItem(RG_BRONZE_SCALE) || logic->CanUse(RG_IRON_BOOTS) || logic->CanUse(RG_BOOMERANG) || (ctx->GetTrickOption(RT_VOIDOUT_COLLECTION) && logic->CanVoid()))),
@@ -115,7 +116,7 @@ void RegionTable_Init_ZoraRiver() {
     }, {
         //Exits
         ENTRANCE(RR_ZR_FRONT,            logic->IsAdult || logic->HasItem(RG_BRONZE_SCALE) || logic->HasItem(RG_POWER_BRACELET) || logic->BlastOrSmash() || logic->HasItem(RG_HOVER_BOOTS)),
-        ENTRANCE(RR_ZR_ATOP_LADDER,      ((logic->IsAdult || logic->HasItem(RG_POWER_BRACELET)) && logic->CanClimbLadder()) || (logic->IsAdult && CanPlantBean(RR_ZORAS_RIVER, RG_ZORAS_RIVER_BEAN_SOUL))),
+        ENTRANCE(RR_ZR_ATOP_LADDER,      ((logic->IsAdult || logic->HasItem(RG_POWER_BRACELET)) && logic->CanClimbLadder()) || (logic->IsAdult && logic->BeanPlanted(LOGIC_PLANT_ZORAS_RIVER_BEAN))),
         ENTRANCE(RR_ZR_PILLAR,           (logic->IsChild && logic->HasItem(RG_POWER_BRACELET)) || logic->CanUse(RG_HOVER_BOOTS) || (logic->IsAdult && ctx->GetTrickOption(RT_ZR_LOWER))),
         ENTRANCE(RR_ZR_FROM_SHORTCUT,    logic->HasItem(RG_SILVER_SCALE) || logic->CanUse(RG_IRON_BOOTS)),
         ENTRANCE(RR_ZR_STORMS_GROTTO,    logic->CanOpenStormsGrotto()),

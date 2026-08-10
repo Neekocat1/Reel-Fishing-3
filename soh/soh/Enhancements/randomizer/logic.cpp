@@ -1,4 +1,5 @@
 #include "logic.h"
+#include "bean_patches.h"
 #include "../debugger/performanceTimer.h"
 
 #include <vector>
@@ -13,6 +14,8 @@
 #include <spdlog/spdlog.h>
 #include <ship/utils/StringHelper.h>
 #include "location_access.h"
+
+extern "C" PlayState* gPlayState;
 
 namespace Rando {
 
@@ -1305,6 +1308,29 @@ bool Logic::CanDetonateUprightBombFlower() {
     return CanDetonateBombFlowers() || HasItem(RG_GORONS_BRACELET) ||
            (ctx->GetTrickOption(RT_BLUE_FIRE_MUD_WALLS) && CanUse(RG_BOTTLE_WITH_BLUE_FIRE) &&
             (EffectiveHealth() > 8 || CanUse(RG_NAYRUS_LOVE)));
+}
+
+bool Logic::BeanPlanted(LogicVal beanEvent) {
+    // rely on Get, rest is to track bean being planted out of logic
+    if (Get(beanEvent)) {
+        return true;
+    }
+
+    const BeanPatch* patch = FindBeanPatch(beanEvent);
+    if (patch == nullptr) {
+        assert(false);
+        return false;
+    }
+
+    // Get the swch value for the scene
+    uint32_t swch;
+    if (gPlayState != nullptr && gPlayState->sceneNum == patch->scene) {
+        swch = gPlayState->actorCtx.flags.swch;
+    } else {
+        swch = GetSaveContext()->sceneFlags[patch->scene].swch;
+    }
+
+    return swch >> patch->swchFlag & 1;
 }
 
 bool Logic::CanHammerRecoilHover(bool needShield) {
@@ -3060,16 +3086,9 @@ void Logic::Reset(bool resetSaveContext /*= true*/) {
         }
 
         if (ctx->GetOption(RSK_SHUFFLE_BEAN_SOULS).Is(false)) {
-            SetRandoInf(RAND_INF_DEATH_MOUNTAIN_CRATER_BEAN_SOUL, true);
-            SetRandoInf(RAND_INF_DEATH_MOUNTAIN_TRAIL_BEAN_SOUL, true);
-            SetRandoInf(RAND_INF_DESERT_COLOSSUS_BEAN_SOUL, true);
-            SetRandoInf(RAND_INF_GERUDO_VALLEY_BEAN_SOUL, true);
-            SetRandoInf(RAND_INF_GRAVEYARD_BEAN_SOUL, true);
-            SetRandoInf(RAND_INF_KOKIRI_FOREST_BEAN_SOUL, true);
-            SetRandoInf(RAND_INF_LAKE_HYLIA_BEAN_SOUL, true);
-            SetRandoInf(RAND_INF_LOST_WOODS_BRIDGE_BEAN_SOUL, true);
-            SetRandoInf(RAND_INF_LOST_WOODS_BEAN_SOUL, true);
-            SetRandoInf(RAND_INF_ZORAS_RIVER_BEAN_SOUL, true);
+            for (const BeanPatch& patch : beanPatches) {
+                SetRandoInf(patch.soulRandInf, true);
+            }
         }
 
         // If not keysanity, start with 1 logical key to account for automatically unlocking the basement door in
