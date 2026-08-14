@@ -241,6 +241,8 @@ foreach(_torch_game SM64 MK64 SF64 PM64 FZERO BK64 MARIO_ARTIST)
     set(BUILD_${_torch_game} OFF CACHE BOOL "" FORCE)
 endforeach()
 
+add_compile_definitions(YAML_CPP_STATIC_DEFINE)
+
 add_subdirectory(torch)
 
 # Build-time ROM extraction. soh links torch as a static library, which compiles out torch's
@@ -257,6 +259,11 @@ add_executable(soh-o2r-packer EXCLUDE_FROM_ALL
     ${CMAKE_CURRENT_SOURCE_DIR}/soh/assets/tools/soh-o2r-packer/PngTexture.cpp
 )
 target_link_libraries(soh-o2r-packer PRIVATE torch)
+
+if(MSVC)
+    set_target_properties(soh-torch soh-o2r-packer PROPERTIES
+        MSVC_RUNTIME_LIBRARY "$<IF:$<CONFIG:Debug>,MultiThreadedDebug,MultiThreaded>")
+endif()
 
 # Target to generate OTRs. SOH_ROM_PATH takes roms and/or directories of roms; torch names each
 # archive (oot.o2r or oot-mq.o2r) from its hash, so a vanilla and a master quest rom produce both
