@@ -124,6 +124,16 @@ typedef enum {
     INGO_RACE_NONE,
 } IngoRaceType;
 
+// The Bombchu Bowling prize cycle always runs in this order, only the entry it starts on is random
+typedef enum {
+    BOWLING_FIRST_PRIZE_RANDOM,
+    BOWLING_FIRST_PRIZE_BOMB_BAG,
+    BOWLING_FIRST_PRIZE_PURPLE_RUPEE,
+    BOWLING_FIRST_PRIZE_BOMBCHUS,
+    BOWLING_FIRST_PRIZE_HEART_PIECE,
+    BOWLING_FIRST_PRIZE_BOMBS,
+} BombchuBowlingFirstPrize;
+
 typedef enum {
     RANDOMIZE_OFF,
     RANDOMIZE_ON_NEW_SCENE,

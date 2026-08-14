@@ -1,7 +1,6 @@
 #pragma once
 
 #include "randomizerTypes.h"
-#include "z64save.h"
 #include "item_override.h"
 #include "hint.h"
 #include "fishsanity.h"

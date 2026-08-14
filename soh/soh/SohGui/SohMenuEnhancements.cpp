@@ -5,13 +5,14 @@
 #include <soh/OTRGlobals.h>
 #include <soh/Enhancements/cosmetics/authenticGfxPatches.h>
 #include <soh/Enhancements/TimeDisplay/TimeDisplay.h>
-#include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/Restorations/GetItemManipulation.h"
+#include "soh/Enhancements/randomizer/SeedContext.h"
 #include <ship/Context.h>
 
 extern "C" {
 #include "functions.h"
 #include "variables.h"
+#include "macros.h"
 extern PlayState* gPlayState;
 }
 
@@ -85,6 +86,15 @@ static const std::map<int32_t, const char*> sleepingWaterfallOptions = {
     { WATERFALL_ALWAYS, "Always" },
     { WATERFALL_ONCE, "Once" },
     { WATERFALL_NEVER, "Never" },
+};
+
+static const std::map<int32_t, const char*> bombchuBowlingFirstPrizeOptions = {
+    { BOWLING_FIRST_PRIZE_RANDOM, "Random" },
+    { BOWLING_FIRST_PRIZE_BOMB_BAG, "Bomb Bag" },
+    { BOWLING_FIRST_PRIZE_PURPLE_RUPEE, "Purple Rupee" },
+    { BOWLING_FIRST_PRIZE_BOMBCHUS, "Bombchus" },
+    { BOWLING_FIRST_PRIZE_HEART_PIECE, "Heart Piece" },
+    { BOWLING_FIRST_PRIZE_BOMBS, "Bombs" },
 };
 
 static const std::map<int32_t, const char*> allPowers = {
@@ -1524,6 +1534,13 @@ void SohMenu::AddMenuEnhancements() {
                      .DefaultValue(10)
                      .Format("%d bombchus")
                      .Tooltip("The number of Bombchus available at the start of the Bombchu Bowling minigame."));
+    AddWidget(path, "First Prize", WIDGET_CVAR_COMBOBOX)
+        .CVar(CVAR_ENHANCEMENT("BombchuBowlingFirstPrize"))
+        .PreFunc(bombchuBowlingDisabledFunc)
+        .Options(ComboboxOptions()
+                     .ComboMap(bombchuBowlingFirstPrizeOptions)
+                     .DefaultIndex(BOWLING_FIRST_PRIZE_RANDOM)
+                     .Tooltip("The prize the cycle starts on."));
     AddWidget(path, "Horseback Archery", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Customize Behavior##HBA", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("CustomizeHorsebackArchery"))

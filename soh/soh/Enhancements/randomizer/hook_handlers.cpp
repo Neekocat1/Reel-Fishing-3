@@ -45,6 +45,7 @@ extern "C" {
 #include "src/overlays/actors/ovl_En_Box/z_en_box.h"
 #include "src/overlays/actors/ovl_En_Skj/z_en_skj.h"
 #include "src/overlays/actors/ovl_En_Hy/z_en_hy.h"
+#include "src/overlays/actors/ovl_En_Bom_Bowl_Man/z_en_bom_bowl_man.h"
 #include "src/overlays/actors/ovl_En_Bom_Bowl_Pit/z_en_bom_bowl_pit.h"
 #include "src/overlays/actors/ovl_En_Ge1/z_en_ge1.h"
 #include "src/overlays/actors/ovl_En_Ge2/z_en_ge2.h"
@@ -1938,6 +1939,36 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
             // Only check for bomb bag when bombchus aren't in logic
             // and only check for bombchus when bombchus are in logic
             *should = INV_CONTENT((RAND_GET_OPTION(RSK_BOMBCHU_BAG) ? ITEM_BOMBCHU : ITEM_BOMB)) != ITEM_NONE;
+            break;
+        }
+        case VB_SET_BOMBCHU_BOWLING_PRIZE_SELECT: {
+            EnBomBowlMan* bowlMan = va_arg(args, EnBomBowlMan*);
+            bowlMan->prizeSelect = 0;
+            *should = false;
+            break;
+        }
+        case VB_SET_BOMBCHU_BOWLING_PRIZE: {
+            EnBomBowlMan* bowlMan = va_arg(args, EnBomBowlMan*);
+            s16* prize = va_arg(args, s16*);
+            switch (bowlMan->prizeSelect) {
+                case 0:
+                    *prize = Flags_GetItemGetInf(ITEMGETINF_11) ? EXITEM_PURPLE_RUPEE_BOWLING : EXITEM_BOMB_BAG_BOWLING;
+                    break;
+                case 1:
+                    *prize =
+                        Flags_GetItemGetInf(ITEMGETINF_12) ? EXITEM_PURPLE_RUPEE_BOWLING : EXITEM_HEART_PIECE_BOWLING;
+                    break;
+                case 2:
+                    *prize = EXITEM_BOMBCHUS_BOWLING;
+                    break;
+                case 3:
+                    *prize = EXITEM_PURPLE_RUPEE_BOWLING;
+                    break;
+                case 4:
+                    *prize = EXITEM_BOMBS_BOWLING;
+                    break;
+            }
+            *should = false;
             break;
         }
         case VB_SHOULD_CHECK_FOR_FISHING_RECORD: {

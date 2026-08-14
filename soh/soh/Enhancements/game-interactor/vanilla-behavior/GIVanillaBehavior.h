@@ -2482,6 +2482,23 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*EnBomBowlMan`
+    // - `s16*` (prize to show, an `ExItemType`)
+    VB_SET_BOMBCHU_BOWLING_PRIZE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnBomBowlMan`
+    VB_SET_BOMBCHU_BOWLING_PRIZE_SELECT,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `int32_t` (button - promoted from `s16`)
     VB_SET_BUTTON_ITEM_FROM_C_BUTTON_SLOT,
 
