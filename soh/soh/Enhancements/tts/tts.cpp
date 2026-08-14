@@ -9,7 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include "soh/ShipInit.hpp"
-#include "message_data_static.h"
+#include "message_data_fmt.h"
 #include "overlays/gamestates/ovl_file_choose/file_choose.h"
 #include "soh/Enhancements/boss-rush/BossRush.h"
 #include "soh/Enhancements/FileSelectEnhancements.h"
