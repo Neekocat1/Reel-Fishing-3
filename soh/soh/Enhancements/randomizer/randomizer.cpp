@@ -22,6 +22,7 @@
 #include "soh/ObjectExtension/ObjectExtension.h"
 #include "soh/Enhancements/randomizer/RCToRandInf.h"
 #include "dungeon.h"
+#include "logic.h"
 
 extern "C" {
 #include "src/overlays/actors/ovl_Obj_Bean/z_obj_bean.h"
@@ -589,57 +590,20 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGe
         case RG_GANONS_CASTLE_BOSS_KEY:
             return !CHECK_DUNGEON_ITEM(DUNGEON_KEY_BOSS, SCENE_GANONS_TOWER) ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
         case RG_FOREST_TEMPLE_SMALL_KEY:
-            return OTRGlobals::Instance->gRandoContext->GetDungeon(Rando::FOREST_TEMPLE)
-                               ->GetTotalSmallKeys(&gSaveContext) < FOREST_TEMPLE_SMALL_KEY_MAX
-                       ? CAN_OBTAIN
-                       : CANT_OBTAIN_ALREADY_HAVE;
         case RG_FIRE_TEMPLE_SMALL_KEY:
-            return OTRGlobals::Instance->gRandoContext->GetDungeon(Rando::FIRE_TEMPLE)
-                               ->GetTotalSmallKeys(&gSaveContext) < FIRE_TEMPLE_SMALL_KEY_MAX
-                       ? CAN_OBTAIN
-                       : CANT_OBTAIN_ALREADY_HAVE;
         case RG_WATER_TEMPLE_SMALL_KEY:
-            return OTRGlobals::Instance->gRandoContext->GetDungeon(Rando::WATER_TEMPLE)
-                               ->GetTotalSmallKeys(&gSaveContext) < WATER_TEMPLE_SMALL_KEY_MAX
-                       ? CAN_OBTAIN
-                       : CANT_OBTAIN_ALREADY_HAVE;
         case RG_SPIRIT_TEMPLE_SMALL_KEY:
-            return OTRGlobals::Instance->gRandoContext->GetDungeon(Rando::SPIRIT_TEMPLE)
-                               ->GetTotalSmallKeys(&gSaveContext) < SPIRIT_TEMPLE_SMALL_KEY_MAX
-                       ? CAN_OBTAIN
-                       : CANT_OBTAIN_ALREADY_HAVE;
         case RG_SHADOW_TEMPLE_SMALL_KEY:
-            return OTRGlobals::Instance->gRandoContext->GetDungeon(Rando::SHADOW_TEMPLE)
-                               ->GetTotalSmallKeys(&gSaveContext) < SHADOW_TEMPLE_SMALL_KEY_MAX
-                       ? CAN_OBTAIN
-                       : CANT_OBTAIN_ALREADY_HAVE;
         case RG_BOTTOM_OF_THE_WELL_SMALL_KEY:
-            return OTRGlobals::Instance->gRandoContext->GetDungeon(Rando::BOTTOM_OF_THE_WELL)
-                               ->GetTotalSmallKeys(&gSaveContext) < BOTTOM_OF_THE_WELL_SMALL_KEY_MAX
-                       ? CAN_OBTAIN
-                       : CANT_OBTAIN_ALREADY_HAVE;
         case RG_GERUDO_TRAINING_GROUND_SMALL_KEY:
-            return OTRGlobals::Instance->gRandoContext->GetDungeon(Rando::GERUDO_TRAINING_GROUND)
-                               ->GetTotalSmallKeys(&gSaveContext) < GERUDO_TRAINING_GROUND_SMALL_KEY_MAX
-                       ? CAN_OBTAIN
-                       : CANT_OBTAIN_ALREADY_HAVE;
-        case RG_GERUDO_FORTRESS_SMALL_KEY: {
-            std::vector<uint8_t> DoorFlags = THIEVES_HIDEOUT_DOOR_FLAGS;
-            return Rando::FindTotalSmallKeys(&gSaveContext, SCENE_THIEVES_HIDEOUT, &DoorFlags) <
-                           GERUDO_FORTRESS_SMALL_KEY_MAX
+        case RG_GERUDO_FORTRESS_SMALL_KEY:
+        case RG_GANONS_CASTLE_SMALL_KEY:
+        case RG_TREASURE_GAME_SMALL_KEY: {
+            SceneID scene = Rando::Logic::RandoGetToDungeonScene.find(randoGet)->second;
+            return Rando::GetSceneTotalSmallKeys(&gSaveContext, scene) < Rando::GetSceneSmallKeyMax(scene)
                        ? CAN_OBTAIN
                        : CANT_OBTAIN_ALREADY_HAVE;
         }
-        case RG_GANONS_CASTLE_SMALL_KEY:
-            return OTRGlobals::Instance->gRandoContext->GetDungeon(Rando::GANONS_CASTLE)
-                               ->GetTotalSmallKeys(&gSaveContext) < GANONS_CASTLE_SMALL_KEY_MAX
-                       ? CAN_OBTAIN
-                       : CANT_OBTAIN_ALREADY_HAVE;
-        case RG_TREASURE_GAME_SMALL_KEY:
-            // I assume this cannot be easily manipulated?
-            return gSaveContext.inventory.dungeonKeys[SCENE_TREASURE_BOX_SHOP] < TREASURE_GAME_SMALL_KEY_MAX
-                       ? CAN_OBTAIN
-                       : CANT_OBTAIN_ALREADY_HAVE;
 
         // Dungeon Rewards
         case RG_KOKIRI_EMERALD:
@@ -1205,15 +1169,14 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             Flags_SetRandomizerInf(RAND_INF_HAS_SKELETON_KEY);
             // This isn't technically necessary, because keys will no longer be consumed,
             // but for the player's sanity we display that they _have_ keys.
-            gSaveContext.inventory.dungeonKeys[SCENE_FOREST_TEMPLE] = FOREST_TEMPLE_SMALL_KEY_MAX;
-            gSaveContext.inventory.dungeonKeys[SCENE_FIRE_TEMPLE] = FIRE_TEMPLE_SMALL_KEY_MAX;
-            gSaveContext.inventory.dungeonKeys[SCENE_WATER_TEMPLE] = WATER_TEMPLE_SMALL_KEY_MAX;
-            gSaveContext.inventory.dungeonKeys[SCENE_SPIRIT_TEMPLE] = SPIRIT_TEMPLE_SMALL_KEY_MAX;
-            gSaveContext.inventory.dungeonKeys[SCENE_SHADOW_TEMPLE] = SHADOW_TEMPLE_SMALL_KEY_MAX;
-            gSaveContext.inventory.dungeonKeys[SCENE_BOTTOM_OF_THE_WELL] = BOTTOM_OF_THE_WELL_SMALL_KEY_MAX;
-            gSaveContext.inventory.dungeonKeys[SCENE_GERUDO_TRAINING_GROUND] = GERUDO_TRAINING_GROUND_SMALL_KEY_MAX;
-            gSaveContext.inventory.dungeonKeys[SCENE_THIEVES_HIDEOUT] = GERUDO_FORTRESS_SMALL_KEY_MAX;
-            gSaveContext.inventory.dungeonKeys[SCENE_INSIDE_GANONS_CASTLE] = GANONS_CASTLE_SMALL_KEY_MAX;
+            for (Rando::DungeonInfo* dungeon : Rando::Context::GetInstance()->GetDungeons()->GetDungeonList()) {
+                uint8_t keys = Rando::GetSceneSmallKeyMax(dungeon->GetScene());
+                if (keys > 0) {
+                    gSaveContext.inventory.dungeonKeys[dungeon->GetScene()] = keys;
+                }
+            }
+            gSaveContext.inventory.dungeonKeys[SCENE_THIEVES_HIDEOUT] =
+                Rando::GetSceneSmallKeyMax(SCENE_THIEVES_HIDEOUT);
         } else if (item >= RG_KEATON_MASK && item <= RG_MASK_OF_TRUTH) {
             if (!ChildTradeSlotOccupied()) {
                 INV_CONTENT(ITEM_TRADE_CHILD) = (int)ITEM_MASK_KEATON + (item - RG_KEATON_MASK);
@@ -1288,7 +1251,6 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         (item >= RG_DEKU_TREE_MAP && item <= RG_ICE_CAVERN_MAP) ||
         (item >= RG_DEKU_TREE_COMPASS && item <= RG_ICE_CAVERN_COMPASS)) {
         u16 mapIndex = gSaveContext.mapIndex;
-        u8 numOfKeysOnKeyring = 0;
         switch (item) {
             case RG_DEKU_TREE_MAP:
             case RG_DEKU_TREE_COMPASS:
@@ -1308,7 +1270,6 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             case RG_FOREST_TEMPLE_KEY_RING:
             case RG_FOREST_TEMPLE_BOSS_KEY:
                 mapIndex = SCENE_FOREST_TEMPLE;
-                numOfKeysOnKeyring = FOREST_TEMPLE_SMALL_KEY_MAX;
                 break;
             case RG_FIRE_TEMPLE_MAP:
             case RG_FIRE_TEMPLE_COMPASS:
@@ -1316,7 +1277,6 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             case RG_FIRE_TEMPLE_KEY_RING:
             case RG_FIRE_TEMPLE_BOSS_KEY:
                 mapIndex = SCENE_FIRE_TEMPLE;
-                numOfKeysOnKeyring = FIRE_TEMPLE_SMALL_KEY_MAX;
                 break;
             case RG_WATER_TEMPLE_MAP:
             case RG_WATER_TEMPLE_COMPASS:
@@ -1324,7 +1284,6 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             case RG_WATER_TEMPLE_KEY_RING:
             case RG_WATER_TEMPLE_BOSS_KEY:
                 mapIndex = SCENE_WATER_TEMPLE;
-                numOfKeysOnKeyring = WATER_TEMPLE_SMALL_KEY_MAX;
                 break;
             case RG_SPIRIT_TEMPLE_MAP:
             case RG_SPIRIT_TEMPLE_COMPASS:
@@ -1332,7 +1291,6 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             case RG_SPIRIT_TEMPLE_KEY_RING:
             case RG_SPIRIT_TEMPLE_BOSS_KEY:
                 mapIndex = SCENE_SPIRIT_TEMPLE;
-                numOfKeysOnKeyring = SPIRIT_TEMPLE_SMALL_KEY_MAX;
                 break;
             case RG_SHADOW_TEMPLE_MAP:
             case RG_SHADOW_TEMPLE_COMPASS:
@@ -1340,14 +1298,12 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             case RG_SHADOW_TEMPLE_KEY_RING:
             case RG_SHADOW_TEMPLE_BOSS_KEY:
                 mapIndex = SCENE_SHADOW_TEMPLE;
-                numOfKeysOnKeyring = SHADOW_TEMPLE_SMALL_KEY_MAX;
                 break;
             case RG_BOTTOM_OF_THE_WELL_MAP:
             case RG_BOTTOM_OF_THE_WELL_COMPASS:
             case RG_BOTTOM_OF_THE_WELL_SMALL_KEY:
             case RG_BOTTOM_OF_THE_WELL_KEY_RING:
                 mapIndex = SCENE_BOTTOM_OF_THE_WELL;
-                numOfKeysOnKeyring = BOTTOM_OF_THE_WELL_SMALL_KEY_MAX;
                 break;
             case RG_ICE_CAVERN_MAP:
             case RG_ICE_CAVERN_COMPASS:
@@ -1359,22 +1315,18 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             case RG_GERUDO_TRAINING_GROUND_SMALL_KEY:
             case RG_GERUDO_TRAINING_GROUND_KEY_RING:
                 mapIndex = SCENE_GERUDO_TRAINING_GROUND;
-                numOfKeysOnKeyring = GERUDO_TRAINING_GROUND_SMALL_KEY_MAX;
                 break;
             case RG_GERUDO_FORTRESS_SMALL_KEY:
             case RG_GERUDO_FORTRESS_KEY_RING:
                 mapIndex = SCENE_THIEVES_HIDEOUT;
-                numOfKeysOnKeyring = GERUDO_FORTRESS_SMALL_KEY_MAX;
                 break;
             case RG_GANONS_CASTLE_SMALL_KEY:
             case RG_GANONS_CASTLE_KEY_RING:
                 mapIndex = SCENE_INSIDE_GANONS_CASTLE;
-                numOfKeysOnKeyring = GANONS_CASTLE_SMALL_KEY_MAX;
                 break;
             case RG_TREASURE_GAME_SMALL_KEY:
             case RG_TREASURE_GAME_KEY_RING:
                 mapIndex = SCENE_TREASURE_BOX_SHOP;
-                numOfKeysOnKeyring = TREASURE_GAME_SMALL_KEY_MAX;
                 break;
             default:
                 break;
@@ -1391,8 +1343,9 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         }
 
         if ((item >= RG_FOREST_TEMPLE_KEY_RING) && (item <= RG_TREASURE_GAME_KEY_RING)) {
-            gSaveContext.ship.stats.dungeonKeys[mapIndex] = numOfKeysOnKeyring;
-            gSaveContext.inventory.dungeonKeys[mapIndex] = numOfKeysOnKeyring;
+            u8 keysOnRing = Rando::GetSceneSmallKeyMax((SceneID)mapIndex);
+            gSaveContext.ship.stats.dungeonKeys[mapIndex] = keysOnRing;
+            gSaveContext.inventory.dungeonKeys[mapIndex] = keysOnRing;
             return Return_Item_Entry(giEntry, RG_NONE);
         }
 
