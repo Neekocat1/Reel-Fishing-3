@@ -1,5 +1,4 @@
-#ifndef UIWidgets2_hpp
-#define UIWidgets2_hpp
+#pragma once
 
 #include "UIWidgetOptions.hpp"
 
@@ -552,5 +551,3 @@ ImVec4 GetRandomValue(uint64_t* state = nullptr);
 
 Color_RGBA8 RGBA8FromVec(ImVec4 vec);
 ImVec4 VecFromRGBA8(Color_RGBA8 color);
-
-#endif /* UIWidgets_hpp */

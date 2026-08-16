@@ -1,5 +1,3 @@
-#ifndef FISHSANITY_H
-#define FISHSANITY_H
 #pragma once
 
 #include <z64.h>
@@ -209,5 +207,3 @@ void Fishsanity_CloseGreyscaleColor(PlayState* play);
 #ifdef __cplusplus
 }
 #endif
-
-#endif // FISHSANITY_H

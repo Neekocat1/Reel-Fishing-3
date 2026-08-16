@@ -1,8 +1,5 @@
 #pragma once
 
-#ifndef GI_VANILLA_BEHAVIOR_H
-#define GI_VANILLA_BEHAVIOR_H
-
 typedef enum {
     // #### `result`
     // ```c
@@ -3751,5 +3748,3 @@ typedef enum {
     // - `*EnBox`
     VB_CHEST_CONSIDER_CHEST_OPEN,
 } GIVanillaBehavior;
-
-#endif

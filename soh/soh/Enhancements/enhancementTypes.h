@@ -1,5 +1,4 @@
-#ifndef _ENHANCEMENT_TYPES_H_
-#define _ENHANCEMENT_TYPES_H_
+#pragma once
 
 typedef enum {
     WARP_MODE_OVERRIDE_OFF,
@@ -147,5 +146,3 @@ typedef enum {
     TELEPORT_TRAP_SIMPLE,
     TELEPORT_TRAP_ADVANCED,
 } TeleportTrapMode;
-
-#endif
