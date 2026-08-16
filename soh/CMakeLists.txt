@@ -102,7 +102,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # Sub-projects
 ################################################################################
 if (NOT TARGET libultraship)
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../libultraship ${CMAKE_BINARY_DIR}/libultraship)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../libultraship ${CMAKE_BINARY_DIR}/libultraship SYSTEM)
 endif()
 
 set(PROJECT_NAME soh)
@@ -315,15 +315,17 @@ endif()
 # Compile definitions
 ################################################################################
 
-target_include_directories(${PROJECT_NAME} PRIVATE assets
+target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include/
     ${CMAKE_CURRENT_SOURCE_DIR}/src/
-    ${CMAKE_CURRENT_SOURCE_DIR}/../libultraship/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/
+    .
+)
+
+target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
     ${SDL2-INCLUDE}
     ${SDL2-NET-INCLUDE}
-    ${CMAKE_CURRENT_SOURCE_DIR}/assets/
     ${dr_libs_SOURCE_DIR}
-    .
 )
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -678,7 +680,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "CafeOS")
 
         "$<$<CONFIG:Debug>:-Wl,--wrap=abort>"
     )
-    target_include_directories(${PROJECT_NAME} PRIVATE
+    target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
         ${DEVKITPRO}/portlibs/wiiu/include/
     )
 else()
