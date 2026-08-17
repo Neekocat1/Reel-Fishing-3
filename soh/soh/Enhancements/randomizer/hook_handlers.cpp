@@ -433,8 +433,6 @@ void RandomizerOnPlayerUpdateForRCQueueHandler() {
             rc != RC_MARKET_BOMBCHU_BOWLING_SECOND_PRIZE &&
             // Always show ItemGet animation for ice traps
             !(getItemEntry.modIndex == MOD_RANDOMIZER && getItemEntry.getItemId == RG_ICE_TRAP) &&
-            // Always show ItemGet animation outside of randomizer to keep behaviour consistent in vanilla
-            IS_RANDO &&
             (CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK) == SGIA_ALL ||
              (CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK) == SGIA_JUNK &&
               (
@@ -543,7 +541,7 @@ void RandomizerOnItemReceiveHandler(GetItemEntry receivedItemEntry) {
     }
 
     if (loc->GetRandomizerCheck() == RC_SPIRIT_TEMPLE_SILVER_GAUNTLETS_CHEST) {
-        if (!CVarGetInteger(CVAR_ENHANCEMENT("TimeSavers.SkipCutscene.Story"), IS_RANDO)) {
+        if (!CVarGetInteger(CVAR_ENHANCEMENT("TimeSavers.SkipCutscene.Story"), 1)) {
             static uint32_t updateHook;
             updateHook = GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerUpdate>([]() {
                 Player* player = GET_PLAYER(gPlayState);
@@ -784,15 +782,13 @@ bool ShouldGiveFishingPrize(f32 sFishOnHandLength) {
                              ? CVarGetInteger(CVAR_ENHANCEMENT("MinimumFishWeightChild"), 10)
                              : 10;
         f32 score = sqrt(((f32)weight - 0.5f) / 0.0036f);
-        return sFishOnHandLength >= score && (IS_RANDO ? !Flags_GetRandomizerInf(RAND_INF_CHILD_FISHING)
-                                                       : !(HIGH_SCORE(HS_FISHING) & HS_FISH_PRIZE_CHILD));
+        return sFishOnHandLength >= score && !Flags_GetRandomizerInf(RAND_INF_CHILD_FISHING);
     } else {
         int32_t weight = CVarGetInteger(CVAR_ENHANCEMENT("CustomizeFishing"), 0)
                              ? CVarGetInteger(CVAR_ENHANCEMENT("MinimumFishWeightAdult"), 13)
                              : 13;
         f32 score = sqrt(((f32)weight - 0.5f) / 0.0036f);
-        return sFishOnHandLength >= score && (IS_RANDO ? !Flags_GetRandomizerInf(RAND_INF_ADULT_FISHING)
-                                                       : !(HIGH_SCORE(HS_FISHING) & HS_FISH_PRIZE_ADULT));
+        return sFishOnHandLength >= score && !Flags_GetRandomizerInf(RAND_INF_ADULT_FISHING);
     }
 }
 
@@ -1985,48 +1981,44 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
             break;
         }
         case VB_SHOULD_GIVE_VANILLA_FISHING_PRIZE: {
-            VBFishingData* fishData = va_arg(args, VBFishingData*);
-            *should = !IS_RANDO && ShouldGiveFishingPrize(fishData->fishWeight);
+            // rando gives its prize via VB_GIVE_RANDO_FISHING_PRIZE instead
+            *should = false;
             break;
         }
         case VB_GIVE_RANDO_FISHING_PRIZE: {
-            if (IS_RANDO) {
-                VBFishingData* fishData = va_arg(args, VBFishingData*);
-                if (*fishData->sFishOnHandIsLoach) {
-                    if (!Flags_GetRandomizerInf(RAND_INF_CAUGHT_LOACH) &&
-                        OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_FISHSANITY) ==
-                            RO_FISHSANITY_HYRULE_LOACH) {
-                        Flags_SetRandomizerInf(RAND_INF_CAUGHT_LOACH);
-                        Message_StartTextbox(gPlayState, TEXT_FISHING_RELEASE_THIS_ONE, NULL);
-                        *should = true;
-                        fishData->actor->stateAndTimer = 20;
+            VBFishingData* fishData = va_arg(args, VBFishingData*);
+            if (*fishData->sFishOnHandIsLoach) {
+                if (!Flags_GetRandomizerInf(RAND_INF_CAUGHT_LOACH) &&
+                    OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_FISHSANITY) ==
+                        RO_FISHSANITY_HYRULE_LOACH) {
+                    Flags_SetRandomizerInf(RAND_INF_CAUGHT_LOACH);
+                    Message_StartTextbox(gPlayState, TEXT_FISHING_RELEASE_THIS_ONE, NULL);
+                    *should = true;
+                    fishData->actor->stateAndTimer = 20;
+                }
+            } else {
+                if (ShouldGiveFishingPrize(fishData->fishWeight)) {
+                    if (LINK_IS_CHILD) {
+                        Flags_SetRandomizerInf(RAND_INF_CHILD_FISHING);
+                        HIGH_SCORE(HS_FISHING) |= HS_FISH_PRIZE_CHILD;
+                    } else {
+                        Flags_SetRandomizerInf(RAND_INF_ADULT_FISHING);
+                        HIGH_SCORE(HS_FISHING) |= HS_FISH_PRIZE_ADULT;
                     }
-                } else {
-                    if (ShouldGiveFishingPrize(fishData->fishWeight)) {
-                        if (LINK_IS_CHILD) {
-                            Flags_SetRandomizerInf(RAND_INF_CHILD_FISHING);
-                            HIGH_SCORE(HS_FISHING) |= HS_FISH_PRIZE_CHILD;
-                        } else {
-                            Flags_SetRandomizerInf(RAND_INF_ADULT_FISHING);
-                            HIGH_SCORE(HS_FISHING) |= HS_FISH_PRIZE_ADULT;
-                        }
-                        *should = true;
-                        *fishData->sSinkingLureLocation = (u8)Rand_ZeroFloat(3.999f) + 1;
-                        fishData->actor->stateAndTimer = 0;
-                    }
+                    *should = true;
+                    *fishData->sSinkingLureLocation = (u8)Rand_ZeroFloat(3.999f) + 1;
+                    fishData->actor->stateAndTimer = 0;
                 }
             }
             break;
         }
         case VB_GIVE_RANDO_GLITCH_FISHING_PRIZE: {
-            if (IS_RANDO) {
-                Fishing* fishing = va_arg(args, Fishing*);
-                if (!Flags_GetRandomizerInf(RAND_INF_ADULT_FISHING)) {
-                    Flags_SetRandomizerInf(RAND_INF_ADULT_FISHING);
-                }
-                *should = true;
-                fishing->stateAndTimer = 0;
+            Fishing* fishing = va_arg(args, Fishing*);
+            if (!Flags_GetRandomizerInf(RAND_INF_ADULT_FISHING)) {
+                Flags_SetRandomizerInf(RAND_INF_ADULT_FISHING);
             }
+            *should = true;
+            fishing->stateAndTimer = 0;
             break;
         }
         case VB_TRADE_TIMER_EYEDROPS: {

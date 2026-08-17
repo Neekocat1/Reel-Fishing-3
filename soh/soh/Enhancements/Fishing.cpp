@@ -1,9 +1,11 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipInit.hpp"
+#include "src/overlays/actors/ovl_Fishing/z_fishing.h"
 
 extern "C" {
 #include <variables.h>
 #include <functions.h>
+#include <macros.h>
 extern PlayState* gPlayState;
 extern SaveContext gSaveContext;
 f32 Fishing_GetMinimumRequiredScore();
@@ -18,6 +20,13 @@ void BuildFishingMessage(uint16_t* textId, bool* loadFromMessageTable) {
 void RegisterFishingMessages() {
     COND_ID_HOOK(OnOpenText, 0x40AE, CVarGetInteger(CVAR_ENHANCEMENT("CustomizeFishing"), 0), BuildFishingMessage);
     COND_ID_HOOK(OnOpenText, 0x4080, CVarGetInteger(CVAR_ENHANCEMENT("CustomizeFishing"), 0), BuildFishingMessage);
+
+    COND_VB_SHOULD(
+        VB_SHOULD_GIVE_VANILLA_FISHING_PRIZE, (!IS_RANDO && CVarGetInteger(CVAR_ENHANCEMENT("CustomizeFishing"), 0)), {
+            VBFishingData* fishData = va_arg(args, VBFishingData*);
+            *should = fishData->fishWeight >= Fishing_GetMinimumRequiredScore() &&
+                      !(HIGH_SCORE(HS_FISHING) & (LINK_IS_CHILD ? HS_FISH_PRIZE_CHILD : HS_FISH_PRIZE_ADULT));
+        });
 }
 
 void RegisterHoverFishing() {
@@ -58,7 +67,7 @@ void RegisterAllowFishingBlankB() {
         });
 }
 
-static RegisterShipInitFunc initFunc(RegisterFishingMessages, { CVAR_ENHANCEMENT("CustomizeFishing") });
+static RegisterShipInitFunc initFunc(RegisterFishingMessages, { CVAR_ENHANCEMENT("CustomizeFishing"), "IS_RANDO" });
 static RegisterShipInitFunc initHoverFishing(RegisterHoverFishing, { CVAR_ENHANCEMENT("HoverFishing") });
 static RegisterShipInitFunc initAllowFishingBlankB(RegisterAllowFishingBlankB,
                                                    { CVAR_ENHANCEMENT("FishingBlankB"), "IS_RANDO" });
