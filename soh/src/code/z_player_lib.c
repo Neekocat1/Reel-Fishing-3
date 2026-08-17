@@ -782,7 +782,7 @@ s32 Player_GetStrength(void) {
         return PLAYER_STR_NONE;
     }
 
-    if (CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0) || LINK_IS_ADULT) {
+    if (GameInteractor_Should(VB_PLAYER_MEETS_AGE_REQ, LINK_IS_ADULT, LINK_AGE_ADULT)) {
         return strengthUpgrade;
     } else if (strengthUpgrade != 0) {
         return PLAYER_STR_BRACELET;

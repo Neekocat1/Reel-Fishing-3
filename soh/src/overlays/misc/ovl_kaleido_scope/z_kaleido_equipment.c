@@ -773,29 +773,27 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
 
     for (rowStart = 0, j = 0, temp = 0, i = 0; i < 4; i++, rowStart += 4, j += 16) {
         gSPVertex(POLY_OPA_DISP++, &pauseCtx->equipVtx[j], 16, 0);
-        bool drawGreyItems = !CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0);
         if (LINK_AGE_IN_YEARS == YEARS_CHILD) {
             point = CUR_UPG_VALUE(sChildUpgrades[i]);
             if ((point != 0) && (CUR_UPG_VALUE(sChildUpgrades[i]) != 0)) {
+                int upgradeItem = sChildUpgradeItemBases[i] + point - 1;
                 // Grey Out the Gauntlets as Child
                 // Grey Out Strength Upgrades when Disabled and the Toggle Strength Option is on
-                if ((drawGreyItems &&
-                     ((sChildUpgradeItemBases[i] + CUR_UPG_VALUE(sChildUpgrades[i]) - 1) == ITEM_GAUNTLETS_SILVER ||
-                      (sChildUpgradeItemBases[i] + CUR_UPG_VALUE(sChildUpgrades[i]) - 1) == ITEM_GAUNTLETS_GOLD)) ||
+                if (!CHECK_AGE_REQ_ITEM(upgradeItem) ||
                     (CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0) &&
                      CVarGetInteger(CVAR_ENHANCEMENT("StrengthDisabled"), 0) && sChildUpgrades[i] == UPG_STRENGTH)) {
                     gDPSetGrayscaleColor(POLY_OPA_DISP++, 109, 109, 109, 255);
                     gSPGrayscale(POLY_OPA_DISP++, true);
                 }
-                KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx,
-                                                   gItemIcons[sChildUpgradeItemBases[i] + point - 1], 32, 32, 0);
+                KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, gItemIcons[upgradeItem], 32, 32, 0);
                 gSPGrayscale(POLY_OPA_DISP++, false);
             }
         } else {
             if ((i == 0) &&
                 (CUR_UPG_VALUE(sAdultUpgrades[i]) ==
                  0)) { // If the player doesn't have the bow, load the current slingshot ammo upgrade instead.
-                if (drawGreyItems) {
+                // Check the base item, the upgrade level can be 0 here
+                if (!CHECK_AGE_REQ_ITEM(sChildUpgradeItemBases[i])) {
                     gDPSetGrayscaleColor(POLY_OPA_DISP++, 109, 109, 109, 255); // Grey Out Slingshot Bullet Bags
                     gSPGrayscale(POLY_OPA_DISP++, true);
                 }
@@ -804,19 +802,18 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                     32, 32, 0);
                 gSPGrayscale(POLY_OPA_DISP++, false);
             } else if (CUR_UPG_VALUE(sAdultUpgrades[i]) != 0) {
-                // Grey Out the Goron Bracelet when Not Randomized and Toggle Strength Option is off
+                int upgradeItem = sAdultUpgradeItemBases[i] + CUR_UPG_VALUE(sAdultUpgrades[i]) - 1;
+                // Grey Out upgrades the wrong age, ie the Goron Bracelet as Adult,
+                // unless rando or the Toggle Strength Option still has a use for it
                 // Grey Out Strength Upgrades when Disabled and the Toggle Strength Option is on
-                if ((drawGreyItems &&
-                     (((sAdultUpgradeItemBases[i] + CUR_UPG_VALUE(sAdultUpgrades[i]) - 1) == ITEM_BRACELET &&
-                       !(IS_RANDO) && !CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0)))) ||
+                if ((!CHECK_AGE_REQ_ITEM(upgradeItem) && !(IS_RANDO) &&
+                     !CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0)) ||
                     (CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0) &&
                      CVarGetInteger(CVAR_ENHANCEMENT("StrengthDisabled"), 0) && sAdultUpgrades[i] == UPG_STRENGTH)) {
                     gDPSetGrayscaleColor(POLY_OPA_DISP++, 109, 109, 109, 255);
                     gSPGrayscale(POLY_OPA_DISP++, true);
                 }
-                KaleidoScope_DrawQuadTextureRGBA32(
-                    play->state.gfxCtx, gItemIcons[sAdultUpgradeItemBases[i] + CUR_UPG_VALUE(sAdultUpgrades[i]) - 1],
-                    32, 32, 0);
+                KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, gItemIcons[upgradeItem], 32, 32, 0);
                 gSPGrayscale(POLY_OPA_DISP++, false);
             }
         }

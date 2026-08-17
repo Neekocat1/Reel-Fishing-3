@@ -2497,7 +2497,7 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
     s32 item;
     s32 i;
 
-    if (this->currentMask != PLAYER_MASK_NONE && !CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0)) {
+    if (GameInteractor_Should(VB_PLAYER_UNEQUIP_MASK_WITHOUT_BUTTON, this->currentMask != PLAYER_MASK_NONE, this)) {
         maskItemAction = this->currentMask - 1 + PLAYER_IA_MASK_KEATON;
 
         bool hasOnDpad = false;
@@ -5557,10 +5557,6 @@ void func_8083A0F4(PlayState* play, Player* this) {
             this->interactRangeActor->parent = &this->actor;
             Player_SetupAction(play, this, Player_Action_WaitForCutscene, 0);
             this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
-            if (!CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0) ||
-                !CVarGetInteger(CVAR_ENHANCEMENT("AdultMasks"), 0)) {
-                gSaveContext.ship.maskMemory = PLAYER_MASK_NONE;
-            }
         } else {
             LinkAnimationHeader* anim;
 
@@ -9507,9 +9503,6 @@ void func_80843AE8(PlayState* play, Player* this) {
         OnePointCutscene_Init(play, 9908, 125, &this->actor, CAM_ID_MAIN);
     } else if (play->gameOverCtx.state == GAMEOVER_DEATH_WAIT_GROUND) {
         play->gameOverCtx.state = GAMEOVER_DEATH_DELAY_MENU;
-        if (!CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0)) {
-            gSaveContext.ship.maskMemory = PLAYER_MASK_NONE;
-        }
     }
 }
 
@@ -10820,13 +10813,6 @@ void Player_Init(Actor* thisx, PlayState* play2) {
     Player_UseItem(play, this, ITEM_NONE);
     Player_SetEquipmentData(play, this);
     this->prevBoots = this->currentBoots;
-    // keep masks thru loading zones
-    if (CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0)) {
-        if (INV_CONTENT(ITEM_TRADE_CHILD) == ITEM_SOLD_OUT) {
-            gSaveContext.ship.maskMemory = PLAYER_MASK_NONE;
-        }
-        this->currentMask = gSaveContext.ship.maskMemory;
-    }
     Player_InitCommon(this, play, gPlayerSkelHeaders[((void)0, gSaveContext.linkAge)]);
     // `giObjectSegment` is used for both "get item" objects and title cards. The maximum size for
     // get item objects is 0x2000 (see the assert in func_8083AE40), and the maximum size for
@@ -12674,10 +12660,7 @@ s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
     if (CVarGetInteger(CVAR_SETTING("MoveInFirstPerson"), 0) &&
         CVarGetInteger(CVAR_SETTING("Controls.RightStickAim"), 0)) {
         f32 movementSpeed = LINK_IS_ADULT ? 9.0f : 8.25f;
-        if (CVarGetInteger(CVAR_ENHANCEMENT("MMBunnyHood"), BUNNY_HOOD_VANILLA) != BUNNY_HOOD_VANILLA &&
-            this->currentMask == PLAYER_MASK_BUNNY) {
-            movementSpeed *= 1.5f;
-        }
+        GameInteractor_Should(VB_PLAYER_MODIFY_FIRST_PERSON_SPEED, true, this, &movementSpeed);
 
         f32 relX = (sControlInput->rel.stick_x / 10 * -invertXAxisMulti);
         f32 relY = (sControlInput->rel.stick_y / 10);

@@ -1,6 +1,8 @@
 ﻿#include "SohMenu.h"
 #include <soh/Enhancements/enhancementTypes.h>
 #include "soh/Enhancements/SwitchAge.h"
+#include "soh/Enhancements/AdultMasks.h"
+#include "soh/Enhancements/BunnyHood.h"
 #include <soh/Enhancements/game-interactor/GameInteractor.h>
 #include <soh/OTRGlobals.h>
 #include <soh/Enhancements/cosmetics/authenticGfxPatches.h>
@@ -906,7 +908,7 @@ void SohMenu::AddMenuEnhancements() {
 
     AddWidget(path, "Masks", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Bunny Hood Effect", WIDGET_CVAR_COMBOBOX)
-        .CVar(CVAR_ENHANCEMENT("MMBunnyHood"))
+        .CVar(CVAR_BUNNY_HOOD_NAME)
         .Options(ComboboxOptions()
                      .ComboMap(bunnyHoodEffectMap)
                      .Tooltip("Wearing the Bunny Hood grants a speed and jump boost like in Majora's Mask.\n"
@@ -914,7 +916,7 @@ void SohMenu::AddMenuEnhancements() {
                               "The effects of either option are not accounted for in Randomizer logic.\n"
                               "Also disables NPC's reactions to wearing the Bunny Hood."));
     AddWidget(path, "Masks Equippable as Adult", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_ENHANCEMENT("AdultMasks"))
+        .CVar(CVAR_ADULT_MASKS_NAME)
         .Options(CheckboxOptions().Tooltip("Allows masks to be equipped normally from the pause menu as adult."));
     AddWidget(path, "Persistent Masks", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("PersistentMasks"))

@@ -1143,13 +1143,14 @@ void func_80083108(PlayState* play) {
 
                 if (interfaceCtx->restrictions.tradeItems != 0) {
                     for (i = 1; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
-                        if ((CVarGetInteger(CVAR_ENHANCEMENT("MMBunnyHood"), BUNNY_HOOD_VANILLA) !=
-                             BUNNY_HOOD_VANILLA) &&
-                            (gSaveContext.equips.buttonItems[i] >= ITEM_MASK_KEATON) &&
-                            (gSaveContext.equips.buttonItems[i] <= ITEM_MASK_TRUTH)) {
-                            gSaveContext.buttonStatus[BUTTON_STATUS_INDEX(i)] = BTN_ENABLED;
-                        } else if ((gSaveContext.equips.buttonItems[i] >= ITEM_WEIRD_EGG) &&
-                                   (gSaveContext.equips.buttonItems[i] <= ITEM_CLAIM_CHECK)) {
+                        if ((gSaveContext.equips.buttonItems[i] >= ITEM_WEIRD_EGG) &&
+                            (gSaveContext.equips.buttonItems[i] <= ITEM_CLAIM_CHECK)) {
+                            if (!GameInteractor_Should(VB_DISABLE_TRADE_ITEM_BUTTON, true,
+                                                       gSaveContext.equips.buttonItems[i])) {
+                                gSaveContext.buttonStatus[BUTTON_STATUS_INDEX(i)] = BTN_ENABLED;
+                                continue;
+                            }
+
                             if (gSaveContext.buttonStatus[BUTTON_STATUS_INDEX(i)] == BTN_ENABLED) {
                                 sp28 = 1;
                             }

@@ -3755,4 +3755,79 @@ typedef enum {
     // #### `args`
     // - `*EnBox`
     VB_CHEST_CONSIDER_CHEST_OPEN,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether NPCs give their mask reaction text for the mask being worn.
+    // #### `args`
+    // - `u8 currentMask`
+    VB_NPC_REACT_TO_MASK,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether a trade item button gets greyed out while trade items are restricted.
+    // #### `args`
+    // - `u8 item`
+    VB_DISABLE_TRADE_ITEM_BUTTON,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Movement speed for the "Move in first person" setting, multiplied in place.
+    // #### `args`
+    // - `*Player`
+    // - `f32*` movementSpeed
+    VB_PLAYER_MODIFY_FIRST_PERSON_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether the market night guard goes back to idle once talked to, rather than
+    // a hook taking over his action func.
+    // #### `args`
+    // - `*EnHeishi4`
+    // - `*PlayState`
+    VB_MARKET_NIGHT_GUARD_SET_ACTION_AFTER_TALK,
+
+    // #### `result`
+    // ```c
+    // ageReq == AGE_REQ_NONE || ageReq == gSaveContext.linkAge
+    // ```
+    // Whether the player is the right age for something age gated.
+    // #### `args`
+    // - `u8 ageReq` an `AGE_REQ_*`, which for adult and child is the matching `LINK_AGE_*`
+    VB_PLAYER_MEETS_AGE_REQ,
+
+    // #### `result`
+    // ```c
+    // gItemAgeReqs[itemIndex] == AGE_REQ_NONE || gItemAgeReqs[itemIndex] == gSaveContext.linkAge
+    // ```
+    // Whether the player is the right age to hold an item.
+    // #### `args`
+    // - `u8 itemIndex`
+    VB_ITEM_MEETS_AGE_REQ,
+
+    // #### `result`
+    // ```c
+    // gSlotAgeReqs[slotIndex] == AGE_REQ_NONE || gSlotAgeReqs[slotIndex] == gSaveContext.linkAge
+    // ```
+    // Whether the player is the right age to use an inventory slot.
+    // #### `args`
+    // - `u8 slotIndex`
+    VB_SLOT_MEETS_AGE_REQ,
+
+    // #### `result`
+    // ```c
+    // this->currentMask != PLAYER_MASK_NONE
+    // ```
+    // Whether a worn mask comes off once it's no longer on a button.
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_UNEQUIP_MASK_WITHOUT_BUTTON,
 } GIVanillaBehavior;

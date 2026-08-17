@@ -559,21 +559,6 @@ void Play_Init(GameState* thisx) {
 
     Fault_AddClient(&D_801614B8, ZeldaArena_Display, NULL, NULL);
 
-    // In order to keep masks equipped on first load, we need to pre-set the age reqs for the item and slot
-    if (CVarGetInteger(CVAR_ENHANCEMENT("AdultMasks"), 0) || CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0)) {
-        for (int i = ITEM_MASK_KEATON; i <= ITEM_MASK_TRUTH; i += 1) {
-            gItemAgeReqs[i] = AGE_REQ_NONE;
-        }
-        if (INV_CONTENT(ITEM_TRADE_CHILD) >= ITEM_MASK_KEATON && INV_CONTENT(ITEM_TRADE_CHILD) <= ITEM_MASK_TRUTH) {
-            gSlotAgeReqs[SLOT_TRADE_CHILD] = AGE_REQ_NONE;
-        }
-    } else {
-        for (int i = ITEM_MASK_KEATON; i <= ITEM_MASK_TRUTH; i += 1) {
-            gItemAgeReqs[i] = AGE_REQ_CHILD;
-        }
-        gSlotAgeReqs[SLOT_TRADE_CHILD] = AGE_REQ_CHILD;
-    }
-
     // Handle Rocs Feather requirement
     gItemAgeReqs[ITEM_ROCS_FEATHER] = AGE_REQ_NONE;
     gSlotAgeReqs[SLOT_NAYRUS_LOVE] = AGE_REQ_NONE;
@@ -1150,11 +1135,6 @@ void Play_Update(PlayState* play) {
                     gSaveContext.ship.stats.playTimer++;
                     gSaveContext.ship.stats.sceneTimer++;
                     gSaveContext.ship.stats.roomTimer++;
-
-                    if (CVarGetInteger(CVAR_ENHANCEMENT("MMBunnyHood"), BUNNY_HOOD_VANILLA) != BUNNY_HOOD_VANILLA &&
-                        Player_GetMask(play) == PLAYER_MASK_BUNNY) {
-                        gSaveContext.ship.stats.count[COUNT_TIME_BUNNY_HOOD]++;
-                    }
                 }
 
                 if (play->actorCtx.freezeFlashTimer && (play->actorCtx.freezeFlashTimer-- < 5)) {
