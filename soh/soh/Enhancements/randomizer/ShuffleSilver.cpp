@@ -1,4 +1,5 @@
 #include <soh/OTRGlobals.h>
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "dungeon.h"
 #include "SeedContext.h"
 #include "draw.h"

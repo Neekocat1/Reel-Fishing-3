@@ -3,7 +3,6 @@
 #include "randomizerTypes.h"
 #include "item_override.h"
 #include "hint.h"
-#include "fishsanity.h"
 #include "trial.h"
 
 #include <memory>
@@ -86,7 +85,6 @@ class Context {
                           const std::set<RandomizerTrick>& enabledTricks);
     std::shared_ptr<EntranceShuffler> GetEntranceShuffler();
     std::shared_ptr<Dungeons> GetDungeons();
-    std::shared_ptr<Fishsanity> GetFishsanity();
     DungeonInfo* GetDungeon(size_t key) const;
     DungeonInfo* GetDungeonFromScene(SceneID key) const;
     std::shared_ptr<Logic> GetLogic();
@@ -195,7 +193,6 @@ class Context {
     std::shared_ptr<Dungeons> mDungeons;
     std::shared_ptr<Logic> mLogic;
     std::shared_ptr<Trials> mTrials;
-    std::shared_ptr<Fishsanity> mFishsanity;
     std::shared_ptr<Kaleido> mKaleido;
     bool mSeedGenerated = false;
     bool mSpoilerLoaded = false;

@@ -1,4 +1,5 @@
 #include "Traps.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/ShipUtils.h"

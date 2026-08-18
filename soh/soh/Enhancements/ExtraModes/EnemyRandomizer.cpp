@@ -3,6 +3,7 @@
 #include "soh/ShipUtils.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/Enhancements/enhancementTypes.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ObjectExtension/ObjectExtension.h"
 #include "variables.h"
 #include "soh/ResourceManagerHelpers.h"

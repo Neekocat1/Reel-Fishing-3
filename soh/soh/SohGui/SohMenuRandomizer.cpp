@@ -1,11 +1,11 @@
 #include <unordered_set>
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "SohMenu.h"
 #include "soh/Enhancements/enhancementTypes.h"
 #include "soh/Enhancements/randomizer/randomizer_check_objects.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/settings.h"
-#include "soh/OTRGlobals.h"
 #include "soh/ShipUtils.h"
 #include "soh/SohGui/SohGui.hpp"
 
@@ -67,7 +67,7 @@ void SaveExcludedLocations() {
 }
 
 void DrawLocationsMenu(WidgetInfo& info) {
-    auto ctx = OTRGlobals::Instance->gRandoContext;
+    auto ctx = Rando::Context::GetInstance();
     int32_t currMQDungeonSetting = CVarGetInteger(CVAR_RANDOMIZER_SETTING("MQDungeons"), 0) |
                                    CVarGetInteger(CVAR_RANDOMIZER_SETTING("MQDungeonCount"), 0) << 8;
     static ImVec2 cellPadding(8.0f, 8.0f);
@@ -360,7 +360,7 @@ void UpdateMenuTricks() {
 }
 
 void DrawTricksMenu(WidgetInfo& info) {
-    auto ctx = OTRGlobals::Instance->gRandoContext;
+    auto ctx = Rando::Context::GetInstance();
     auto randoSettings = Rando::Settings::GetInstance();
     static ImVec2 cellPadding(8.0f, 8.0f);
     bool generating = CVarGetInteger(CVAR_GENERAL("RandoGenerating"), 0);
@@ -717,7 +717,7 @@ void SohMenu::AddMenuRandomizer() {
     });
     AddWidget(path, "Generate Randomizer", WIDGET_BUTTON)
         .Callback([](WidgetInfo& info) {
-            OTRGlobals::Instance->gRandoContext->SetSpoilerLoaded(false);
+            Rando::Context::GetInstance()->SetSpoilerLoaded(false);
             GenerateRandomizer(CVarGetInteger(CVAR_RANDOMIZER_SETTING("ManualSeedEntry"), 0) ? seedString : "");
         })
         .PreFunc([](WidgetInfo& info) {

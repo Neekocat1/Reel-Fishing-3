@@ -12,6 +12,7 @@
 #include "soh/SohGui/SohMenu.h"
 #include "dungeon.h"
 #include "entrance.h"
+#include "fishsanity.h"
 #include "location_access.h"
 #include "3drando/fill.hpp"
 #include "soh/Enhancements/debugger/performanceTimer.h"
@@ -1945,8 +1946,7 @@ bool IsCheckShuffled(RandomizerCheck rc) {
                 (showDungeonWonderItems && RandomizerCheckObjects::AreaIsDungeon(loc->GetArea()))) &&
                (loc->GetRCType() != RCTYPE_ICICLE || showIcicles) &&
                (loc->GetRCType() != RCTYPE_RED_ICE || showRedIce) &&
-               (loc->GetRCType() != RCTYPE_FISH ||
-                OTRGlobals::Instance->gRandoContext->GetFishsanity()->GetFishLocationIncluded(loc)) &&
+               (loc->GetRCType() != RCTYPE_FISH || Rando::Fishsanity::GetFishLocationIncluded(loc)) &&
                (loc->GetRCType() != RCTYPE_FREESTANDING ||
                 (showOverworldFreestanding && RandomizerCheckObjects::AreaIsOverworld(loc->GetArea())) ||
                 (showDungeonFreestanding && RandomizerCheckObjects::AreaIsDungeon(loc->GetArea()))) &&

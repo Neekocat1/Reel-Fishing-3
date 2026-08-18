@@ -5,6 +5,7 @@
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/bean_patches.h"
 #include "soh/Enhancements/randomizer/dungeon.h"
+#include "soh/Enhancements/randomizer/fishsanity.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -2913,7 +2914,7 @@ static void RandomizerRegisterHooks() {
             RandomizerOnKaleidoscopeUpdateHandler);
 
         if (RAND_GET_OPTION(RSK_FISHSANITY).IsNot(RO_FISHSANITY_OFF)) {
-            OTRGlobals::Instance->gRandoContext->GetFishsanity()->InitializeFromSave();
+            Rando::Fishsanity::InitializeFromSave();
         }
     });
 }

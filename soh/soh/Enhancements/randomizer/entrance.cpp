@@ -1,4 +1,5 @@
 #include "entrance.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
 
 #include "3drando/fill.hpp"
 #include "3drando/pool_functions.hpp"
