@@ -179,6 +179,9 @@ void TimeSaverOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_li
                     CHECK_QUEST_ITEM(QUEST_MEDALLION_SPIRIT) && CHECK_QUEST_ITEM(QUEST_MEDALLION_SHADOW) &&
                     !Flags_GetEventChkInf(EVENTCHKINF_RETURNED_TO_TEMPLE_OF_TIME_WITH_ALL_MEDALLIONS)) {
                     Flags_SetEventChkInf(EVENTCHKINF_RETURNED_TO_TEMPLE_OF_TIME_WITH_ALL_MEDALLIONS);
+                    if (!IS_RANDO) {
+                        gSaveContext.dayTime = gSaveContext.skyboxTime = 0x2aaa;
+                    }
                     if (GameInteractor_Should(VB_GIVE_ITEM_LIGHT_ARROW, true)) {
                         Item_Give(gPlayState, ITEM_ARROW_LIGHT);
                     }
@@ -513,6 +516,9 @@ void TimeSaverOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_li
                     Flags_SetEventChkInf(EVENTCHKINF_ENTERED_MASTER_SWORD_CHAMBER);
                     Flags_SetEventChkInf(EVENTCHKINF_SHEIK_SPAWNED_AT_MASTER_SWORD_PEDESTAL);
                     Flags_SetEventChkInf(EVENTCHKINF_TIME_TRAVELED_TO_ADULT);
+                    if (!IS_RANDO) {
+                        gSaveContext.dayTime = gSaveContext.skyboxTime = 0x8000;
+                    }
                     if (GameInteractor_Should(VB_GIVE_ITEM_LIGHT_MEDALLION, true)) {
                         Item_Give(gPlayState, ITEM_MEDALLION_LIGHT);
                     }
