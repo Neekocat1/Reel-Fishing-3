@@ -887,7 +887,9 @@ bool HasBossSoul(RandomizerInf bossSoul) {
 void DrawItem(ItemTrackerItem item) {
     auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
     uint32_t actualItemId =
-        GameInteractor::IsSaveLoaded() && item.kind == ITEM_KIND_ITEM ? INV_CONTENT(item.id) : (uint8_t)ITEM_NONE;
+        GameInteractor::IsSaveLoaded() && item.kind == ITEM_KIND_ITEM && item.id < ARRAY_COUNT(gItemSlots)
+            ? INV_CONTENT(item.id)
+            : (uint8_t)ITEM_NONE;
     float iconSize = static_cast<float>(CVarGetInteger(CVAR_TRACKER_ITEM("IconSize"), 36));
     bool hasItem = actualItemId != ITEM_NONE;
     bool hideMax = false;
@@ -931,6 +933,17 @@ void DrawItem(ItemTrackerItem item) {
                 actualItemId = item.id;
                 hasItem = Flags_GetRandomizerInf(RAND_INF_GREG_FOUND);
                 break;
+            case ITEM_NAYRUS_LOVE:
+                // Roc's Feather shares this slot, so the slot being filled isn't enough
+                hasItem = IS_RANDO && OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_ROCS_FEATHER)
+                              ? Flags_GetRandomizerInf(RAND_INF_OBTAINED_NAYRUS_LOVE)
+                              : actualItemId == ITEM_NAYRUS_LOVE;
+                break;
+            case ITEM_FISHING_POLE:
+                actualItemId = item.id;
+                hasItem = IS_RANDO && Flags_GetRandomizerInf(RAND_INF_FISHING_POLE_FOUND);
+                itemName = "Fishing Pole";
+                break;
             case ITEM_NONE: // spacer, don't render
                 return;
         }
@@ -946,19 +959,6 @@ void DrawItem(ItemTrackerItem item) {
                 hasItem = IS_RANDO &&
                           (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT_PIECES_TOTAL) > 0);
                 itemName = "Triforce Piece";
-                break;
-            case ITEM_NAYRUS_LOVE:
-                if (IS_RANDO && OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_ROCS_FEATHER)) {
-                    hasItem = Flags_GetRandomizerInf(RAND_INF_OBTAINED_NAYRUS_LOVE);
-                } else if (!IS_RANDO) {
-                    // In non-rando, check if player has Roc's Feather in inventory
-                    for (int i = 0; i < 24; i++) {
-                        if (gSaveContext.inventory.items[i] == ITEM_ROCS_FEATHER) {
-                            hasItem = true;
-                            break;
-                        }
-                    }
-                }
                 break;
             case RG_ROCS_FEATHER:
                 itemName = "Roc's Feather";
@@ -1063,10 +1063,6 @@ void DrawItem(ItemTrackerItem item) {
                 break;
             case RG_OCARINA_C_RIGHT_BUTTON:
                 itemName = "Ocarina C Right Button";
-                break;
-            case ITEM_FISHING_POLE:
-                hasItem = IS_RANDO && Flags_GetRandomizerInf(RAND_INF_FISHING_POLE_FOUND);
-                itemName = "Fishing Pole";
                 break;
 
             case RG_GUARD_HOUSE_KEY:
