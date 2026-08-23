@@ -553,7 +553,7 @@ void RegionTable_Init_DodongosCavern() {
         //Exits
         ENTRANCE(RR_DODONGOS_CAVERN_MQ_LOBBY,                  true),
         ENTRANCE(RR_DODONGOS_CAVERN_MQ_LOWER_RIGHT_SIDE_SCRUB, logic->CanBreakMudWalls() || logic->HasItem(RG_GORONS_BRACELET)),
-        ENTRANCE(RR_DODONGOS_CAVERN_MQ_LOWER_LIZALFOS,         AnyAgeTime([]{return logic->CanDetonateBombFlowers() || logic->HasItem(RG_GORONS_BRACELET);}) && logic->CanHitEyeTargets()),
+        ENTRANCE(RR_DODONGOS_CAVERN_MQ_LOWER_LIZALFOS,         AnyAgeTime([]{return logic->CanDetonateBombFlowers() || logic->HasItem(RG_GORONS_BRACELET) || ctx->GetTrickOption(RT_BOULDER_COLLISION);}) && logic->CanHitEyeTargets()),
     });
 
     areaTable[RR_DODONGOS_CAVERN_MQ_LOWER_RIGHT_SIDE_SCRUB] = Region("Dodongos Cavern MQ Lower Right Side Scrub", SCENE_DODONGOS_CAVERN, {}, {
