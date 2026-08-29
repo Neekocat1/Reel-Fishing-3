@@ -105,9 +105,6 @@ void Settings::HandleShopsanityPriceUI() {
     }
 }
 
-Settings::Settings() : mExcludeLocationsOptionsAreas(RCAREA_INVALID) {
-}
-
 #define OPT_U8(rsk, ...) mOptions[rsk] = Option::U8(rsk, __VA_ARGS__)
 #define OPT_BOOL(rsk, ...) mOptions[rsk] = Option::Bool(rsk, __VA_ARGS__)
 #define OPT_TRICK(rsk, ...) mTrickSettings[rsk] = TrickSetting::LogicTrick(rsk, __VA_ARGS__)
@@ -1516,8 +1513,6 @@ void Settings::CreateOptions() {
 
     StaticData::optionNameToEnum = PopulateOptionNameToEnum();
 
-    mExcludeLocationsOptionsAreas.reserve(RCAREA_INVALID);
-
     // RANDOTODO sweep trick descriptions and make sure they match a post-refactor, post shuffles reality
     /* Common abbreviations in name tags
     - A: Adult
@@ -2603,7 +2598,7 @@ std::vector<Option*>& Settings::GetExcludeOptionsForArea(const RandomizerCheckAr
     return mExcludeLocationsOptionsAreas[area];
 }
 
-const std::vector<std::vector<Option*>>& Settings::GetExcludeLocationsOptions() const {
+const std::array<std::vector<Option*>, RCAREA_INVALID>& Settings::GetExcludeLocationsOptions() const {
     return mExcludeLocationsOptionsAreas;
 }
 
