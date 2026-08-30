@@ -2462,7 +2462,7 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                 case RG_BOMBCHU_5:
                 case RG_BOMBCHU_10:
                 case RG_BOMBCHU_20:
-                    if (ctx->GetOption(RSK_BOMBCHU_BAG).IsNot(RO_BOMBCHU_BAG_PROGRESSIVE)) {
+                    if (ctx->GetOption(RSK_BOMBCHU_BAG).Is(RO_BOMBCHU_BAG_NONE)) {
                         SetInventory(ITEM_BOMBCHU, (!state ? ITEM_NONE : ITEM_BOMBCHU));
                     }
                     break;
@@ -2592,6 +2592,7 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                     if (ctx->GetOption(RSK_BOMBCHU_BAG).Is(RO_BOMBCHU_BAG_NONE)) {
                         SetInventory(ITEM_BOMBCHU, (!state ? ITEM_NONE : ITEM_BOMBCHU));
                     }
+                    break;
                 default:
                     break;
             }
