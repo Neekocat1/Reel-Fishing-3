@@ -12,7 +12,6 @@ struct Migration {
 static const Migration version3Migrations[] = {
     { "gSwitchAge", "gGeneral.SwitchAge" },
     { "gFrameAdvance", "gDeveloperTools.FrameAdvanceTick" },
-    { "gRandoGenerating", "gGeneral.RandoGenerating" },
     { "gNewSeedGenerated", "gGeneral.NewSeedGenerated" },
     { "gOnFileSelectNameEntry", "gGeneral.OnFileSelectNameEntry" },
     { "gBetterDebugWarpScreenMQMode", "gGeneral.BetterDebugWarpScreenMQMode" },

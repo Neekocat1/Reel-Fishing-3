@@ -7,6 +7,7 @@
 #include "soh/SohGui/ImGuiUtils.h"
 #include "soh/OTRGlobals.h"
 #include "soh/cvar_prefixes.h"
+#include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/settings.h"
 
 namespace SohGui {
@@ -144,7 +145,7 @@ static void StartingItemCombobox(RandomizerSettingKey rsk) {
 }
 
 void DrawStartingItemsMenu(WidgetInfo& info) {
-    bool generating = CVarGetInteger(CVAR_GENERAL("RandoGenerating"), 0);
+    bool generating = IsRandoGenerating();
     bool disableEditingRandoSettings = generating || CVarGetInteger(CVAR_GENERAL("OnFileSelectNameEntry"), 0);
     ImGui::BeginDisabled(CVarGetInteger(CVAR_SETTING("DisableChanges"), 0) || disableEditingRandoSettings);
 
