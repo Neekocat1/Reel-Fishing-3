@@ -311,8 +311,21 @@ void DrawStartingItemsMenu(WidgetInfo& info) {
                               "you get the item Impa would give and skip everything up to meeting Zelda.");
         }
     }
+    StartingItemToggle(RSK_STARTING_KEATON_MASK, ITEM_MASK_KEATON);
+    ImGui::SameLine();
+    StartingItemToggle(RSK_STARTING_SKULL_MASK, ITEM_MASK_SKULL);
+    ImGui::SameLine();
+    StartingItemToggle(RSK_STARTING_SPOOKY_MASK, ITEM_MASK_SPOOKY);
     ImGui::SameLine();
     StartingItemToggle(RSK_STARTING_BUNNY_HOOD, ITEM_MASK_BUNNY);
+    ImGui::SameLine();
+    StartingItemToggle(RSK_STARTING_GORON_MASK, ITEM_MASK_GORON);
+    ImGui::SameLine();
+    StartingItemToggle(RSK_STARTING_ZORA_MASK, ITEM_MASK_ZORA);
+    ImGui::SameLine();
+    StartingItemToggle(RSK_STARTING_GERUDO_MASK, ITEM_MASK_GERUDO);
+    ImGui::SameLine();
+    StartingItemToggle(RSK_STARTING_MASK_OF_TRUTH, ITEM_MASK_TRUTH);
 
     ImGui::SeparatorText("Songs");
     StartingSongToggle(RSK_STARTING_ZELDAS_LULLABY, QUEST_SONG_LULLABY);

@@ -709,13 +709,8 @@ void Settings::CreateOptionDescriptions() {
     mOptionDescriptions[RSK_SKIP_CHILD_STEALTH] =
         "The crawlspace into Hyrule Castle goes straight to Zelda, skipping the guards.";
     mOptionDescriptions[RSK_SKIP_EPONA_RACE] = "Epona can be summoned with Epona's Song without needing to race Ingo.";
-    mOptionDescriptions[RSK_MASK_QUEST] =
-        "How masks are acquired.\n"
-        "Vanilla - Mask trade quest.\n"
-        "\n"
-        "Completed - Once the Happy Mask Shop is opened, all masks will be available to be borrowed.\n"
-        "\n"
-        "Shuffle - Happy Mask Shop never opens, masks are shuffled with the rest of the items.";
+    mOptionDescriptions[RSK_SHUFFLE_MASKS] =
+        "The Happy Mask Shop never opens, masks are shuffled with the rest of the items.";
     mOptionDescriptions[RSK_SKIP_SCARECROWS_SONG] =
         "Start with the ability to summon Pierre the Scarecrow. Pulling out an Ocarina in the usual locations will "
         "automatically summon him.\n"
