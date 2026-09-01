@@ -1,6 +1,7 @@
 #include <libultraship/bridge/consolevariablebridge.h>
 
 #include "option.h"
+#include "static_data.h"
 #include "soh/SohGui/SohMenu.h"
 #include "soh/Enhancements/Lang/Lang.h"
 #include <soh/cvar_prefixes.h>
@@ -124,8 +125,6 @@ static const std::string& MakeTrickDescription(RandomizerTrick key) {
 
 #pragma endregion
 
-const static std::string todo = "TODO";
-
 const std::string& Option::GetName() const {
     switch (this->GetCategory()) {
         case OptionCategory::Setting:
@@ -134,7 +133,7 @@ const std::string& Option::GetName() const {
         case OptionCategory::Trick:
             return MakeTrickName(static_cast<RandomizerTrick>(this->key));
         case OptionCategory::LocationExclusion:
-            return todo;
+            return StaticData::GetLocation(static_cast<RandomizerCheck>(this->key))->GetName();
         default:
             assert(false);
             return error;
@@ -149,7 +148,7 @@ const std::string& Option::GetDescription() const {
         case OptionCategory::Trick:
             return MakeTrickDescription(static_cast<RandomizerTrick>(this->key));
         case OptionCategory::LocationExclusion:
-            return todo;
+            return empty;
         default:
             assert(false);
             return error;
@@ -165,6 +164,9 @@ uint8_t Option::GetMenuOptionDefault() const {
 }
 
 const std::string& Option::GetOptionText(size_t index) const {
+    if (options.empty()) {
+        return empty;
+    }
     if (index >= options.size()) {
         index = options.size() - 1;
     }

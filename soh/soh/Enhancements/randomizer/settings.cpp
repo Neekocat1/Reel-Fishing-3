@@ -2556,7 +2556,10 @@ void Settings::CreateOptions() {
 std::unordered_map<std::string, RandomizerSettingKey> Settings::PopulateOptionNameToEnum() {
     std::unordered_map<std::string, RandomizerSettingKey> output = {};
     for (size_t count = 0; count < RSK_MAX; count++) {
-        output[mOptions[count].GetName()] = static_cast<RandomizerSettingKey>(count);
+        // skip unassigned settings (RSK_NONE)
+        if (mOptions[count].GetOptionCount() > 0) {
+            output[mOptions[count].GetName()] = static_cast<RandomizerSettingKey>(count);
+        }
     }
     return output;
 }
