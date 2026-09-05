@@ -5,6 +5,7 @@
 #include "../debugger/performanceTimer.h"
 #include "soh/OTRGlobals.h"
 #include "randomizer.h"
+#include "randomizerEnumStrings.h"
 #include "dungeon.h"
 #include "SeedContext.h"
 #include "randomizer.h"
@@ -322,8 +323,7 @@ bool Logic::HasItem(RandomizerGet itemName) {
         default:
             break;
     }
-    SPDLOG_ERROR("HasItem reached `return false;`. Missing case for RandomizerGet of {}",
-                 static_cast<uint32_t>(itemName));
+    SPDLOG_ERROR("HasItem reached `return false;`. Missing case for RandomizerGet of {}", itemName);
     assert(false);
     return false;
 }
@@ -486,7 +486,7 @@ bool Logic::ItemUseAllowed(RandomizerGet itemName) {
         case SCENE_FISHING_POND:
             return itemName == RG_FISHING_POLE;
         default:
-            SPDLOG_INFO("ItemUseAllowed reached `default` with item {} in Scene {}.", static_cast<uint32_t>(itemName),
+            SPDLOG_INFO("ItemUseAllowed reached `default` with item {} in Scene {}.", itemName,
                         static_cast<uint32_t>(RegionTable(CurrentRegionKey)->scene));
             return true;
     }
@@ -676,8 +676,7 @@ bool Logic::CanUse(RandomizerGet itemName) {
             return true;
 
         default:
-            SPDLOG_INFO("CanUse reached `default` for {}. using HasItem is a minor Optimisation.",
-                        static_cast<uint32_t>(itemName));
+            SPDLOG_INFO("CanUse reached `default` for {}. using HasItem is a minor Optimisation.", itemName);
             return true;
     }
 }
