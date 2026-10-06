@@ -33,6 +33,8 @@
 #include "soh/Enhancements/debugger/SohConsoleWindow.h"
 #include "soh/Enhancements/debugger/SohGfxDebuggerWindow.h"
 #include "soh/Enhancements/debugger/SohStatsWindow.h"
+#include "soh/Enhancements/ReelFishing/RF3DebugWindow.h"
+#include "soh/Enhancements/ReelFishing/RF3TensionGauge.h"
 #include "soh/Enhancements/debugger/valueViewer.h"
 #include "soh/Enhancements/gameplaystatswindow.h"
 #include "soh/Enhancements/randomizer/randomizer_check_tracker.h"
@@ -80,6 +82,8 @@ std::string GetWindowButtonText(const char* text, bool menuOpen) {
 
 std::shared_ptr<Ship::GuiWindow> mConsoleWindow;
 std::shared_ptr<SohStatsWindow> mStatsWindow;
+std::shared_ptr<RF3DebugWindow> mRF3DebugWindow;
+std::shared_ptr<RF3TensionGauge> mRF3TensionGauge;
 std::shared_ptr<Ship::GuiWindow> mGfxDebuggerWindow;
 
 std::shared_ptr<SohMenu> mSohMenu;
@@ -125,6 +129,8 @@ std::vector<std::shared_ptr<Ship::GuiWindow>> GetAllGuiWindows() {
     return {
         mConsoleWindow,
         mStatsWindow,
+        mRF3DebugWindow,
+        mRF3TensionGauge,
         mGfxDebuggerWindow,
         mModMenuWindow,
         mAudioEditorWindow,
@@ -188,6 +194,12 @@ void SetupGuiElements() {
 
     mStatsWindow = std::make_shared<SohStatsWindow>(CVAR_WINDOW("SohStats"), "Stats##Soh", ImVec2(400, 100));
     gui->AddGuiWindow(mStatsWindow);
+
+    mRF3DebugWindow = std::make_shared<RF3DebugWindow>(CVAR_WINDOW("ReelFishing3Debug"), "Reel Fishing III Debug",
+                                                       ImVec2(460, 360));
+    gui->AddGuiWindow(mRF3DebugWindow);
+    mRF3TensionGauge = std::make_shared<RF3TensionGauge>(CVAR_WINDOW("ReelFishing3Gauge"), "Reel Fishing III Gauge");
+    gui->AddGuiWindow(mRF3TensionGauge);
 
     /*mInputEditorWindow = gui->GetGuiWindow("Controller Configuration");
     if (mInputEditorWindow == nullptr) {
@@ -298,6 +310,8 @@ void Destroy() {
     mModMenuWindow = nullptr;
     mAudioEditorWindow = nullptr;
     mStatsWindow = nullptr;
+    mRF3DebugWindow = nullptr;
+    mRF3TensionGauge = nullptr;
     mConsoleWindow = nullptr;
     mGfxDebuggerWindow = nullptr;
     mInputViewer = nullptr;

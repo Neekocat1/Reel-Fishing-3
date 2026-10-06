@@ -12,6 +12,18 @@
 
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/ReelFishing/RF3Log.h"
+#include "soh/Enhancements/ReelFishing/RF3Bridge.h"
+
+// Reel Fishing III mod: RF3 steps are 1/60 s; OoT's game logic runs R_UPDATE_RATE of them per
+// game frame (3 = 20 Hz in normal play).
+#define RF3_SUBSTEPS ((R_UPDATE_RATE > 0) ? R_UPDATE_RATE : 1)
+// OoT only lets fish line up and bite within 800 units of the pond centre (states 2-4).
+#define RF3_LURE_IN_BITE_AREA() ((SQ(sLurePos.x) + SQ(sLurePos.z)) < SQ(800.0f))
+// Step 11: B held during OoT's cast wind-up (sRodCastTimer 37 -> 18) charges RF3 cast power.
+#define RF3_CAST_WINDUP_FRAMES 19
+static s16 sRF3CastHeldFrames = 0;
+static u8 sRF3CastCharging = false;
 #include <libultraship/bridge/consolevariablebridge.h>
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
@@ -855,6 +867,8 @@ void Fishing_Init(Actor* thisx, PlayState* play2) {
 
     if (thisx->params < EN_FISH_PARAM) {
         sReelLock = 0;
+        RF3Fight_End();      // Reel Fishing III mod: no fight carries over into a new pond visit
+        RF3Approach_Reset(); // ... and no lure meter, chaser or wariness either
         sFishingMain = this;
         Collider_InitJntSph(play, &sFishingMain->collider);
         Collider_SetJntSph(play, &sFishingMain->collider, thisx, &sJntSphInit, sFishingMain->colliderElements);
@@ -2247,10 +2261,19 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                 if ((D_80B7E0B0 == 0) && (player->unk_860 == 1)) {
                     sRodCastTimer = 37;
                     Message_CloseTextbox(play);
+                    sRF3CastHeldFrames = 0; // step 11: B was just pressed; charging starts
+                    sRF3CastCharging = true;
                 }
             } else {
                 sLureRot.x = sReelLineRot[LINE_SEG_COUNT - 2].x + M_PI;
                 sLureRot.y = sReelLineRot[LINE_SEG_COUNT - 2].y;
+
+                // Step 11: RF3 charges while B is held; letting go fixes the power.
+                if (sRF3CastCharging && CHECK_BTN_ALL(input->cur.button, BTN_B)) {
+                    sRF3CastHeldFrames++;
+                } else {
+                    sRF3CastCharging = false;
+                }
 
                 if (sRodCastTimer == 18) {
                     sRodCastState = 1;
@@ -2260,6 +2283,14 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     sp90.y = 0.0f;
                     sp90.z = 25.0f;
                     Matrix_MultVec3f(&sp90, &sLurePosDelta);
+                    if (RF3_IsEnabled()) {
+                        // Step 11: scale OoT's forward launch speed by the charged power
+                        // (a full hold through the wind-up = OoT's normal full cast).
+                        f32 castFactor = RF3Cast_Launch(sRF3CastHeldFrames, RF3_CAST_WINDUP_FRAMES, RF3_SUBSTEPS);
+                        sLurePosDelta.x *= castFactor;
+                        sLurePosDelta.z *= castFactor;
+                    }
+                    sRF3CastCharging = false;
                     sLurePosDelta.y = 15.0f;
                     sLureCastDelta.x = sLureCastDelta.z = 0.0f;
                     sLureCastDelta.y = -1.0f;
@@ -2778,7 +2809,23 @@ void func_80B70ED4(Fishing* this, Input* input) {
 
     lineLengthSQ = SQ(lineVec.x) + SQ(lineVec.y) + SQ(lineVec.z);
 
-    if ((sRodCastState == 3) && (this->unk_1A2 == 0) && (sIsOwnersHatHooked == 0)) {
+    if ((sRodCastState == 3) && (this->unk_1A2 == 0) && (sIsOwnersHatHooked == 0) && RF3_IsEnabled() &&
+        RF3_LURE_IN_BITE_AREA()) {
+        // Reel Fishing III mod (step 10): RF3 decides who notices the lure (RF3-MECHANICS 2.3).
+        // OoT's range/button rules and its dawn/dusk frenzy shortcut are skipped.
+        s16 toLureYaw = Math_Atan2S(lineVec.z, lineVec.x);
+        f32 angleFromHeading = (s16)(toLureYaw - this->actor.shape.rot.y) * (M_PI / 32768.0f);
+
+        if (RF3Approach_Notice(this->actor.params - EN_FISH_PARAM, this->fishLength, sqrtf(lineLengthSQ),
+                               sqrtf(SQ(lineVec.x) + SQ(lineVec.z)), angleFromHeading)) {
+            this->fishState = 2;
+            this->unk_15E = 0;
+            this->timerArray[0] = 0;
+            this->timerArray[2] = 30000; // RF3 decides when the chase ends
+            this->perception = sFishInits[this->actor.params - EN_FISH_PARAM].perception;
+            this->rotationStep = 0.0f;
+        }
+    } else if ((sRodCastState == 3) && (this->unk_1A2 == 0) && (sIsOwnersHatHooked == 0)) {
         Matrix_RotateY((-this->actor.shape.rot.y / 32768.0f) * M_PI, MTXMODE_NEW);
         Matrix_MultVec3f(&lineVec, &sp28);
 
@@ -2887,6 +2934,7 @@ void Fishing_HandleAquariumDialog(Fishing* this, PlayState* play) {
 
             if (Actor_ProcessTalkRequest(&this->actor, play)) {
                 sFishLengthToWeigh = sFishingRecordLength;
+                RF3Size_SetLengthToWeigh(sFishLengthToWeigh); // step 12b: weigh-in shows RF3 length
                 this->isAquariumMessage = true;
             } else {
                 Actor_OfferTalkNearColChkInfoCylinder(&this->actor, play);
@@ -2899,6 +2947,245 @@ void Fishing_HandleAquariumDialog(Fishing* this, PlayState* play) {
         this->isAquariumMessage = false;
         this->aquariumWaitTimer = 20;
     }
+}
+
+// Reel Fishing III mod (step 8): one frame of the RF3 fight for the hooked fish.
+// Steers the fish to the fight's distance from Link, keeping its bearing, and turns
+// OoT's line into a visual that follows the fish. Swim speed and depth per fight
+// state are our visual choices, not Reel Fishing III data (docs/DESIGN.md, steps 8b-8c).
+// Returns an RF3_OUTCOME_* code.
+static f32 sRF3FishSpeed = 0.0f;
+static f32 sRF3PrevTargetDist = -1.0f; // last frame's target distance, -1 = new fight
+static f32 sRF3RodBend = 0.0f;         // smoothed rod bend angle from tension
+static u8 sRF3FeedbackTimer = 0;
+static f32 sRF3ReelFreq = 1.0f; // static: the audio code keeps this pointer for continuous sounds
+static u8 sRF3HookPending = false; // step 9: RF3 set the hook; OoT's hook-set block applies its effects
+static u8 sRF3WindowRumbled = false; // step 9b: the hook-set window rumble has started
+static u8 sRF3SweepTimer = 0;   // step 8h: game frames until STRUGGLE's sweep changes side
+static u8 sRF3SweepSide = 0;    // step 8h: STRUGGLE's current side of the line (0/1)
+static s16 sRF3TurnScale = 0;   // step 8h: turn scale for Fishing_UpdateFish this frame, 0 = OoT's own
+
+// Reset the steering and feedback state for a new strike or fight.
+static void Fishing_RF3ResetVisuals(Fishing* this) {
+    sRF3PrevTargetDist = -1.0f;
+    sRF3FishSpeed = this->actor.speedXZ;
+    sRF3RodBend = D_80B7A6BC;
+    sRF3FeedbackTimer = 0;
+    sRF3HookPending = false;
+    sRF3WindowRumbled = false;
+    sRF3SweepTimer = 0;
+    sRF3TurnScale = 0;
+}
+
+static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* hookedOut) {
+    Player* player = GET_PLAYER(play);
+    RF3FightInput rf3In;
+    RF3FightOutput rf3Out;
+    f32 dx = this->actor.world.pos.x - player->actor.world.pos.x;
+    f32 dz = this->actor.world.pos.z - player->actor.world.pos.z;
+    f32 dist = sqrtf(SQ(dx) + SQ(dz));
+    f32 scale;
+    f32 targetSq;
+    f32 gap;
+    f32 radialSpeed;
+    f32 drift;
+    f32 depthBelowSurface;
+    f32 targetY;
+    f32 minY;
+    f32 maxY;
+    f32 circleX;
+    f32 circleZ;
+    // Turn 0.2 rad around Link when circling.
+    const f32 circleCos = 0.9801f;
+    const f32 circleSin = 0.1987f;
+
+    f32 load;
+    f32 bendTarget;
+
+    if (!RF3Fight_IsActive()) {
+        Fishing_RF3ResetVisuals(this); // fallback start (option switched on mid-fight)
+    }
+
+    rf3In.reelHeld = CHECK_BTN_ALL(input->cur.button, BTN_A) ? 1 : 0;
+    rf3In.stickX = input->rel.stick_x;
+    rf3In.stickY = input->rel.stick_y;
+    rf3In.fishDistUnits = dist;
+    rf3In.lineMaxUnits = 1000.0f;            // OoT's full line: 200 segments of 5 units
+    rf3In.catchDistUnits = 1.5f * RF3_UNITS_PER_METRE; // step 8i: caught at 1.5 m (user choice; OoT's was 50 units)
+    rf3In.fishLength = this->fishLength;
+    rf3In.fishY = this->actor.world.pos.y;
+    rf3In.waterY = WATER_SURFACE_Y(play);
+    rf3In.floorY = this->actor.floorHeight;
+    rf3In.lureDepthUnits = WATER_SURFACE_Y(play) - sLurePos.y;
+    rf3In.substeps = RF3_SUBSTEPS;
+    RF3Fight_Update(&rf3In, &rf3Out);
+
+    *hookedOut = rf3Out.hooked ? true : false;
+    sRF3TurnScale = 0;
+    if (!rf3Out.hooked) {
+        // Strike phase (HIT): OoT keeps the fish at the lure; nothing to steer yet.
+        // Step 9b: the only rumble during the strike marks the hook-set window, so the
+        // player can feel when to set the hook. OoT's random fight rumble is held off.
+        sRumbleDelay = 2;
+        if (rf3Out.hookWindowOpen && !sRF3WindowRumbled) {
+            // Full strength for the window's length, then a decrease of 255 stops it at once
+            // (the rumble update holds for the duration, then subtracts the rate each frame).
+            func_800A9F6C(0.0f, 220, (u8)CLAMP(rf3Out.hookWindowFrames, 1, 255), 255);
+            sRF3WindowRumbled = true;
+        }
+        return rf3Out.outcome;
+    }
+
+    gap = fabsf(rf3Out.targetDistUnits - dist);
+
+    if (dist > 1.0f) {
+        if (gap < 20.0f) {
+            // Close enough: swim sideways around Link instead of back and forth.
+            circleX = (dx * circleCos) - (dz * circleSin);
+            circleZ = (dx * circleSin) + (dz * circleCos);
+            this->fishTargetPos.x = player->actor.world.pos.x + circleX;
+            this->fishTargetPos.z = player->actor.world.pos.z + circleZ;
+        } else {
+            scale = rf3Out.targetDistUnits / dist;
+            this->fishTargetPos.x = player->actor.world.pos.x + (dx * scale);
+            this->fishTargetPos.z = player->actor.world.pos.z + (dz * scale);
+        }
+        // Keep the target inside the pond, as OoT's own fight targets are.
+        targetSq = SQ(this->fishTargetPos.x) + SQ(this->fishTargetPos.z);
+        if (targetSq > SQ(750.0f)) {
+            scale = 750.0f / sqrtf(targetSq);
+            this->fishTargetPos.x *= scale;
+            this->fishTargetPos.z *= scale;
+        }
+    }
+
+    // Step 8g: movement that shows the fight state (our visual choice; the fight's numbers are
+    // unchanged). AWAY heads straight away from Link, FOLLOW straight toward him, STRUGGLE
+    // thrashes across the line, switching sides with the sim's 0.25 s shake.
+    if ((dist > 1.0f) && ((rf3Out.mode == 9) || (rf3Out.mode == 10) || (rf3Out.mode == 11))) {
+        f32 ux = dx / dist; // unit vector, Link -> fish
+        f32 uz = dz / dist;
+        f32 radial;
+        f32 across = 0.0f;
+
+        if (rf3Out.mode == 10) {
+            radial = dist + 40.0f;
+        } else if (rf3Out.mode == 11) {
+            radial = MAX(dist - 40.0f, 0.0f);
+        } else {
+            // Step 8h: a wide sweep across the line, changing side every 0.5 s, so it reads
+            // as a fight. 8g's �40 units every 0.25 s was too small and too fast to see.
+            if (sRF3SweepTimer == 0) {
+                sRF3SweepSide ^= 1;
+                sRF3SweepTimer = 10;
+            }
+            sRF3SweepTimer--;
+            radial = (gap > 20.0f) ? rf3Out.targetDistUnits : dist;
+            across = sRF3SweepSide ? 80.0f : -80.0f;
+        }
+        this->fishTargetPos.x = player->actor.world.pos.x + (ux * radial) - (uz * across);
+        this->fishTargetPos.z = player->actor.world.pos.z + (uz * radial) + (ux * across);
+        targetSq = SQ(this->fishTargetPos.x) + SQ(this->fishTargetPos.z);
+        if (targetSq > SQ(750.0f)) {
+            scale = 750.0f / sqrtf(targetSq);
+            this->fishTargetPos.x *= scale;
+            this->fishTargetPos.z *= scale;
+        }
+    }
+
+    // Depth and a slow drift per fight state.
+    switch (rf3Out.mode) {
+        case 9: // STRUGGLE: thrash near the surface
+            drift = 0.6f;
+            depthBelowSurface = 10.0f;
+            break;
+        case 10: // AWAY: run deep
+            drift = 0.8f;
+            depthBelowSurface = 50.0f;
+            break;
+        case 11: // FOLLOW
+            drift = 0.6f;
+            depthBelowSurface = 30.0f;
+            break;
+        case 7: // STOP
+            drift = 0.2f;
+            depthBelowSurface = -1.0f;
+            break;
+        default: // STIFFEN and anything else
+            drift = 0.5f;
+            depthBelowSurface = -1.0f;
+            break;
+    }
+
+    // Depth target, kept between the lake floor (plus half the fish's thickness and a
+    // margin) and just under the surface. actor.floorHeight is OoT's own floor probe.
+    targetY = (depthBelowSurface >= 0.0f) ? (WATER_SURFACE_Y(play) - depthBelowSurface) : this->actor.world.pos.y;
+    maxY = WATER_SURFACE_Y(play) - 5.0f;
+    minY = (this->actor.floorHeight > BGCHECK_Y_MIN + 1.0f) ? (this->actor.floorHeight + (this->fishLength * 0.1f) + 10.0f)
+                                                            : (maxY - 1000.0f);
+    if (minY > maxY) {
+        targetY = (minY + maxY) * 0.5f; // very shallow: stay midway
+    } else {
+        targetY = CLAMP(targetY, minY, maxY);
+    }
+    this->fishTargetPos.y = targetY;
+
+    // Speed: only as fast as the fight's distance changes, plus a gap correction and a
+    // slow drift. OoT's own state-5 code also pushes speedXZ earlier in the frame, so
+    // keep our own smoothed value and assign it.
+    radialSpeed = (sRF3PrevTargetDist >= 0.0f) ? fabsf(rf3Out.targetDistUnits - sRF3PrevTargetDist) : 0.0f;
+    sRF3PrevTargetDist = rf3Out.targetDistUnits;
+    if ((rf3Out.mode == 10) || (rf3Out.mode == 11)) {
+        // Step 8g: AWAY/FOLLOW move only as fast as the fight's distance changes (FOLLOW: the
+        // reel speed), slowly, plus a catch-up only in the direction the fish is heading.
+        f32 behind = (rf3Out.mode == 10) ? (rf3Out.targetDistUnits - dist) : (dist - rf3Out.targetDistUnits);
+
+        Math_ApproachF(&sRF3FishSpeed, CLAMP(radialSpeed + (MAX(behind, 0.0f) * 0.02f), 0.3f, 2.5f), 1.0f, 0.2f);
+    } else if (rf3Out.mode == 9) {
+        Math_ApproachF(&sRF3FishSpeed, 6.0f, 1.0f, 1.0f); // STRUGGLE: fast sweep (step 8h)
+    } else {
+        Math_ApproachF(&sRF3FishSpeed, CLAMP(radialSpeed + (gap * 0.03f) + drift, 0.3f, 4.0f), 1.0f, 0.1f);
+    }
+    this->actor.speedXZ = sRF3FishSpeed;
+
+    // Step 8h: tail beat by state (OoT's procedural swim: unk_190 = beat speed, unk_194 =
+    // amplitude), set after OoT's own state-5 values. STRUGGLE also turns fast so the sweep shows.
+    if (rf3Out.mode == 9) {
+        this->unk_190 = 1.6f;
+        this->unk_194 = 6000.0f;
+        this->rotationStep = 16384.0f;
+        sRF3TurnScale = 3;
+    } else if ((rf3Out.mode == 10) || (rf3Out.mode == 11)) {
+        this->unk_190 = 0.6f;
+        this->unk_194 = 1500.0f;
+    }
+
+    // Tension feedback, Reel Fishing III style (step 8d; our tuning, not RF3 data).
+    load = (rf3Out.tensionLimit > 0.0f) ? CLAMP(rf3Out.tension / rf3Out.tensionLimit, 0.0f, 1.0f) : 0.0f;
+    sRF3FeedbackTimer++;
+    // Rod bend: slight when slack, deep near the limit, trembling above 85%.
+    bendTarget = -0.25f - (0.85f * load);
+    if (load > 0.85f) {
+        bendTarget += Math_SinS(sRF3FeedbackTimer * 0x3000) * 0.06f * ((load - 0.85f) / 0.15f);
+    }
+    Math_ApproachF(&sRF3RodBend, bendTarget, 0.5f, 0.08f);
+    D_80B7A6BC = sRF3RodBend;
+    // Rumble: OoT's random fight rumble is held off; pulse harder as tension rises past 40%.
+    sRumbleDelay = 2;
+    if ((load > 0.4f) && ((sRF3FeedbackTimer % 10) == 0)) {
+        func_800A9F6C(0.0f, (u8)(60.0f + (195.0f * (load - 0.4f) / 0.6f)), 10, 5);
+    }
+    // Warning: above 80% the reel screams, higher-pitched toward the limit.
+    if (load > 0.8f) {
+        sRF3ReelFreq = 0.8f + ((load - 0.8f) * 3.0f);
+        Audio_PlaySfxGeneral(NA_SE_IT_FISHING_REEL_HIGH - SFX_FLAG, &gSfxDefaultPos, 4, &sRF3ReelFreq,
+                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    }
+
+    // OoT's reel no longer pulls the fish in; refit the line to the fish every frame.
+    sRodReelingSpeed = 0.0f;
+    D_80B7A6A4 = 5;
+    return rf3Out.outcome;
 }
 
 void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
@@ -2938,6 +3225,10 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
     f32 rumbleStrength;
     u16 attempts;
     u8 rumbleStrength8;
+    s32 rf3Outcome;
+    u8 rf3Fight;
+    u8 rf3Hooked;
+    s32 rf3Approach;
 
     this->actor.uncullZoneForward = 700.0f;
     this->actor.uncullZoneScale = 50.0f;
@@ -3377,6 +3668,64 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 this->unk_15E = 0;
             }
 
+            if (RF3_IsEnabled()) {
+                // Reel Fishing III mod (step 10): RF3's chase decides; OoT's perception and bite
+                // chance are skipped. "Reached" is OoT's own close-to-the-lure test above.
+                // A lure outside OoT's biting area counts as out of play (step 10b).
+                rf3Approach = RF3Approach_Chase(
+                    this->actor.params - EN_FISH_PARAM, (sRodCastState == 3) && RF3_LURE_IN_BITE_AREA(),
+                    (SQ(sLurePos.x - player->actor.world.pos.x) + SQ(sLurePos.z - player->actor.world.pos.z)) <
+                        SQ(KREG(59) + 50.0f),
+                    distToTarget < ((this->fishLength * 0.5f) + 20.0f), RF3_SUBSTEPS);
+                if (rf3Approach == RF3_APPROACH_STRIKE) {
+                    // OoT's own strike setup: line up (state 3, or -3 for a loach), then lunge.
+                    if (this->isLoach == 0) {
+                        this->fishState = 3;
+                        this->unk_190 = 1.2f;
+                        this->unk_194 = 5000.0f;
+                        this->timerArray[0] = Rand_ZeroFloat(10.0f);
+                    } else {
+                        this->fishState = -3;
+                        this->unk_190 = 1.0f;
+                        this->unk_194 = 3000.0f;
+                        this->timerArray[0] = 40;
+                    }
+                    if (sLureEquipped == FS_LURE_SINKING) {
+                        this->speedTarget = Rand_ZeroFloat(1.5f) + 3.0f;
+                    } else {
+                        this->speedTarget = Rand_ZeroFloat(1.5f) + 4.5f;
+                    }
+                } else if (rf3Approach == RF3_APPROACH_FAIL) {
+                    // Lost interest: OoT's own end-of-follow (the fish swims off).
+                    this->fishState = this->fishStateNext;
+                    this->timerArray[1] = (s16)Rand_ZeroFloat(30.0f) + 50;
+                    this->timerArray[0] = (s16)Rand_ZeroFloat(10.0f) + 5;
+                    this->unk_190 = 1.0f;
+                    this->rotationStep = 0.0f;
+                    this->unk_194 = 2000.0f;
+                }
+                if ((this->fishState == 2) &&
+                    (sqrtf(SQ(this->actor.world.pos.x) + SQ(this->actor.world.pos.z)) > 800.0f)) {
+                    // OoT's own exit: the fish strayed too far from the pond centre.
+                    RF3Approach_EndChase(this->actor.params - EN_FISH_PARAM);
+                    this->fishState = this->fishStateNext;
+                    this->timerArray[1] = (s16)Rand_ZeroFloat(30.0f) + 50;
+                    this->timerArray[0] = (s16)Rand_ZeroFloat(10.0f) + 5;
+                    this->unk_190 = 1.0f;
+                    this->rotationStep = 0.0f;
+                    this->unk_194 = 2000.0f;
+                }
+                if (this->actor.xzDistToPlayer < (100.0f * playerSpeedMod)) {
+                    // OoT's own exit: Link came too close and scared the fish.
+                    RF3Approach_EndChase(this->actor.params - EN_FISH_PARAM);
+                    this->fishStateNext = this->fishState = 0;
+                    this->unk_1A4 = 1000;
+                    this->unk_1A2 = 200;
+                    this->timerArray[1] = 50;
+                }
+                break;
+            }
+
             if (this->fishLength >= 60.0f) {
                 multiplier = 0.3f;
             } else if (this->fishLength >= 45.0f) {
@@ -3439,6 +3788,10 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             break;
 
         case 3:
+            if (RF3_IsEnabled()) {
+                // Step 10: still the chaser while lining up; released after the bite.
+                RF3Approach_Chase(this->actor.params - EN_FISH_PARAM, sRodCastState == 3, false, false, RF3_SUBSTEPS);
+            }
             this->lilyTimer = 6;
             rotXYScale = 2;
 
@@ -3471,11 +3824,17 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 this->rotationStep = 16384.0f;
                 this->unk_190 = 1.2f;
                 this->unk_194 = 5000.0f;
-                this->timerArray[0] = 20;
+                // Step 10b: an RF3 strike means the fish takes the lure, so give the lunge 3 s
+                // (60 game frames) to catch a lure that is still being reeled; OoT allows 1 s.
+                this->timerArray[0] = RF3_IsEnabled() ? 60 : 20;
             }
             break;
 
         case 4:
+            if (RF3_IsEnabled()) {
+                // Step 10: still the chaser while lunging; released after the bite.
+                RF3Approach_Chase(this->actor.params - EN_FISH_PARAM, sRodCastState == 3, false, false, RF3_SUBSTEPS);
+            }
             Math_ApproachF(&this->rotationStep, 16384.0f, 1.0f, 4096.0f);
             Math_ApproachS(&this->fishLimbDRotZDelta, 0x4E20, 4, 0x1388);
 
@@ -3521,7 +3880,9 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                     }
                     sLureBitTimer = timer;
                     sRumbleDelay = timer;
-                    func_800A9F6C(0.0f, 60, timer * 3, 10);
+                    if (!RF3_IsEnabled()) { // step 9b: in RF3 mode the rumble marks the hook-set window instead
+                        func_800A9F6C(0.0f, 60, timer * 3, 10);
+                    }
                 } else {
                     if (this->fishLength > 70.0f) {
                         timer = (s16)Rand_ZeroFloat(5.0f) + 10;
@@ -3534,7 +3895,9 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                     }
                     sLureBitTimer = timer;
                     sRumbleDelay = timer;
-                    func_800A9F6C(0.0f, 180, timer * 3, 10);
+                    if (!RF3_IsEnabled()) { // step 9b: in RF3 mode the rumble marks the hook-set window instead
+                        func_800A9F6C(0.0f, 180, timer * 3, 10);
+                    }
                 }
 
                 sLineHooked = 0;
@@ -3544,6 +3907,10 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             break;
 
         case -3:
+            if (RF3_IsEnabled()) {
+                // Step 10: still the chaser while a loach lunges; released after the bite.
+                RF3Approach_Chase(this->actor.params - EN_FISH_PARAM, sRodCastState == 3, false, false, RF3_SUBSTEPS);
+            }
             this->lilyTimer = 50;
             this->fishTargetPos = sLurePos;
             Math_ApproachF(&this->actor.speedXZ, 2.0f, 1.0f, 1.0f);
@@ -3576,11 +3943,15 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 if (sLureEquipped == FS_LURE_SINKING) {
                     sLureBitTimer = 30;
                     sRumbleDelay = 100;
-                    func_800A9F6C(0.0f, 60, 90, 10);
+                    if (!RF3_IsEnabled()) { // step 9b: in RF3 mode the rumble marks the hook-set window instead
+                        func_800A9F6C(0.0f, 60, 90, 10);
+                    }
                 } else {
                     sLureBitTimer = 30;
                     sRumbleDelay = 40;
-                    func_800A9F6C(0.0f, 180, 90, 10);
+                    if (!RF3_IsEnabled()) { // step 9b: in RF3 mode the rumble marks the hook-set window instead
+                        func_800A9F6C(0.0f, 180, 90, 10);
+                    }
                 }
 
                 sLineHooked = false;
@@ -3606,9 +3977,13 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 }
             }
 
-            if ((sLureBitTimer != 0) && (sLineHooked == 0)) { // pull the line to hook it
-                if (((input->rel.stick_y < -50) && (sStickAdjYPrev > -40)) ||
-                    CHECK_BTN_ALL(input->press.button, BTN_A)) {
+            // Reel Fishing III mod (step 9): with the RF3 option on, the RF3 hook set decides
+            // (sRF3HookPending, set below) and OoT's short bite timer no longer gates it.
+            if (((sLureBitTimer != 0) || RF3_IsEnabled()) && (sLineHooked == 0)) { // pull the line to hook it
+                if (RF3_IsEnabled() ? sRF3HookPending
+                                    : (((input->rel.stick_y < -50) && (sStickAdjYPrev > -40)) ||
+                                       CHECK_BTN_ALL(input->press.button, BTN_A))) {
+                    sRF3HookPending = false;
                     if (input->rel.stick_y < -50) {
                         temp_f0 = 40.0f - ((this->fishLength - 30.0f) * 1.333333f);
                         if (temp_f0 > 0.0f) {
@@ -3802,6 +4177,25 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                                2.0f * (this->actor.speedXZ * 1.5f));
             }
 
+            // Reel Fishing III mod (steps 8-9): RF3 runs the hook set from the bite on, then
+            // the fight: the fish's distance and whether it gets away or is caught.
+            rf3Outcome = RF3_OUTCOME_NONE;
+            rf3Hooked = false;
+            rf3Fight = RF3_IsEnabled();
+            if (rf3Fight) {
+                if (!sLineHooked && !RF3Fight_IsActive()) {
+                    RF3Fight_StartStrike(this->fishLength); // the bite is the strike
+                    Fishing_RF3ResetVisuals(this);
+                }
+                rf3Outcome = Fishing_RF3Fight(this, play, input, &rf3Hooked);
+                if (sRF3TurnScale != 0) {
+                    rotXYScale = sRF3TurnScale; // step 8h: STRUGGLE turns fast
+                }
+                if (rf3Hooked && !sLineHooked) {
+                    sRF3HookPending = true; // OoT's hook-set block above applies the effects next frame
+                }
+            }
+
             if (CHECK_BTN_ALL(input->cur.button, BTN_A) || (input->rel.stick_y < -30)) {
                 if (sRodPullback < 100) {
                     sRodPullback++;
@@ -3812,11 +4206,29 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 }
             }
 
-            if ((sRodCastState < 3) || ((sReelLock != 0) && (sFishFightTime > 50)) || (sFishFightTime >= 6000) ||
-                ((sLureBitTimer == 0) && (sLineHooked == 0)) || (sRodPullback == 0) ||
-                GameInteractor_Should(VB_FISHING_FISH_ESCAPE, ((sLureTimer & 0x7F) == 0) && (Rand_ZeroOne() < 0.05f) &&
-                                                                  (sLureEquipped != FS_LURE_SINKING) &&
-                                                                  (KREG(69) == 0))) {
+            if (rf3Fight
+                    ? ((sRodCastState < 3) || (rf3Outcome == RF3_OUTCOME_LINEBREAK) ||
+                       (rf3Outcome == RF3_OUTCOME_HOOKOUT) || (rf3Outcome == RF3_OUTCOME_MISSED))
+                    : ((sRodCastState < 3) || ((sReelLock != 0) && (sFishFightTime > 50)) ||
+                       (sFishFightTime >= 6000) || ((sLureBitTimer == 0) && (sLineHooked == 0)) ||
+                       (sRodPullback == 0) ||
+                       GameInteractor_Should(VB_FISHING_FISH_ESCAPE,
+                                             ((sLureTimer & 0x7F) == 0) && (Rand_ZeroOne() < 0.05f) &&
+                                                 (sLureEquipped != FS_LURE_SINKING) && (KREG(69) == 0)))) {
+                if (rf3Fight) {
+                    RF3Fight_End();
+                    sRF3HookPending = false;
+                    if (rf3Outcome == RF3_OUTCOME_MISSED) {
+                        sLureBitTimer = 0; // step 9: OoT's "missed bite" text (0x4081) below
+                        // Step 10: a fish that spat the lure stays wary for 60 s (RF3-MECHANICS 2.3).
+                        RF3Approach_SetWary(this->actor.params - EN_FISH_PARAM, 60.0f);
+                    }
+                    if (rf3Outcome == RF3_OUTCOME_LINEBREAK) {
+                        // Step 8e: the line snaps. OoT's rod-snap bend plus a twang.
+                        sRodHitTimer = 10;
+                        Sfx_PlaySfxCentered(NA_SE_IT_BOW_FLICK);
+                    }
+                }
                 sFishingCaughtTextDelay = 20;
 
                 if ((sLureBitTimer == 0) && (sLineHooked == 0)) {
@@ -3846,7 +4258,14 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 sFishingMusicDelay = 50;
                 sRodReelingSpeed = 0.5f;
                 this->unk_152 = 0;
-            } else if (GameInteractor_Should(VB_FISHING_CATCH_FISH, this->actor.xzDistToPlayer < (KREG(59) + 50.0f))) {
+            } else if (rf3Fight ? ((rf3Outcome == RF3_OUTCOME_CAUGHT) || (rf3Outcome == RF3_OUTCOME_BUKKONUKI))
+                                : GameInteractor_Should(VB_FISHING_CATCH_FISH,
+                                                        this->actor.xzDistToPlayer < (KREG(59) + 50.0f))) {
+                if (rf3Fight) {
+                    RF3Fight_End();
+                    sRF3HookPending = false;
+                    sLineHooked = 1; // a perfect hook set (BUKKONUKI) lands the fish before OoT's hook block runs
+                }
                 this->fishState = 6;
                 this->timerArray[0] = 100;
                 player->unk_860 = 3;
@@ -3901,6 +4320,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
 
                 if (this->isLoach == 0) {
                     sFishLengthToWeigh = this->fishLength;
+                    RF3Size_SetLengthToWeigh(sFishLengthToWeigh); // step 12b: weigh-in shows RF3 length
 
                     if (sFishLengthToWeigh >= 75) {
                         sFishingCaughtTextId = 0x409F;
@@ -3911,6 +4331,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                     }
                 } else {
                     sFishLengthToWeigh = 2.0f * this->fishLength;
+                    RF3Size_SetLengthToWeigh(sFishLengthToWeigh); // step 12b: weigh-in shows RF3 length
                     sFishingCaughtTextId = 0x4099;
                 }
 
@@ -4856,6 +5277,7 @@ void Fishing_HandleOwnerDialog(Fishing* this, PlayState* play) {
                 switch (play->msgCtx.choiceIndex) {
                     case 0:
                         sFishLengthToWeigh = sFishingRecordLength;
+                        RF3Size_SetLengthToWeigh(sFishLengthToWeigh); // step 12b: weigh-in shows RF3 length
                         Message_ContinueTextbox(play, 0x4080);
                         this->stateAndTimer = 5;
                         break;
@@ -4910,6 +5332,7 @@ void Fishing_HandleOwnerDialog(Fishing* this, PlayState* play) {
                                 this->stateAndTimer = 20;
                             } else if (sFishOnHandIsLoach == 0) {
                                 sFishLengthToWeigh = sFishOnHandLength;
+                                RF3Size_SetLengthToWeigh(sFishLengthToWeigh); // step 12b: weigh-in shows RF3 length
                                 // if we set the record or get the reward
                                 if (GameInteractor_Should(VB_SHOULD_CHECK_FOR_FISHING_RECORD,
                                                           (s16)sFishingRecordLength < (s16)sFishOnHandLength,
@@ -5798,6 +6221,59 @@ void Fishing_UpdateOwner(Actor* thisx, PlayState* play2) {
     if (BREG(26) != 0) {
         BREG(26) = 0;
         Message_StartTextbox(play, 0x407B + BREG(27), NULL);
+    }
+
+    // Reel Fishing III mod (step 10): the shared lure action meter and every fish's memory of it.
+    if (RF3_IsEnabled()) {
+        static Vec3f sRF3PrevLurePos = { 0.0f, 0.0f, 0.0f };
+        f32 lureMoved = sqrtf(SQ(sLurePos.x - sRF3PrevLurePos.x) + SQ(sLurePos.y - sRF3PrevLurePos.y) +
+                              SQ(sLurePos.z - sRF3PrevLurePos.z));
+
+        RF3Approach_UpdateMeter(sRodCastState == 3, lureMoved, CHECK_BTN_ALL(input->cur.button, BTN_A), RF3_SUBSTEPS);
+        sRF3PrevLurePos = sLurePos;
+    }
+
+    // Reel Fishing III mod: log this frame's pond state. Read-only.
+    if (RF3Log_IsEnabled()) {
+        RF3OwnerFrame logFrame = { 0 };
+
+        logFrame.frame = play->gameplayFrames;
+        logFrame.castState = sRodCastState;
+        logFrame.lureEquipped = sLureEquipped;
+        logFrame.lineHooked = sLineHooked;
+        logFrame.reelLock = sReelLock;
+        logFrame.rodPullback = sRodPullback;
+        logFrame.reelSpeed = sRodReelingSpeed;
+        logFrame.lineSpooled = sRodLineSpooled;
+        logFrame.lurePos[0] = sLurePos.x;
+        logFrame.lurePos[1] = sLurePos.y;
+        logFrame.lurePos[2] = sLurePos.z;
+        logFrame.rodTipPos[0] = sRodTipPos.x;
+        logFrame.rodTipPos[1] = sRodTipPos.y;
+        logFrame.rodTipPos[2] = sRodTipPos.z;
+        logFrame.waterSurfaceY = WATER_SURFACE_Y(play);
+        logFrame.stickX = input->rel.stick_x;
+        logFrame.stickY = input->rel.stick_y;
+        logFrame.buttons = input->cur.button;
+        logFrame.linkPos[0] = player->actor.world.pos.x;
+        logFrame.linkPos[1] = player->actor.world.pos.y;
+        logFrame.linkPos[2] = player->actor.world.pos.z;
+        // Same guard the game uses before touching sFishingHookedFish; it is never cleared.
+        if (((sRodCastState == 4) || (sRodCastState == 5)) && (sFishingHookedFish != NULL)) {
+            logFrame.hasFish = 1;
+            logFrame.fishState = sFishingHookedFish->fishState;
+            logFrame.fishStateNext = sFishingHookedFish->fishStateNext;
+            logFrame.fishLength = sFishingHookedFish->fishLength;
+            logFrame.fishPos[0] = sFishingHookedFish->actor.world.pos.x;
+            logFrame.fishPos[1] = sFishingHookedFish->actor.world.pos.y;
+            logFrame.fishPos[2] = sFishingHookedFish->actor.world.pos.z;
+            logFrame.fishSpeedXZ = sFishingHookedFish->actor.speedXZ;
+            logFrame.fishFloorY = sFishingHookedFish->actor.floorHeight;
+            logFrame.fishYaw = sFishingHookedFish->actor.world.rot.y;
+            logFrame.fishTailStep = sFishingHookedFish->fishLimbRotPhaseStep;
+            logFrame.fishTailMag = sFishingHookedFish->fishLimbRotPhaseMag;
+        }
+        RF3Log_OwnerFrame(&logFrame);
     }
 
     osSyncPrintf("HI_SCORE = %x\n", HIGH_SCORE(HS_FISHING));

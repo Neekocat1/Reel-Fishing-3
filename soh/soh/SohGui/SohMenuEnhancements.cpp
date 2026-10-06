@@ -1810,6 +1810,32 @@ void SohMenu::AddMenuEnhancements() {
         .CVar(CVAR_ENHANCEMENT("FishingBlankB"))
         .Options(CheckboxOptions().Tooltip("Allow fishing even when not having any item equipped on the B button, "
                                            "fixing a vanilla bug. Always enabled in randomizer."));
+    AddWidget(path, "Reel Fishing III Mechanics", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ReelFishing3.Enabled"))
+        .Options(CheckboxOptions().Tooltip(
+            "Replace the Fishing Pond mechanics with Reel Fishing III's.\n\n"
+            "Work in progress: the cast, the approach, the hook set and the fight use Reel Fishing III's rules.\n"
+            "Cast: hold B through the swing for a full cast; let go early for a shorter one.\n"
+            "Approach: fish notice a lure you reel steadily; pause too long and the chasing fish loses "
+            "interest and stays wary for a while.\n"
+            "Hook set: after a bite, the controller rumbles while the hook can be set. Jerk the rod "
+            "(stick down) or press A during the rumble. Too early or too late and the fish lets go.\n"
+            "Fight: hold A to reel, hold the stick down to raise the rod, push it up to give line. "
+            "Watch the rod bend and feel the rumble for line tension."));
+    AddWidget(path, "Reel Fishing III Tension Gauge", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ReelFishing3.TensionGauge"))
+        .Options(CheckboxOptions().Tooltip(
+            "Show an on-screen line tension gauge during a Reel Fishing III fight. Reel Fishing III itself has no "
+            "gauge; without it, tension shows through the rod bend, rumble and the reel's warning sound."));
+    AddWidget(path, "Reel Fishing III Debug Window", WIDGET_WINDOW_BUTTON)
+        .CVar(CVAR_WINDOW("ReelFishing3Debug"))
+        .WindowName("Reel Fishing III Debug")
+        .Options(WindowButtonOptions().Tooltip(
+            "Live view of the Reel Fishing III fight: state, tension, hook, stamina, distance and inputs."));
+    AddWidget(path, "Log Fishing Data (CSV)", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ReelFishing3.Log"))
+        .Options(CheckboxOptions().Tooltip("Write the Fishing Pond state to logs/rf3_fishing_<date>.csv next to "
+                                           "the game, one row per frame while the line is out."));
 
     AddWidget(path, "Multiple Prizes", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Dampe's Race", WIDGET_CVAR_CHECKBOX)
