@@ -2,9 +2,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
 #include <optional>
+#include <string>
 
 #include <libultraship/bridge/consolevariablebridge.h>
+#include <ship/Context.h>
 
 #include "soh/cvar_prefixes.h"
 #include "RF3Sim.h"
@@ -21,6 +26,39 @@ float sLastWaterDepthUnits = 0.0f;
 float sFightLengthMm = 0.0f;
 int32_t sFightWeightG = 0;
 uint32_t sSizeRng = 0x9E3779B9u;
+// Step 14b: the current fight's fish and its table record.
+int32_t sFightFishIndex = -1;
+float sFightOotLength = 0.0f; // step 14d: OoT length the fight started with, to match the kept fish
+const rf3::FishRecord* sFightRecord = nullptr;
+
+// Step 14b: each OoT fish's RF3 species (index = actor params - 100), rolled at pond load.
+constexpr int kMaxSpeciesFish = 32;
+int sSpecies[kMaxSpeciesFish];
+bool sSpeciesRolled[kMaxSpeciesFish] = {};
+uint32_t sSpeciesRng = 0;
+
+int RollSpecies() {
+    if (sSpeciesRng == 0) {
+        sSpeciesRng = static_cast<uint32_t>(std::time(nullptr)) | 1u;
+    }
+    sSpeciesRng ^= sSpeciesRng << 13;
+    sSpeciesRng ^= sSpeciesRng >> 17;
+    sSpeciesRng ^= sSpeciesRng << 5;
+    return static_cast<int>(sSpeciesRng % rf3::kSpeciesCount);
+}
+
+// The fish's species; one not rolled yet (option switched on mid-visit) rolls now.
+// Out-of-range indices fall back to largemouth bass (species 8).
+int SpeciesOf(int32_t fishIndex) {
+    if (fishIndex < 0 || fishIndex >= kMaxSpeciesFish) {
+        return 8;
+    }
+    if (!sSpeciesRolled[fishIndex]) {
+        sSpecies[fishIndex] = RollSpecies();
+        sSpeciesRolled[fishIndex] = true;
+    }
+    return sSpecies[fishIndex];
+}
 
 void FillStatus(RF3FightStatus* status) {
     *status = {};
@@ -53,6 +91,11 @@ void FillStatus(RF3FightStatus* status) {
     status->hookSetStrength = sFight->GetHookSetStrength();
     status->lengthMm = sFightLengthMm;
     status->weightG = sFightWeightG;
+    status->fishIndex = sFightFishIndex;
+    status->species = sFightRecord ? sFightRecord->species : -1;
+    status->record = sFightRecord ? sFightRecord->record : -1;
+    status->speciesName = sFightRecord ? sFightRecord->speciesName : "";
+    status->ootLength = sFightOotLength;
 }
 
 // Placeholder hook set until step 9 replaces OoT's: a mid-window rod jerk
@@ -60,17 +103,26 @@ void FillStatus(RF3FightStatus* status) {
 constexpr float kPlaceholderTimingA = 0.5f;
 constexpr float kPlaceholderStrengthB = 0.8f;
 
-// Step 12: the RF3 size class follows the fish's mapped RF3 length (RF3SizeMap.h).
-const rf3::FishParams& FishFor(float oFishLength) {
-    return rf3::AdultBassForMm(rf3::OotLengthToRf3Mm(oFishLength));
+// Steps 12 and 14b: the fish's species, and the size class its mapped RF3 length falls in.
+const rf3::FishRecord& RecordFor(int32_t fishIndex, float oFishLength) {
+    int species = SpeciesOf(fishIndex);
+    return rf3::SpeciesRecordForMm(species, rf3::OotLengthToSpeciesMm(species, oFishLength));
 }
 
-void DrawFightSize(float oFishLength) {
+const rf3::FishParams& FishFor(int32_t fishIndex, float oFishLength) {
+    return RecordFor(fishIndex, oFishLength).params;
+}
+
+// A new strike or fallback fight: the fish, its record, and its RF3 size.
+void StartFightFish(int32_t fishIndex, float oFishLength) {
     sSizeRng ^= sSizeRng << 13;
     sSizeRng ^= sSizeRng >> 17;
     sSizeRng ^= sSizeRng << 5;
-    sFightLengthMm = rf3::OotLengthToRf3Mm(oFishLength);
-    sFightWeightG = rf3::WeightFromLength(FishFor(oFishLength), static_cast<int>(sFightLengthMm),
+    sFightFishIndex = fishIndex;
+    sFightOotLength = oFishLength;
+    sFightRecord = &RecordFor(fishIndex, oFishLength);
+    sFightLengthMm = rf3::OotLengthToSpeciesMm(SpeciesOf(fishIndex), oFishLength);
+    sFightWeightG = rf3::WeightFromLength(sFightRecord->params, static_cast<int>(sFightLengthMm),
                                           static_cast<int>(sSizeRng % 10));
 }
 
@@ -89,10 +141,10 @@ extern "C" int RF3Fight_IsActive(void) {
     return sFight.has_value() ? 1 : 0;
 }
 
-extern "C" void RF3Fight_StartStrike(float fishLength) {
-    sFight.emplace(FishFor(fishLength), rf3::kDefaultTackle);
+extern "C" void RF3Fight_StartStrike(int32_t fishIndex, float fishLength) {
+    StartFightFish(fishIndex, fishLength);
+    sFight.emplace(sFightRecord->params, rf3::kDefaultTackle);
     sFight->StartStrike();
-    DrawFightSize(fishLength);
     sFight->SetBodyLength(sFightLengthMm / 1000.0f); // AWAY surge (DESIGN step 8f)
 }
 
@@ -101,9 +153,9 @@ extern "C" int32_t RF3Fight_Update(const RF3FightInput* in, RF3FightOutput* out)
     if (!sFight.has_value()) {
         // Fallback only (option switched on mid-fight): no strike was seen, so
         // start the fight as if hooked with a mid-window rod jerk.
-        sFight.emplace(FishFor(in->fishLength), rf3::kDefaultTackle);
+        StartFightFish(in->fishIndex, in->fishLength);
+        sFight.emplace(sFightRecord->params, rf3::kDefaultTackle);
         sFight->StartFight(kPlaceholderTimingA, kPlaceholderStrengthB, fishDistM);
-        DrawFightSize(in->fishLength);
         sFight->SetBodyLength(sFightLengthMm / 1000.0f);
     }
 
@@ -153,19 +205,7 @@ extern "C" void RF3Fight_End(void) {
     }
 }
 
-// --- Size display (step 12b) ------------------------------------------------
-
-namespace {
-float sLengthToWeigh = 0.0f;
-} // namespace
-
-extern "C" void RF3Size_SetLengthToWeigh(float ootLength) {
-    sLengthToWeigh = ootLength;
-}
-
-extern "C" float RF3Size_GetLengthToWeigh(void) {
-    return sLengthToWeigh;
-}
+// Size display (steps 12b, 14d): RF3Records.cpp.
 
 // --- Cast (step 11) ---------------------------------------------------------
 
@@ -201,8 +241,14 @@ uint32_t sApproachFrame = 0;
 uint32_t sChaserPingFrame = 0;
 uint32_t sApproachRng = 0x1234567u;
 
-// Our choice (DESIGN step 10): conditions fixed to the user's RF3 session.
-const int kActivityLevel = rf3::ActivityLevel(rf3::kBassNormal, rf3::kConditionsTestSession);
+// Our choice (DESIGN step 10): conditions fixed to the user's RF3 session. The activity level is
+// per fish record (step 14b).
+int ActivityOf(const rf3::FishParams& fish) {
+    return rf3::ActivityLevel(fish, rf3::kConditionsTestSession);
+}
+float SightRangeOf(const rf3::FishParams& fish) {
+    return rf3::SightRange(fish, ActivityOf(fish));
+}
 
 uint32_t NextApproachRandom() {
     sApproachRng ^= sApproachRng << 13;
@@ -216,7 +262,7 @@ rf3::ApproachFish* FishAt(int32_t index, float fishLength) {
         return nullptr;
     }
     if (!sApproachInit[index]) {
-        sApproach[index] = rf3::ApproachFish(FishFor(fishLength));
+        sApproach[index] = rf3::ApproachFish(FishFor(index, fishLength));
         sApproachInit[index] = true;
     }
     return &sApproach[index];
@@ -257,7 +303,7 @@ extern "C" int32_t RF3Approach_Notice(int32_t fishIndex, float fishLength, float
     in.horizontalDistance = fishToLureXZUnits / RF3_UNITS_PER_METRE;
     in.distance = fishToLureUnits / RF3_UNITS_PER_METRE;
     in.angleFromHeading = angleFromHeading;
-    in.sightRange = rf3::SightRange(FishFor(fishLength), kActivityLevel);
+    in.sightRange = SightRangeOf(FishFor(fishIndex, fishLength));
     if (!fish->TryNotice(in)) {
         return 0;
     }
@@ -321,8 +367,10 @@ extern "C" void RF3Approach_GetStatus(RF3ApproachStatus* status) {
     *status = {};
     status->meter = sMeter.Get();
     status->chaser = sChaser;
-    status->activityLevel = kActivityLevel;
-    status->sightRangeM = rf3::SightRange(rf3::kBassNormal, kActivityLevel);
+    // The chaser's own values; with no chaser, a normal adult bass (as before step 14b).
+    const rf3::FishParams& shown = (sChaser >= 0) ? sApproach[sChaser].GetFish() : rf3::kBassNormal;
+    status->activityLevel = ActivityOf(shown);
+    status->sightRangeM = SightRangeOf(shown);
     for (int i = 0; i < kMaxFish; i++) {
         if (sApproachInit[i] && sApproach[i].GetWary() > 0.0f) {
             status->waryFish++;
@@ -343,4 +391,33 @@ extern "C" void RF3Fight_GetStatus(RF3FightStatus* status) {
     } else {
         *status = sEndedStatus; // active = 0: the values are from the fight that just ended
     }
+}
+
+// --- Species (step 14b) -----------------------------------------------------
+
+extern "C" void RF3Species_RollAll(int32_t fishCount) {
+    int count = std::clamp(static_cast<int>(fishCount), 0, kMaxSpeciesFish);
+    for (int i = 0; i < kMaxSpeciesFish; i++) {
+        sSpeciesRolled[i] = false;
+    }
+    for (int i = 0; i < count; i++) {
+        SpeciesOf(i);
+    }
+    // One line per pond visit in logs/rf3_species.txt, so the spread can be counted (DESIGN step 14).
+    std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::ofstream out(dir + "/rf3_species.txt", std::ios::app);
+    char stamp[32];
+    std::time_t now = std::time(nullptr);
+    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+    out << stamp;
+    for (int i = 0; i < count; i++) {
+        out << ' ' << i << '=' << sSpecies[i];
+    }
+    out << '\n';
+}
+
+extern "C" int32_t RF3Species_Get(int32_t fishIndex) {
+    return SpeciesOf(fishIndex);
 }

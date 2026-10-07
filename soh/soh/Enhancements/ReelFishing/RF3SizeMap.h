@@ -2,10 +2,14 @@
 #define RF3_SIZE_MAP_H
 
 // Reel Fishing III mod (step 12): OoT fish length -> RF3 largemouth bass length and size class.
+// Step 14b adds the same mapping for every species in the random pool.
 // The user's rule: OoT's lowest size = RF3's lowest adult bass, OoT's highest = RF3's highest,
 // linear in between and extrapolated outside. See docs/DESIGN.md step 12.
 
+#include <algorithm>
+
 #include "RF3Params.h"
+#include "RF3FishTable.h"
 
 namespace rf3 {
 
@@ -25,6 +29,49 @@ inline float OotLengthToRf3Mm(float ootLength) {
 // (child Link only) still count as normal adults: the scope is adult bass.
 inline const FishParams& AdultBassForMm(float mm) {
     return (mm <= kBassNormal.lengthMaxMm) ? kBassNormal : kBassLunker;
+}
+
+// Step 14b: the same rule for any species in the random pool (RF3FishTable.h). OoT 33..76 maps
+// onto the species' adult range (lowest minimum to highest maximum of its pool records).
+inline constexpr int kSpeciesCount = 22; // the random pool: species 0..21 (DESIGN step 14)
+
+inline void SpeciesAdultRangeMm(int species, float* minMm, float* maxMm) {
+    *minMm = 1e9f;
+    *maxMm = 0.0f;
+    for (const FishRecord& r : kFishRecords) {
+        if (r.inRandomPool && r.species == species) {
+            *minMm = std::min(*minMm, static_cast<float>(r.params.lengthMinMm));
+            *maxMm = std::max(*maxMm, static_cast<float>(r.params.lengthMaxMm));
+        }
+    }
+}
+
+inline float OotLengthToSpeciesMm(int species, float ootLength) {
+    float minMm, maxMm;
+    SpeciesAdultRangeMm(species, &minMm, &maxMm);
+    return minMm + (ootLength - kOotLengthMin) * (maxMm - minMm) / (kOotLengthMax - kOotLengthMin);
+}
+
+// The species' pool record for mm: the smallest class whose maximum is at least mm, else the
+// largest class. For bass this is step 12's rule (<= 400 mm normal, above that lunker).
+inline const FishRecord& SpeciesRecordForMm(int species, float mm) {
+    const FishRecord* best = nullptr;    // smallest class with lengthMaxMm >= mm
+    const FishRecord* largest = nullptr; // fallback above every class
+    for (const FishRecord& r : kFishRecords) {
+        if (!r.inRandomPool || r.species != species) {
+            continue;
+        }
+        if (largest == nullptr || r.params.lengthMaxMm > largest->params.lengthMaxMm) {
+            largest = &r;
+        }
+        if (mm <= r.params.lengthMaxMm && (best == nullptr || r.params.lengthMaxMm < best->params.lengthMaxMm)) {
+            best = &r;
+        }
+    }
+    if (best != nullptr) {
+        return *best;
+    }
+    return largest != nullptr ? *largest : kFishRecords[0];
 }
 
 } // namespace rf3

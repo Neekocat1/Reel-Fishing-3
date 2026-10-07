@@ -186,6 +186,7 @@ class ApproachFish {
     float GetHold() const { return mHold; }
     float GetWary() const { return mWary; }
     float GetWaitLeft() const { return mWaitLeft; }
+    const FishParams& GetFish() const { return *mFish; } // step 14b: the chaser's species values
 
   private:
     const FishParams* mFish = &kBassNormal;

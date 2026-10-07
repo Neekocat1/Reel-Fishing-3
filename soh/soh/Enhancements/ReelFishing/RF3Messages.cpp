@@ -6,6 +6,7 @@
 // owner's weigh-in shows RF3 lengths instead of OoT's pounds. See docs/DESIGN.md step 12b.
 
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -41,9 +42,11 @@ static float MmToInches(float mm) {
     return mm / 25.4f;
 }
 
-static std::string InchesText(float ootLength) {
+// Step 14d: the length comes from RF3Records.cpp (the fish's own species and size, or the bass
+// conversion of the OoT length when no remembered fish matches).
+static std::string InchesText(float mm) {
     char text[16];
-    std::snprintf(text, sizeof(text), "%.1f", MmToInches(rf3::OotLengthToRf3Mm(ootLength)));
+    std::snprintf(text, sizeof(text), "%.1f", MmToInches(mm));
     return text;
 }
 
@@ -91,11 +94,16 @@ static bool IsCatchText(uint16_t textId) {
 static void BuildRF3CatchMessage(bool* loadFromMessageTable) {
     RF3FightStatus status;
     RF3Fight_GetStatus(&status); // the fight that just ended in the catch
-    char text[160];
+    // Step 14c: the fish's RF3 species name, as RF3 writes it ("an" before a vowel).
+    const char* name = (status.speciesName != nullptr && status.speciesName[0] != '\0') ? status.speciesName
+                                                                                        : "Largemouth Bass";
+    const char* article = (std::strchr("AEIOUaeiou", name[0]) != nullptr) ? "an" : "a";
+    char text[192];
     std::snprintf(text, sizeof(text),
-                  "You caught a %%rlargemouth bass%%w!&%%g%.1f in%%w (%.0f mm), %%g%.2f lb%%w (%d g)&\x1B%%gKeep it&"
+                  "You caught %s %%r%s%%w!&%%g%.1f in%%w (%.0f mm), %%g%.2f lb%%w (%d g)&\x1B%%gKeep it&"
                   "Release it%%w",
-                  MmToInches(status.lengthMm), status.lengthMm, status.weightG / 453.592f, status.weightG);
+                  article, name, MmToInches(status.lengthMm), status.lengthMm, status.weightG / 453.592f,
+                  status.weightG);
     CustomMessage msg = CustomMessage(text);
     msg.AutoFormat();
     msg.LoadIntoFont();
@@ -112,10 +120,10 @@ static void BuildRF3PondMessage(uint16_t textId, bool* loadFromMessageTable) {
         return; // no fish number in this text: OoT's own message
     }
     if (hasRecord) {
-        msg.Replace(std::string(kFishRecordCode), InchesText(RecordOotLength()));
+        msg.Replace(std::string(kFishRecordCode), InchesText(RF3Size_GetRecordMm(LINK_IS_CHILD, RecordOotLength())));
     }
     if (hasFish) {
-        msg.Replace(std::string(kFishInfoCode), InchesText(RF3Size_GetLengthToWeigh()));
+        msg.Replace(std::string(kFishInfoCode), InchesText(RF3Size_GetWeighMm()));
     }
     // Unit words. Checked against logs/rf3_pond_texts.txt for 0x4080 ("weighed ... pounds") and
     // 0x408B ("it weighs ... pounds"); the other weigh-in texts are not dumped yet.

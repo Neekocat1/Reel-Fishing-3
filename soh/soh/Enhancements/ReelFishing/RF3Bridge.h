@@ -29,6 +29,7 @@ typedef struct RF3FightInput {
     float lineMaxUnits;   // longest line, OoT units
     float catchDistUnits; // OoT's catch radius, OoT units
     float fishLength;     // OoT fishLength, used to pick the size class
+    int32_t fishIndex;    // actor params - 100: picks the fish's species (step 14b)
     float fishY;          // fish height, OoT units (debug display only)
     float waterY;         // water surface height, OoT units (debug display only)
     float floorY;         // lake floor under the fish, OoT units (debug display only)
@@ -55,7 +56,8 @@ int RF3_IsEnabled(void);
 int RF3Fight_IsActive(void);
 
 // A fish has bitten: start Reel Fishing III's hook-set timer (state HIT).
-void RF3Fight_StartStrike(float fishLength);
+// fishIndex = actor params - 100, for the fish's species (step 14b).
+void RF3Fight_StartStrike(int32_t fishIndex, float fishLength);
 
 // Start a fight if none is active (call on each hooked frame). Then advance it one frame.
 // Returns the outcome; any outcome other than NONE ends the fight.
@@ -96,14 +98,42 @@ typedef struct RF3FightStatus {
     float hookSetStrength; // "b" of the hook set, 0..1
     float lengthMm;        // RF3 length of this fish (step 12)
     int32_t weightG;       // RF3 weight of this fish (step 12)
+    int32_t fishIndex;     // step 14b: actor params - 100
+    int32_t species;       // step 14b: RF3 species id, -1 if unknown
+    int32_t record;        // step 14b: fishdata.fdt record, -1 if unknown
+    const char* speciesName;
+    float ootLength;       // step 14d: the OoT fishLength the fight started with
 } RF3FightStatus;
 void RF3Fight_GetStatus(RF3FightStatus* status);
 
+// --- Species (step 14b) -----------------------------------------------------
+
+// At pond load: give each of the pond's fish (index 0..fishCount-1) a random RF3 species from the
+// pool, and append the result to logs/rf3_species.txt.
+void RF3Species_RollAll(int32_t fishCount);
+// The fish's RF3 species id (rolled now if it wasn't yet).
+int32_t RF3Species_Get(int32_t fishIndex);
+
 // --- Size display (step 12b) ------------------------------------------------
 
-// The pond owner's fish being weighed (OoT's sFishLengthToWeigh), set each frame by the owner.
-void RF3Size_SetLengthToWeigh(float ootLength);
+// Step 14d (RF3Records.cpp): what OoT's sFishLengthToWeigh refers to, so the texts can show that
+// fish's own RF3 length and species instead of a bass conversion.
+#define RF3_WEIGH_RECORD 0  // the record for the given age (intro text, aquarium)
+#define RF3_WEIGH_CAUGHT 1  // the fish just caught
+#define RF3_WEIGH_ON_HAND 2 // the kept fish, at the weigh-in
+
+// Set wherever OoT sets sFishLengthToWeigh. isChild: OoT's sLinkAge is child (picks the record).
+void RF3Size_SetLengthToWeigh(float ootLength, int32_t source, int32_t isChild);
 float RF3Size_GetLengthToWeigh(void);
+// The RF3 length (mm) to print for the fish being weighed. Falls back to the bass conversion of the
+// OoT length when no remembered fish matches it.
+float RF3Size_GetWeighMm(void);
+// The record's RF3 length for an age (OoT's saved record length given), same fallback.
+float RF3Size_GetRecordMm(int32_t isChild, float ootLength);
+// OoT kept the fish just caught (sFishOnHandLength = ootLength).
+void RF3Size_KeepCaught(float ootLength);
+// OoT wrote a record length into HIGH_SCORE for this age slot: remember the kept fish as that record.
+void RF3Size_SetRecord(int32_t isChild, float ootLength);
 
 // --- Cast (step 11) ---------------------------------------------------------
 

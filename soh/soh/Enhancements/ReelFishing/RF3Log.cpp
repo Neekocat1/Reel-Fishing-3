@@ -50,7 +50,7 @@ static bool OpenLog() {
              "hasFish,fishState,fishStateNext,fishLength,fishX,fishY,fishZ,fishSpeedXZ,"
              "rf3Enabled,rf3Active,rf3Mode,rf3LastRun,rf3Hp,rf3Hook,rf3Tension,rf3Limit,rf3DistanceM,rf3Outcome,"
              "linkX,linkY,linkZ,fishFloorY,rf3Meter,rf3Chaser,rf3ChaserMemory,rf3ApproachMode,"
-             "rf3CastPower,rf3CastFactor,rf3LengthMm,rf3WeightG,fishYaw,fishTailStep,fishTailMag\n";
+             "rf3CastPower,rf3CastFactor,rf3LengthMm,rf3WeightG,fishYaw,fishTailStep,fishTailMag,rf3FishIndex,rf3Species,rf3Record\n";
     sOpen = true;
     sRowsSinceFlush = 0;
     return true;
@@ -99,7 +99,8 @@ extern "C" void RF3Log_OwnerFrame(const RF3OwnerFrame* f) {
     RF3Cast_GetLast(&castPower, &castFactor);
     sFile << approach.meter << ',' << approach.chaser << ',' << approach.chaserMemory << ','
           << approach.chaserMode << ',' << castPower << ',' << castFactor << ',' << fight.lengthMm << ','
-          << fight.weightG << ',' << f->fishYaw << ',' << f->fishTailStep << ',' << f->fishTailMag << '\n';
+          << fight.weightG << ',' << f->fishYaw << ',' << f->fishTailStep << ',' << f->fishTailMag << ','
+          << fight.fishIndex << ',' << fight.species << ',' << fight.record << '\n'; // step 14b
 
     if (++sRowsSinceFlush >= kFlushEveryRows) {
         sFile.flush();

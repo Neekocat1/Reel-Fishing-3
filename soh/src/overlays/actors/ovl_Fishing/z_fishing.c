@@ -1010,6 +1010,9 @@ void Fishing_Init(Actor* thisx, PlayState* play2) {
             Actor_Spawn(&play->actorCtx, play, ACTOR_FISHING, sFishInits[i].pos.x, sFishInits[i].pos.y,
                         sFishInits[i].pos.z, 0, Rand_ZeroFloat(0x10000), 0, 100 + i);
         }
+        if (RF3_IsEnabled()) {
+            RF3Species_RollAll(fishCount); // Reel Fishing III mod (step 14b): a random RF3 species per fish
+        }
     } else {
         if (!GameInteractor_Should(VB_FISHING_FISH_IS_LOACH, thisx->params >= (EN_FISH_PARAM + 15)) ||
             (thisx->params == EN_FISH_AQUARIUM)) {
@@ -2934,7 +2937,7 @@ void Fishing_HandleAquariumDialog(Fishing* this, PlayState* play) {
 
             if (Actor_ProcessTalkRequest(&this->actor, play)) {
                 sFishLengthToWeigh = sFishingRecordLength;
-                RF3Size_SetLengthToWeigh(sFishLengthToWeigh); // step 12b: weigh-in shows RF3 length
+                RF3Size_SetLengthToWeigh(sFishLengthToWeigh, RF3_WEIGH_RECORD, sLinkAge == LINK_AGE_CHILD); // steps 12b/14d: weigh-in shows RF3 length
                 this->isAquariumMessage = true;
             } else {
                 Actor_OfferTalkNearColChkInfoCylinder(&this->actor, play);
@@ -3013,6 +3016,7 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
     rf3In.lineMaxUnits = 1000.0f;            // OoT's full line: 200 segments of 5 units
     rf3In.catchDistUnits = 1.5f * RF3_UNITS_PER_METRE; // step 8i: caught at 1.5 m (user choice; OoT's was 50 units)
     rf3In.fishLength = this->fishLength;
+    rf3In.fishIndex = this->actor.params - EN_FISH_PARAM; // step 14b: the fish's species
     rf3In.fishY = this->actor.world.pos.y;
     rf3In.waterY = WATER_SURFACE_Y(play);
     rf3In.floorY = this->actor.floorHeight;
@@ -4184,7 +4188,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             rf3Fight = RF3_IsEnabled();
             if (rf3Fight) {
                 if (!sLineHooked && !RF3Fight_IsActive()) {
-                    RF3Fight_StartStrike(this->fishLength); // the bite is the strike
+                    RF3Fight_StartStrike(this->actor.params - EN_FISH_PARAM, this->fishLength); // the bite is the strike
                     Fishing_RF3ResetVisuals(this);
                 }
                 rf3Outcome = Fishing_RF3Fight(this, play, input, &rf3Hooked);
@@ -4320,7 +4324,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
 
                 if (this->isLoach == 0) {
                     sFishLengthToWeigh = this->fishLength;
-                    RF3Size_SetLengthToWeigh(sFishLengthToWeigh); // step 12b: weigh-in shows RF3 length
+                    RF3Size_SetLengthToWeigh(sFishLengthToWeigh, RF3_WEIGH_CAUGHT, sLinkAge == LINK_AGE_CHILD); // steps 12b/14d: weigh-in shows RF3 length
 
                     if (sFishLengthToWeigh >= 75) {
                         sFishingCaughtTextId = 0x409F;
@@ -4331,7 +4335,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                     }
                 } else {
                     sFishLengthToWeigh = 2.0f * this->fishLength;
-                    RF3Size_SetLengthToWeigh(sFishLengthToWeigh); // step 12b: weigh-in shows RF3 length
+                    RF3Size_SetLengthToWeigh(sFishLengthToWeigh, RF3_WEIGH_CAUGHT, sLinkAge == LINK_AGE_CHILD); // steps 12b/14d: weigh-in shows RF3 length
                     sFishingCaughtTextId = 0x4099;
                 }
 
@@ -4369,6 +4373,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                                         sFishOnHandLength = this->fishLength;
                                         sFishOnHandIsLoach = this->isLoach;
                                         sLureCaughtWith = sLureEquipped;
+                                        RF3Size_KeepCaught(sFishOnHandLength); // step 14d: remember its species
                                         Actor_Kill(&this->actor);
                                     } else if (GameInteractor_Should(
                                                    VB_FISHING_CONFIRM_KEEPING_SMALLER_FISH,
@@ -4383,6 +4388,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                                         sFishOnHandLength = this->fishLength;
                                         sFishOnHandIsLoach = this->isLoach;
                                         sLureCaughtWith = sLureEquipped;
+                                        RF3Size_KeepCaught(sFishOnHandLength); // step 14d: remember its species
                                         this->fishLength = lengthTemp;
                                         this->isLoach = loachTemp;
                                     }
@@ -4403,6 +4409,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                                     s16 temp2 = sFishOnHandIsLoach;
                                     sFishOnHandLength = this->fishLength;
                                     sLureCaughtWith = sLureEquipped;
+                                    RF3Size_KeepCaught(sFishOnHandLength); // step 14d: remember its species
                                     this->fishLength = temp1;
                                     this->isLoach = temp2;
                                 }
@@ -5277,7 +5284,7 @@ void Fishing_HandleOwnerDialog(Fishing* this, PlayState* play) {
                 switch (play->msgCtx.choiceIndex) {
                     case 0:
                         sFishLengthToWeigh = sFishingRecordLength;
-                        RF3Size_SetLengthToWeigh(sFishLengthToWeigh); // step 12b: weigh-in shows RF3 length
+                        RF3Size_SetLengthToWeigh(sFishLengthToWeigh, RF3_WEIGH_RECORD, sLinkAge == LINK_AGE_CHILD); // steps 12b/14d: weigh-in shows RF3 length
                         Message_ContinueTextbox(play, 0x4080);
                         this->stateAndTimer = 5;
                         break;
@@ -5332,7 +5339,7 @@ void Fishing_HandleOwnerDialog(Fishing* this, PlayState* play) {
                                 this->stateAndTimer = 20;
                             } else if (sFishOnHandIsLoach == 0) {
                                 sFishLengthToWeigh = sFishOnHandLength;
-                                RF3Size_SetLengthToWeigh(sFishLengthToWeigh); // step 12b: weigh-in shows RF3 length
+                                RF3Size_SetLengthToWeigh(sFishLengthToWeigh, RF3_WEIGH_ON_HAND, sLinkAge == LINK_AGE_CHILD); // steps 12b/14d: weigh-in shows RF3 length
                                 // if we set the record or get the reward
                                 if (GameInteractor_Should(VB_SHOULD_CHECK_FOR_FISHING_RECORD,
                                                           (s16)sFishingRecordLength < (s16)sFishOnHandLength,
@@ -5428,11 +5435,13 @@ void Fishing_HandleOwnerDialog(Fishing* this, PlayState* play) {
 
                             HIGH_SCORE(HS_FISHING) &= 0xFFFFFF00;
                             HIGH_SCORE(HS_FISHING) |= (s32)sFishingRecordLength & HS_FISH_LENGTH_CHILD;
+                            RF3Size_SetRecord(true, sFishingRecordLength); // step 14d
 
                             temp = (HIGH_SCORE(HS_FISHING) & HS_FISH_LENGTH_ADULT) >> 0x18;
                             if (temp < sFishingRecordLength) {
                                 HIGH_SCORE(HS_FISHING) &= 0xFFFFFF;
                                 HIGH_SCORE(HS_FISHING) |= ((s32)sFishingRecordLength & HS_FISH_LENGTH_CHILD) << 0x18;
+                                RF3Size_SetRecord(false, sFishingRecordLength); // step 14d
 
                                 if (sLureCaughtWith == FS_LURE_SINKING) {
                                     HIGH_SCORE(HS_FISHING) |= HS_FISH_CHEAT_ADULT;
@@ -5447,6 +5456,7 @@ void Fishing_HandleOwnerDialog(Fishing* this, PlayState* play) {
                         } else {
                             HIGH_SCORE(HS_FISHING) &= 0xFFFFFF;
                             HIGH_SCORE(HS_FISHING) |= ((s32)sFishingRecordLength & HS_FISH_LENGTH_CHILD) << 0x18;
+                            RF3Size_SetRecord(false, sFishingRecordLength); // step 14d
 
                             if (sLureCaughtWith == FS_LURE_SINKING) {
                                 HIGH_SCORE(HS_FISHING) |= HS_FISH_CHEAT_ADULT;
