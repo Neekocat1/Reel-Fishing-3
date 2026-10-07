@@ -114,6 +114,20 @@ void RF3Species_RollAll(int32_t fishCount);
 // The fish's RF3 species id (rolled now if it wasn't yet).
 int32_t RF3Species_Get(int32_t fishIndex);
 
+// --- Region fish (step 16d, RF3RegionFish.cpp) --------------------------------
+
+// Fish index 32 + slot in the bridge; actor params 400 + slot.
+#define RF3_REGION_FISH_INDEX_BASE 32
+typedef struct RF3RegionFishInfo {
+    float minX, maxX, minZ, maxZ, surfaceY; // the region's box (in its own frame) and water surface
+    float angle;                            // step 16i: the box's turn about its centre, radians
+    int32_t record;                         // fishdata.fdt record (species and size class)
+    float mm;                               // RF3 length, drawn at spawn
+    float ootLength;                        // OoT fishLength for the model size
+} RF3RegionFishInfo;
+// The fish in a slot of the current scene. Returns 0 if the slot is empty.
+int32_t RF3RegionFish_Get(int32_t slot, RF3RegionFishInfo* out);
+
 // --- Size display (step 12b) ------------------------------------------------
 
 // Step 14d (RF3Records.cpp): what OoT's sFishLengthToWeigh refers to, so the texts can show that
@@ -134,6 +148,24 @@ float RF3Size_GetRecordMm(int32_t isChild, float ootLength);
 void RF3Size_KeepCaught(float ootLength);
 // OoT wrote a record length into HIGH_SCORE for this age slot: remember the kept fish as that record.
 void RF3Size_SetRecord(int32_t isChild, float ootLength);
+
+// --- The rod as an item (step 15a, RF3Records.cpp) ----------------------------
+
+// The pond owner handed Link the rod after payment: Link owns it from now on (saved per file).
+// Does nothing with the RF3 option off.
+void RF3Rod_SetOwned(void);
+int32_t RF3Rod_IsOwned(void);
+// Step 15c: one line in logs/rf3_records.txt (e.g. "portable-start", scene number).
+void RF3Rod_LogEvent(const char* what, int32_t value);
+
+// --- The mod's own records (step 16a, RF3Records.cpp) -------------------------
+
+// A catch, once per fish (the catch message calls it; repeats of the same catch give the same answer).
+// Returns 1 if it is a new record for its fishdata record (the longest fish wins; the first catch is
+// one). previousMm: the old record, 0 if none.
+int32_t RF3Records_SubmitCatch(int32_t record, int32_t species, float mm, int32_t weightG, float* previousMm);
+// The record for a fishdata record. Returns 0 if none yet.
+int32_t RF3Records_GetBest(int32_t record, float* mm, int32_t* weightG);
 
 // --- Cast (step 11) ---------------------------------------------------------
 

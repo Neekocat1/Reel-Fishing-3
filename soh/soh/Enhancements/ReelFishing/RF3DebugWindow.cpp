@@ -89,6 +89,7 @@ void RF3DebugWindow::DrawElement() {
     RF3Fight_GetStatus(&s);
 
     ImGui::Text("Reel Fishing III mechanics: %s", RF3_IsEnabled() ? "ON" : "OFF");
+    ImGui::Text("Fishing rod owned (this save file): %s", RF3Rod_IsOwned() ? "yes" : "no"); // step 15a
     if (!s.active) {
         ImGui::Separator();
         DrawApproach();

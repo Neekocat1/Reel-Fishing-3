@@ -23,8 +23,10 @@
 #include "RF3SizeMap.h"
 
 extern "C" {
+#include "functions.h"
 #include "variables.h"
 #include "macros.h"
+extern PlayState* gPlayState;
 }
 
 static constexpr uint16_t kFishGotAwayText = 0x4082;
@@ -98,12 +100,50 @@ static void BuildRF3CatchMessage(bool* loadFromMessageTable) {
     const char* name = (status.speciesName != nullptr && status.speciesName[0] != '\0') ? status.speciesName
                                                                                         : "Largemouth Bass";
     const char* article = (std::strchr("AEIOUaeiou", name[0]) != nullptr) ? "an" : "a";
-    char text[192];
+
+    // Step 16a: the mod's own record for this fish's RF3 record (juvenile/normal/lunker separate).
+    // A new record gets its own line and a chime; the Keep/Release choice moves to a second box.
+    float previousMm = 0.0f;
+    bool newRecord = RF3Records_SubmitCatch(status.record, status.species, status.lengthMm, status.weightG,
+                                            &previousMm) != 0;
+    // Step 16e: outside the pond the fish is released after the catch: no Keep choice, one box.
+    bool releaseOnly = (gPlayState != nullptr) && (gPlayState->sceneNum != SCENE_FISHING_POND);
+    char recordLine[64] = "";
+    if (releaseOnly) {
+        std::snprintf(recordLine, sizeof(recordLine), "%s",
+                      newRecord ? "&%yNew record!%w&%gYou let it go.%w" : "&%gYou let it go.%w");
+        if (newRecord) {
+            Audio_PlaySfxGeneral(NA_SE_SY_CORRECT_CHIME, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                 &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        }
+        char text[256];
+        std::snprintf(text, sizeof(text), "You caught %s %%r%s%%w!&%%g%.1f in%%w (%.0f mm), %%g%.2f lb%%w (%d g)%s",
+                      article, name, MmToInches(status.lengthMm), status.lengthMm, status.weightG / 453.592f,
+                      status.weightG, recordLine);
+        CustomMessage msg = CustomMessage(text);
+        msg.AutoFormat();
+        msg.LoadIntoFont();
+        *loadFromMessageTable = false;
+        return;
+    }
+    if (newRecord) {
+        if (previousMm > 0.0f) {
+            std::snprintf(recordLine, sizeof(recordLine), "&%%yNew record!%%w (was %.1f in)^", MmToInches(previousMm));
+        } else {
+            std::snprintf(recordLine, sizeof(recordLine), "&%%yNew record!%%w^");
+        }
+        Audio_PlaySfxGeneral(NA_SE_SY_CORRECT_CHIME, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    } else {
+        std::snprintf(recordLine, sizeof(recordLine), "&");
+    }
+
+    char text[256];
     std::snprintf(text, sizeof(text),
-                  "You caught %s %%r%s%%w!&%%g%.1f in%%w (%.0f mm), %%g%.2f lb%%w (%d g)&\x1B%%gKeep it&"
+                  "You caught %s %%r%s%%w!&%%g%.1f in%%w (%.0f mm), %%g%.2f lb%%w (%d g)%s\x1B%%gKeep it&"
                   "Release it%%w",
                   article, name, MmToInches(status.lengthMm), status.lengthMm, status.weightG / 453.592f,
-                  status.weightG);
+                  status.weightG, recordLine);
     CustomMessage msg = CustomMessage(text);
     msg.AutoFormat();
     msg.LoadIntoFont();

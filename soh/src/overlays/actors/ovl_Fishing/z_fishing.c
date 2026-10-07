@@ -19,7 +19,7 @@
 // game frame (3 = 20 Hz in normal play).
 #define RF3_SUBSTEPS ((R_UPDATE_RATE > 0) ? R_UPDATE_RATE : 1)
 // OoT only lets fish line up and bite within 800 units of the pond centre (states 2-4).
-#define RF3_LURE_IN_BITE_AREA() ((SQ(sLurePos.x) + SQ(sLurePos.z)) < SQ(800.0f))
+#define RF3_LURE_IN_BITE_AREA() (Fishing_RF3LureInBiteArea()) // pond: within 800 of the centre; step 16d: region
 // Step 11: B held during OoT's cast wind-up (sRodCastTimer 37 -> 18) charges RF3 cast power.
 #define RF3_CAST_WINDUP_FRAMES 19
 static s16 sRF3CastHeldFrames = 0;
@@ -27,7 +27,45 @@ static u8 sRF3CastCharging = false;
 #include <libultraship/bridge/consolevariablebridge.h>
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
-#define WATER_SURFACE_Y(play) play->colCtx.colHeader->waterBoxes->ySurface
+// Reel Fishing III mod (step 15c): the rod used outside the pond. A portable instance of this actor
+// (params EN_FISH_PORTABLE) runs the rod, line and lure in any scene. Its water and ground come from
+// under the lure instead of the pond's fixed layout (first water box, 920-unit radius). See
+// docs/DESIGN.md step 15.
+#define EN_FISH_PORTABLE 300
+static u8 sRF3Portable = false;         // a portable instance is running (never in the pond)
+static u8 sRF3PortableInWater = false;  // the lure is over a water box whose surface is above the ground
+static f32 sRF3PortableSurfaceY = 0.0f; // that surface; over land, 50 units below the ground
+static f32 sRF3PortableFloorY = 0.0f;   // the ground under the lure
+static u16 sRF3RodBtn = BTN_B;          // the button holding the rod: B at the pond, else a D-pad button
+
+// Reel Fishing III mod (step 16d): fish in hand-placed regions outside the pond (params EN_FISH_REGION
+// + slot). While a region fish updates or draws, sRF3CurRegion is its region: its water surface and box
+// stand in for the pond's.
+#define EN_FISH_REGION 400
+#define RF3_REGION_SLOTS 64
+#define RF3_IS_REGION_FISH(fish) ((fish)->actor.params >= EN_FISH_REGION)
+typedef struct {
+    f32 minX, maxX, minZ, maxZ, surfaceY; // the box in its own frame (step 16i: turned by angle)
+    f32 angle;                            // radians, about the box centre
+} RF3RegionBox;
+static RF3RegionBox sRF3RegionBoxes[RF3_REGION_SLOTS];
+static RF3RegionBox* sRF3CurRegion = NULL;
+static Vec3f sRF3RegionLastGood[RF3_REGION_SLOTS]; // step 16f: last spot over water deep enough
+#define RF3_REGION_MIN_DEPTH 15.0f                 // step 16f: shallower than this counts as shore
+
+#define WATER_SURFACE_Y(play)                         \
+    ((sRF3CurRegion != NULL) ? sRF3CurRegion->surfaceY \
+                             : (sRF3Portable ? sRF3PortableSurfaceY : play->colCtx.colHeader->waterBoxes->ySurface))
+
+// Is the lure (or a line point) on land? The pond: beyond its 920-unit radius. Portable: no water under the lure.
+static s32 Fishing_RF3OnLand(f32 xzLenSq) {
+    return sRF3Portable ? !sRF3PortableInWater : (xzLenSq > SQ(920.0f));
+}
+
+// Ground height for a lure on land. The pond: its bank slope. Portable: the ground under the lure.
+static f32 Fishing_RF3LandY(PlayState* play, f32 xzLenSq, f32 slope) {
+    return sRF3Portable ? sRF3PortableFloorY : (((sqrtf(xzLenSq) - 920.0f) * slope) + WATER_SURFACE_Y(play));
+}
 
 void Fishing_Init(Actor* thisx, PlayState* play);
 void Fishing_Destroy(Actor* thisx, PlayState* play);
@@ -36,6 +74,18 @@ void Fishing_UpdateOwner(Actor* thisx, PlayState* play);
 void Fishing_DrawFish(Actor* thisx, PlayState* play);
 void Fishing_DrawOwner(Actor* thisx, PlayState* play);
 void Fishing_Reset(void);
+static void Fishing_RF3InitPortable(Fishing* this, PlayState* play);
+static void Fishing_RF3DestroyPortable(PlayState* play);
+static void Fishing_UpdateCinematics(Fishing* this, PlayState* play);
+static s32 Fishing_RF3LureInBiteArea(void);
+static void Fishing_RF3KeepInWater(Fishing* this, PlayState* play);
+static f32 Fishing_RF3ShoreDistance(Fishing* this, PlayState* play);
+static s32 Fishing_RF3OutOfArea(f32 x, f32 z);
+static s32 Fishing_RF3FishIndex(Fishing* this);
+static f32 Fishing_RF3Perception(Fishing* this);
+static void Fishing_RF3RegionTarget(Fishing* this);
+static void Fishing_RF3ClampFightTarget(Vec3f* target);
+static void Fishing_RF3InitRegionFish(Fishing* this, PlayState* play);
 
 typedef struct {
     /* 0x00 */ u8 isLoach;
@@ -865,6 +915,15 @@ void Fishing_Init(Actor* thisx, PlayState* play2) {
         sLinkAge = gSaveContext.linkAge;
     }
 
+    if (thisx->params == EN_FISH_PORTABLE) {
+        Fishing_RF3InitPortable(this, play); // Reel Fishing III mod (step 15c)
+        return;
+    }
+    if (thisx->params >= EN_FISH_REGION) {
+        Fishing_RF3InitRegionFish(this, play); // Reel Fishing III mod (step 16d)
+        return;
+    }
+
     if (thisx->params < EN_FISH_PARAM) {
         sReelLock = 0;
         RF3Fight_End();      // Reel Fishing III mod: no fight carries over into a new pond visit
@@ -1063,6 +1122,11 @@ void Fishing_Destroy(Actor* thisx, PlayState* play2) {
     PlayState* play = play2;
     Fishing* this = (Fishing*)thisx;
 
+    if (thisx->params == EN_FISH_PORTABLE) {
+        Fishing_RF3DestroyPortable(play); // Reel Fishing III mod (step 15c): no skeleton to free
+        return;
+    }
+
     SkelAnime_Free(&this->skelAnime, play);
 
     if (thisx->params == EN_FISH_AQUARIUM) {
@@ -1127,7 +1191,7 @@ void Fishing_UpdateEffects(FishingEffect* effect, PlayState* play) {
                     if (Rand_ZeroOne() < 0.3f) {
                         Vec3f pos = effect->pos;
                         pos.y = rippleY;
-                        Fishing_SpawnRipple(NULL, play->specialEffects, &pos, 20.0f, 60.0f, 150, 90);
+                        Fishing_SpawnRipple(NULL, sFishingEffects, &pos, 20.0f, 60.0f, 150, 90);
                     }
                 }
             } else if (effect->type == FS_EFF_DUST_SPLASH) {
@@ -1141,7 +1205,7 @@ void Fishing_UpdateEffects(FishingEffect* effect, PlayState* play) {
                     if (Rand_ZeroOne() < 0.5f) {
                         Vec3f pos = effect->pos;
                         pos.y = WATER_SURFACE_Y(play);
-                        Fishing_SpawnRipple(NULL, play->specialEffects, &pos, 40.0f, 110.0f, 150, 90);
+                        Fishing_SpawnRipple(NULL, sFishingEffects, &pos, 40.0f, 110.0f, 150, 90);
                     }
                 }
             } else if (effect->type == FS_EFF_RAIN_DROP) {
@@ -1193,7 +1257,7 @@ void Fishing_UpdateEffects(FishingEffect* effect, PlayState* play) {
                 if ((effect->timer % 16) == 0) {
                     Vec3f pos = effect->pos;
                     pos.y = WATER_SURFACE_Y(play);
-                    Fishing_SpawnRipple(NULL, play->specialEffects, &pos, 30.0f, 300.0f, 150, 90);
+                    Fishing_SpawnRipple(NULL, sFishingEffects, &pos, 30.0f, 300.0f, 150, 90);
                 }
 
                 if (effect->state >= 0) {
@@ -1528,8 +1592,8 @@ void Fishing_UpdateLine(PlayState* play, Vec3f* basePos, Vec3f* pos, Vec3f* rot,
 
         sqDistXZ = SQ((pos + i)->x) + SQ((pos + i)->z);
 
-        if (sqDistXZ > SQ(920.0f)) {
-            phi_f12 = ((sqrtf(sqDistXZ) - 920.0f) * 0.11f) + WATER_SURFACE_Y(play);
+        if (Fishing_RF3OnLand(sqDistXZ)) { // step 15c: portable = the lure's own ground
+            phi_f12 = Fishing_RF3LandY(play, sqDistXZ, 0.11f);
         } else {
             phi_f12 = WATER_SURFACE_Y(play);
         }
@@ -1688,7 +1752,7 @@ void Fishing_DrawLureHook(PlayState* play, Vec3f* pos, Vec3f* refPos, u8 hookInd
         Matrix_Push();
 
         if (sIsOwnersHatSunk) {
-            FishingEffect* effect = play->specialEffects;
+            FishingEffect* effect = sFishingEffects;
             MtxF mf;
 
             Matrix_MultVec3f(&sZeroVec, &effect->pos);
@@ -2272,7 +2336,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                 sLureRot.y = sReelLineRot[LINE_SEG_COUNT - 2].y;
 
                 // Step 11: RF3 charges while B is held; letting go fixes the power.
-                if (sRF3CastCharging && CHECK_BTN_ALL(input->cur.button, BTN_B)) {
+                if (sRF3CastCharging && CHECK_BTN_ALL(input->cur.button, sRF3RodBtn)) {
                     sRF3CastHeldFrames++;
                 } else {
                     sRF3CastCharging = false;
@@ -2345,8 +2409,8 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
             sRodLineSpooled = 200.0f - (lengthCasted * 200.0f * 0.001f);
 
             lureXZLen = SQ(sLurePos.x) + SQ(sLurePos.z);
-            if (lureXZLen > SQ(920.0f)) {
-                if ((KREG(56) != 0) || (sLurePos.y > 160.0f) || (sLurePos.x < 80.0f) || (sLurePos.x > 180.0f) ||
+            if (Fishing_RF3OnLand(lureXZLen)) { // step 15c
+                if (sRF3Portable || (KREG(56) != 0) || (sLurePos.y > 160.0f) || (sLurePos.x < 80.0f) || (sLurePos.x > 180.0f) ||
                     (sLurePos.z > 1350.0f) || (sLurePos.z < 1100.0f) || (sLurePos.y < 45.0f)) {
                     sp80 = this->actor.world.pos;
                     this->actor.prevPos = this->actor.world.pos = sLurePos;
@@ -2369,7 +2433,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     }
                 }
 
-                spE4 = ((sqrtf(lureXZLen) - 920.0f) * 0.11f) + WATER_SURFACE_Y(play);
+                spE4 = Fishing_RF3LandY(play, lureXZLen, 0.11f); // step 15c
                 if (sLurePos.y <= spE4) {
                     sLurePos.y = spE4;
                     sLurePosDelta.x = sLurePosDelta.y = sLurePosDelta.z = 0.0f;
@@ -2411,13 +2475,13 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                             spA8.x += (sp9C.x * 3.0f);
                             spA8.y = WATER_SURFACE_Y(play);
                             spA8.z += (sp9C.z * 3.0f);
-                            Fishing_SpawnDustSplash(NULL, play->specialEffects, &spA8, &sp9C,
+                            Fishing_SpawnDustSplash(NULL, sFishingEffects, &spA8, &sp9C,
                                                     Rand_ZeroFloat(0.02f) + 0.025f);
                         }
 
                         spA8 = sLurePos;
                         spA8.y = WATER_SURFACE_Y(play);
-                        Fishing_SpawnRipple(NULL, play->specialEffects, &spA8, 100.0f, 800.0f, 150, 90);
+                        Fishing_SpawnRipple(NULL, sFishingEffects, &spA8, 100.0f, 800.0f, 150, 90);
                     }
                 } else {
                     Math_ApproachZeroF(&D_80B7E148, 1.0f, 0.05f);
@@ -2475,7 +2539,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
             spE4 = WATER_SURFACE_Y(play);
 
             lureXZLen = SQ(sLurePos.x) + SQ(sLurePos.z);
-            if (lureXZLen < SQ(920.0f)) {
+            if (!Fishing_RF3OnLand(lureXZLen)) { // step 15c
                 if (sLurePos.y <= (spE4 + 4.0f)) {
                     wiggle = 0.0f;
 
@@ -2490,7 +2554,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     if (wiggle > 1.0f) {
                         wiggle = 1.0f;
                     }
-                    if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
+                    if (CHECK_BTN_ALL(input->press.button, sRF3RodBtn)) {
                         wiggle = 0.5f;
                     }
 
@@ -2546,13 +2610,13 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     }
                 }
             } else {
-                spE4 = ((sqrtf(lureXZLen) - 920.0f) * 0.11f) + WATER_SURFACE_Y(play);
+                spE4 = Fishing_RF3LandY(play, lureXZLen, 0.11f); // step 15c
                 if (sLurePos.y <= spE4) {
                     sLurePos.y = spE4;
                     spDC = 0x500;
                     sLureWiggleRotYTarget = sReelLineRot[LINE_SEG_COUNT - 2].y + M_PI;
                     sLureRot.x = 0.0f;
-                    if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
+                    if (CHECK_BTN_ALL(input->press.button, sRF3RodBtn)) {
                         sRodLineSpooled += 6.0f;
                         Sfx_PlaySfxAtPos(&sSoundPos, NA_SE_PL_WALK_SAND);
                     }
@@ -2679,7 +2743,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                 if ((sLureTimer & timer) == 0) {
                     spA8 = sLurePos;
                     spA8.y = WATER_SURFACE_Y(play);
-                    Fishing_SpawnRipple(NULL, play->specialEffects, &spA8, 30.0f, 300.0f, 150, 90);
+                    Fishing_SpawnRipple(NULL, sFishingEffects, &spA8, 30.0f, 300.0f, 150, 90);
                 }
             }
             break;
@@ -2691,7 +2755,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
             }
 
             if (CHECK_BTN_ALL(input->cur.button, BTN_A)) {
-                if ((SQ(sLurePos.x) + SQ(sLurePos.z)) > SQ(920.0f)) {
+                if (Fishing_RF3OnLand(SQ(sLurePos.x) + SQ(sLurePos.z))) { // step 15c
                     sRodLineSpooled += (1.0f + (KREG(65) * 0.1f));
                 } else {
                     sRodLineSpooled += sRodReelingSpeed;
@@ -2752,14 +2816,14 @@ s32 Fishing_SplashBySize(Fishing* this, PlayState* play, u8 ignorePosCheck) {
         pos.y = WATER_SURFACE_Y(play);
         pos.z += vel.z * 3.0f;
 
-        Fishing_SpawnDustSplash(&this->actor.projectedPos, play->specialEffects, &pos, &vel,
+        Fishing_SpawnDustSplash(&this->actor.projectedPos, sFishingEffects, &pos, &vel,
                                 (Rand_ZeroFloat(0.02f) + 0.025f) * scale);
     }
 
     pos = this->actor.world.pos;
     pos.y = WATER_SURFACE_Y(play);
 
-    Fishing_SpawnRipple(&this->actor.projectedPos, play->specialEffects, &pos, 100.0f, 800.0f, 150, 90);
+    Fishing_SpawnRipple(&this->actor.projectedPos, sFishingEffects, &pos, 100.0f, 800.0f, 150, 90);
 
     this->lilyTimer = 30;
 
@@ -2796,7 +2860,7 @@ void Fishing_SplashBySize2(Fishing* this, PlayState* play) {
         pos.y += (vel.y * 3.0f);
         pos.z += (vel.z * 3.0f);
 
-        Fishing_SpawnDustSplash(&this->actor.projectedPos, play->specialEffects, &pos, &vel,
+        Fishing_SpawnDustSplash(&this->actor.projectedPos, sFishingEffects, &pos, &vel,
                                 (Rand_ZeroFloat(0.02f) + 0.025f) * scale);
     }
 }
@@ -2819,13 +2883,13 @@ void func_80B70ED4(Fishing* this, Input* input) {
         s16 toLureYaw = Math_Atan2S(lineVec.z, lineVec.x);
         f32 angleFromHeading = (s16)(toLureYaw - this->actor.shape.rot.y) * (M_PI / 32768.0f);
 
-        if (RF3Approach_Notice(this->actor.params - EN_FISH_PARAM, this->fishLength, sqrtf(lineLengthSQ),
+        if (RF3Approach_Notice(Fishing_RF3FishIndex(this), this->fishLength, sqrtf(lineLengthSQ),
                                sqrtf(SQ(lineVec.x) + SQ(lineVec.z)), angleFromHeading)) {
             this->fishState = 2;
             this->unk_15E = 0;
             this->timerArray[0] = 0;
             this->timerArray[2] = 30000; // RF3 decides when the chase ends
-            this->perception = sFishInits[this->actor.params - EN_FISH_PARAM].perception;
+            this->perception = Fishing_RF3Perception(this);
             this->rotationStep = 0.0f;
         }
     } else if ((sRodCastState == 3) && (this->unk_1A2 == 0) && (sIsOwnersHatHooked == 0)) {
@@ -2845,7 +2909,7 @@ void func_80B70ED4(Fishing* this, Input* input) {
                     this->unk_15E = 0;
                     this->timerArray[0] = 0;
                     this->timerArray[2] = (s16)Rand_ZeroFloat(100.0f) + 100;
-                    this->perception = sFishInits[this->actor.params - EN_FISH_PARAM].perception;
+                    this->perception = Fishing_RF3Perception(this);
                     this->rotationStep = 0.0f;
                 }
 
@@ -2854,7 +2918,7 @@ void func_80B70ED4(Fishing* this, Input* input) {
                     this->unk_15E = 0;
                     this->timerArray[0] = 0;
                     this->timerArray[2] = (s16)Rand_ZeroFloat(100.0f) + 100;
-                    this->perception = sFishInits[this->actor.params - EN_FISH_PARAM].perception;
+                    this->perception = Fishing_RF3Perception(this);
                     this->rotationStep = 0.0f;
                 }
             }
@@ -2988,7 +3052,6 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
     f32 dz = this->actor.world.pos.z - player->actor.world.pos.z;
     f32 dist = sqrtf(SQ(dx) + SQ(dz));
     f32 scale;
-    f32 targetSq;
     f32 gap;
     f32 radialSpeed;
     f32 drift;
@@ -3015,8 +3078,12 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
     rf3In.fishDistUnits = dist;
     rf3In.lineMaxUnits = 1000.0f;            // OoT's full line: 200 segments of 5 units
     rf3In.catchDistUnits = 1.5f * RF3_UNITS_PER_METRE; // step 8i: caught at 1.5 m (user choice; OoT's was 50 units)
+    if (sRF3CurRegion != NULL) {
+        // Step 16f: Link may stand inland; the fish can't come closer than the shore, so it lands there.
+        rf3In.catchDistUnits = MAX(rf3In.catchDistUnits, Fishing_RF3ShoreDistance(this, play));
+    }
     rf3In.fishLength = this->fishLength;
-    rf3In.fishIndex = this->actor.params - EN_FISH_PARAM; // step 14b: the fish's species
+    rf3In.fishIndex = Fishing_RF3FishIndex(this); // step 14b: the fish's species
     rf3In.fishY = this->actor.world.pos.y;
     rf3In.waterY = WATER_SURFACE_Y(play);
     rf3In.floorY = this->actor.floorHeight;
@@ -3055,12 +3122,7 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
             this->fishTargetPos.z = player->actor.world.pos.z + (dz * scale);
         }
         // Keep the target inside the pond, as OoT's own fight targets are.
-        targetSq = SQ(this->fishTargetPos.x) + SQ(this->fishTargetPos.z);
-        if (targetSq > SQ(750.0f)) {
-            scale = 750.0f / sqrtf(targetSq);
-            this->fishTargetPos.x *= scale;
-            this->fishTargetPos.z *= scale;
-        }
+        Fishing_RF3ClampFightTarget(&this->fishTargetPos); // step 16d: the pond's 750 radius, or the region's box
     }
 
     // Step 8g: movement that shows the fight state (our visual choice; the fight's numbers are
@@ -3089,12 +3151,7 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
         }
         this->fishTargetPos.x = player->actor.world.pos.x + (ux * radial) - (uz * across);
         this->fishTargetPos.z = player->actor.world.pos.z + (uz * radial) + (ux * across);
-        targetSq = SQ(this->fishTargetPos.x) + SQ(this->fishTargetPos.z);
-        if (targetSq > SQ(750.0f)) {
-            scale = 750.0f / sqrtf(targetSq);
-            this->fishTargetPos.x *= scale;
-            this->fishTargetPos.z *= scale;
-        }
+        Fishing_RF3ClampFightTarget(&this->fishTargetPos); // step 16d: the pond's 750 radius, or the region's box
     }
 
     // Depth and a slow drift per fight state.
@@ -3192,7 +3249,7 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
     return rf3Out.outcome;
 }
 
-void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
+static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
     s16 i;
     s16 rotXYScale = 10;
     f32 distX;
@@ -3372,7 +3429,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 bubblePos.x = Rand_CenteredFloat(5.0f) + 130.0f;
                 bubblePos.y = 40.0f;
                 bubblePos.z = Rand_CenteredFloat(5.0f) + 1280.0f;
-                Fishing_SpawnBubble(NULL, play->specialEffects, &bubblePos, Rand_ZeroFloat(0.02f) + 0.03f, 1);
+                Fishing_SpawnBubble(NULL, sFishingEffects, &bubblePos, Rand_ZeroFloat(0.02f) + 0.03f, 1);
             }
 
             Math_ApproachS(&this->fishLimbEFRotYDelta, (Math_SinS(this->stateAndTimer * 0x800) * 2500.0f) + 2500.0f, 2,
@@ -3425,7 +3482,8 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 this->timerArray[1] = 50;
             }
 
-            if (Message_GetState(&play->msgCtx) == TEXT_STATE_NONE) {
+            // Step 16d: the dawn/dusk group swim follows the pond's group fish; not for region fish.
+            if ((Message_GetState(&play->msgCtx) == TEXT_STATE_NONE) && !RF3_IS_REGION_FISH(this)) {
                 if ((gSaveContext.dayTime >= 0xC000) && (gSaveContext.dayTime <= 0xC01B)) {
                     this->fishState = 7;
                     this->timerArray[3] = (s16)Rand_ZeroFloat(150.0f) + 200;
@@ -3456,6 +3514,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                     this->fishTargetPos.x = Rand_CenteredFloat(300.0f);
                     this->fishTargetPos.y = (WATER_SURFACE_Y(play) - 50.0f) - Rand_ZeroFloat(50.0f);
                     this->fishTargetPos.z = Rand_CenteredFloat(300.0f);
+                    Fishing_RF3RegionTarget(this); // step 16d: a region fish wanders inside its box
                     this->unk_190 = 1.0f;
                     this->unk_194 = 2000.0f;
                 }
@@ -3572,9 +3631,9 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
 
                         spB8 = this->fishMouthPos;
                         spB8.y = WATER_SURFACE_Y(play);
-                        Fishing_SpawnRipple(&this->actor.projectedPos, play->specialEffects, &spB8, 10.0f, 300.0f, 150,
+                        Fishing_SpawnRipple(&this->actor.projectedPos, sFishingEffects, &spB8, 10.0f, 300.0f, 150,
                                             90);
-                        Fishing_SpawnRipple(&this->actor.projectedPos, play->specialEffects, &spB8, 30.0f, 400.0f, 150,
+                        Fishing_SpawnRipple(&this->actor.projectedPos, sFishingEffects, &spB8, 30.0f, 400.0f, 150,
                                             90);
 
                         Audio_PlayActorSound2(&this->actor, NA_SE_PL_CATCH_BOOMERANG);
@@ -3650,7 +3709,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 sWiggleAttraction = 0;
             }
 
-            if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
+            if (CHECK_BTN_ALL(input->press.button, sRF3RodBtn)) {
                 this->perception += 0.008f;
             }
 
@@ -3677,7 +3736,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 // chance are skipped. "Reached" is OoT's own close-to-the-lure test above.
                 // A lure outside OoT's biting area counts as out of play (step 10b).
                 rf3Approach = RF3Approach_Chase(
-                    this->actor.params - EN_FISH_PARAM, (sRodCastState == 3) && RF3_LURE_IN_BITE_AREA(),
+                    Fishing_RF3FishIndex(this), (sRodCastState == 3) && RF3_LURE_IN_BITE_AREA(),
                     (SQ(sLurePos.x - player->actor.world.pos.x) + SQ(sLurePos.z - player->actor.world.pos.z)) <
                         SQ(KREG(59) + 50.0f),
                     distToTarget < ((this->fishLength * 0.5f) + 20.0f), RF3_SUBSTEPS);
@@ -3709,9 +3768,9 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                     this->unk_194 = 2000.0f;
                 }
                 if ((this->fishState == 2) &&
-                    (sqrtf(SQ(this->actor.world.pos.x) + SQ(this->actor.world.pos.z)) > 800.0f)) {
+                    Fishing_RF3OutOfArea(this->actor.world.pos.x, this->actor.world.pos.z)) {
                     // OoT's own exit: the fish strayed too far from the pond centre.
-                    RF3Approach_EndChase(this->actor.params - EN_FISH_PARAM);
+                    RF3Approach_EndChase(Fishing_RF3FishIndex(this));
                     this->fishState = this->fishStateNext;
                     this->timerArray[1] = (s16)Rand_ZeroFloat(30.0f) + 50;
                     this->timerArray[0] = (s16)Rand_ZeroFloat(10.0f) + 5;
@@ -3721,7 +3780,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                 }
                 if (this->actor.xzDistToPlayer < (100.0f * playerSpeedMod)) {
                     // OoT's own exit: Link came too close and scared the fish.
-                    RF3Approach_EndChase(this->actor.params - EN_FISH_PARAM);
+                    RF3Approach_EndChase(Fishing_RF3FishIndex(this));
                     this->fishStateNext = this->fishState = 0;
                     this->unk_1A4 = 1000;
                     this->unk_1A2 = 200;
@@ -3774,7 +3833,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             }
 
             if ((sRodCastState != 3) || (this->timerArray[2] == 0) ||
-                (sqrtf(SQ(this->actor.world.pos.x) + SQ(this->actor.world.pos.z)) > 800.0f)) {
+                Fishing_RF3OutOfArea(this->actor.world.pos.x, this->actor.world.pos.z)) {
                 this->fishState = this->fishStateNext;
                 this->timerArray[1] = (s16)Rand_ZeroFloat(30.0f) + 50;
                 this->timerArray[0] = (s16)Rand_ZeroFloat(10.0f) + 5;
@@ -3794,7 +3853,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
         case 3:
             if (RF3_IsEnabled()) {
                 // Step 10: still the chaser while lining up; released after the bite.
-                RF3Approach_Chase(this->actor.params - EN_FISH_PARAM, sRodCastState == 3, false, false, RF3_SUBSTEPS);
+                RF3Approach_Chase(Fishing_RF3FishIndex(this), sRodCastState == 3, false, false, RF3_SUBSTEPS);
             }
             this->lilyTimer = 6;
             rotXYScale = 2;
@@ -3817,7 +3876,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             Math_ApproachF(&this->actor.speedXZ, this->speedTarget * 0.8f, 1.0f, 1.0f);
 
             if ((sRodCastState != 3) || (sLurePos.y > (WATER_SURFACE_Y(play) + 5.0f)) ||
-                (sqrtf(SQ(sLurePos.x) + SQ(sLurePos.z)) > 800.0f)) {
+                Fishing_RF3OutOfArea(sLurePos.x, sLurePos.z)) {
                 this->fishState = this->fishStateNext;
                 this->timerArray[0] = 0;
                 this->unk_190 = 1.0f;
@@ -3837,7 +3896,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
         case 4:
             if (RF3_IsEnabled()) {
                 // Step 10: still the chaser while lunging; released after the bite.
-                RF3Approach_Chase(this->actor.params - EN_FISH_PARAM, sRodCastState == 3, false, false, RF3_SUBSTEPS);
+                RF3Approach_Chase(Fishing_RF3FishIndex(this), sRodCastState == 3, false, false, RF3_SUBSTEPS);
             }
             Math_ApproachF(&this->rotationStep, 16384.0f, 1.0f, 4096.0f);
             Math_ApproachS(&this->fishLimbDRotZDelta, 0x4E20, 4, 0x1388);
@@ -3848,7 +3907,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             Math_ApproachF(&this->actor.speedXZ, this->speedTarget, 1.0f, 1.0f);
 
             if ((sRodCastState != 3) || (this->timerArray[0] == 0) || (sLurePos.y > (WATER_SURFACE_Y(play) + 5.0f)) ||
-                (sqrtf(SQ(sLurePos.x) + SQ(sLurePos.z)) > 800.0f)) {
+                Fishing_RF3OutOfArea(sLurePos.x, sLurePos.z)) {
 
                 this->timerArray[0] = 0;
                 this->fishState = this->fishStateNext;
@@ -3913,14 +3972,14 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
         case -3:
             if (RF3_IsEnabled()) {
                 // Step 10: still the chaser while a loach lunges; released after the bite.
-                RF3Approach_Chase(this->actor.params - EN_FISH_PARAM, sRodCastState == 3, false, false, RF3_SUBSTEPS);
+                RF3Approach_Chase(Fishing_RF3FishIndex(this), sRodCastState == 3, false, false, RF3_SUBSTEPS);
             }
             this->lilyTimer = 50;
             this->fishTargetPos = sLurePos;
             Math_ApproachF(&this->actor.speedXZ, 2.0f, 1.0f, 1.0f);
 
             if ((sRodCastState != 3) || (this->timerArray[0] == 0) || (sLurePos.y > (WATER_SURFACE_Y(play) + 5.0f)) ||
-                (sqrtf(SQ(sLurePos.x) + SQ(sLurePos.z)) > 800.0f)) {
+                Fishing_RF3OutOfArea(sLurePos.x, sLurePos.z)) {
 
                 this->timerArray[0] = 0;
                 this->unk_190 = 1.0f;
@@ -4188,7 +4247,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             rf3Fight = RF3_IsEnabled();
             if (rf3Fight) {
                 if (!sLineHooked && !RF3Fight_IsActive()) {
-                    RF3Fight_StartStrike(this->actor.params - EN_FISH_PARAM, this->fishLength); // the bite is the strike
+                    RF3Fight_StartStrike(Fishing_RF3FishIndex(this), this->fishLength); // the bite is the strike
                     Fishing_RF3ResetVisuals(this);
                 }
                 rf3Outcome = Fishing_RF3Fight(this, play, input, &rf3Hooked);
@@ -4225,7 +4284,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                     if (rf3Outcome == RF3_OUTCOME_MISSED) {
                         sLureBitTimer = 0; // step 9: OoT's "missed bite" text (0x4081) below
                         // Step 10: a fish that spat the lure stays wary for 60 s (RF3-MECHANICS 2.3).
-                        RF3Approach_SetWary(this->actor.params - EN_FISH_PARAM, 60.0f);
+                        RF3Approach_SetWary(Fishing_RF3FishIndex(this), 60.0f);
                     }
                     if (rf3Outcome == RF3_OUTCOME_LINEBREAK) {
                         // Step 8e: the line snaps. OoT's rod-snap bend plus a twang.
@@ -4364,7 +4423,13 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             if (this->timerArray[0] <= 50) {
                 switch (this->keepState) {
                     case 0:
-                        if ((Message_GetState(&play->msgCtx) == TEXT_STATE_CHOICE) ||
+                        if (RF3_IS_REGION_FISH(this)) {
+                            // Step 16e: outside the pond the catch is recorded, then released: no Keep
+                            // choice. Once the catch message (started by the delay) has closed, let go.
+                            if ((sFishingCaughtTextDelay == 0) && (Message_GetState(&play->msgCtx) == TEXT_STATE_NONE)) {
+                                sRodCastState = 0;
+                            }
+                        } else if ((Message_GetState(&play->msgCtx) == TEXT_STATE_CHOICE) ||
                             (Message_GetState(&play->msgCtx) == TEXT_STATE_NONE)) {
                             if (Message_ShouldAdvance(play)) {
                                 Message_CloseTextbox(play);
@@ -4422,6 +4487,10 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
 
             if (sRodCastState == 0) {
                 if (this->actor.update != NULL) {
+                    if (RF3_IS_REGION_FISH(this)) {
+                        // Step 16e: released back where it lives (Link may stand on land).
+                        this->actor.world.pos = this->actor.prevPos = this->actor.home.pos;
+                    }
                     this->fishState = this->fishStateNext = 0;
                     this->unk_1A4 = 10000;
                     this->unk_1A2 = 500;
@@ -4591,7 +4660,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             (this->actor.speedXZ > 0.0f)) {
             Vec3f pos = this->actor.world.pos;
             pos.y = WATER_SURFACE_Y(play);
-            Fishing_SpawnRipple(&this->actor.projectedPos, play->specialEffects, &pos, 80.0f, 500.0f, 150, 90);
+            Fishing_SpawnRipple(&this->actor.projectedPos, sFishingEffects, &pos, 80.0f, 500.0f, 150, 90);
         }
 
         if ((this->actor.speedXZ > 0.0f) || (this->fishState == 5)) {
@@ -4646,7 +4715,7 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
                         pos.x = Rand_CenteredFloat(10.0f) + this->actor.world.pos.x;
                         pos.z = Rand_CenteredFloat(10.0f) + this->actor.world.pos.z;
                         pos.y = this->actor.floorHeight + 5.0f;
-                        Fishing_SpawnWaterDust(&this->actor.projectedPos, play->specialEffects, &pos,
+                        Fishing_SpawnWaterDust(&this->actor.projectedPos, sFishingEffects, &pos,
                                                (this->fishLength * 0.005f) + 0.15f);
                     }
                 }
@@ -4665,10 +4734,20 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             pos.x = Rand_CenteredFloat(range) + this->actor.world.pos.x;
             pos.y = Rand_CenteredFloat(range) + this->actor.world.pos.y;
             pos.z = Rand_CenteredFloat(range) + this->actor.world.pos.z;
-            Fishing_SpawnBubble(&this->actor.projectedPos, play->specialEffects, &pos, Rand_ZeroFloat(0.035f) + 0.04f,
+            Fishing_SpawnBubble(&this->actor.projectedPos, sFishingEffects, &pos, Rand_ZeroFloat(0.035f) + 0.04f,
                                 0);
         }
     }
+}
+
+// Reel Fishing III mod (step 16d): a region fish updates with its region standing in for the pond.
+void Fishing_UpdateFish(Actor* thisx, PlayState* play) {
+    Fishing* this = (Fishing*)thisx;
+
+    sRF3CurRegion = RF3_IS_REGION_FISH(this) ? &sRF3RegionBoxes[this->actor.params - EN_FISH_REGION] : NULL;
+    Fishing_UpdateFishImpl(thisx, play);
+    Fishing_RF3KeepInWater(this, play); // step 16f
+    sRF3CurRegion = NULL;
 }
 
 s32 Fishing_FishOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx) {
@@ -4724,7 +4803,7 @@ void Fishing_LoachPostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3
     }
 }
 
-void Fishing_DrawFish(Actor* thisx, PlayState* play) {
+static void Fishing_DrawFishImpl(Actor* thisx, PlayState* play) {
     Fishing* this = (Fishing*)thisx;
 
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
@@ -4749,6 +4828,15 @@ void Fishing_DrawFish(Actor* thisx, PlayState* play) {
         SkelAnime_DrawSkeletonOpa(play, &this->skelAnime, Fishing_LoachOverrideLimbDraw, Fishing_LoachPostLimbDraw,
                                   this);
     }
+}
+
+// Reel Fishing III mod (step 16d): the same for drawing.
+void Fishing_DrawFish(Actor* thisx, PlayState* play) {
+    Fishing* this = (Fishing*)thisx;
+
+    sRF3CurRegion = RF3_IS_REGION_FISH(this) ? &sRF3RegionBoxes[this->actor.params - EN_FISH_REGION] : NULL;
+    Fishing_DrawFishImpl(thisx, play);
+    sRF3CurRegion = NULL;
 }
 
 void Fishing_HandleReedContact(FishingProp* prop, Vec3f* entityPos) {
@@ -5089,7 +5177,7 @@ void Fishing_UpdateGroupFishes(PlayState* play) {
 
                 ripplePos = fish->pos;
                 ripplePos.y = WATER_SURFACE_Y(play);
-                Fishing_SpawnRipple(&fish->projectedPos, play->specialEffects, &ripplePos, 20.0f,
+                Fishing_SpawnRipple(&fish->projectedPos, sFishingEffects, &ripplePos, 20.0f,
                                     Rand_ZeroFloat(50.0f) + 100.0f, 150, 90);
 
                 if (fish->velY < 1.5f) {
@@ -5301,6 +5389,7 @@ void Fishing_HandleOwnerDialog(Fishing* this, PlayState* play) {
 
                 play->interfaceCtx.unk_260 = 1;
                 play->startPlayerFishing(play);
+                RF3Rod_SetOwned(); // Reel Fishing III mod (step 15a): the first paid rental buys the rod
                 sFishingPlayingState = 1;
                 sOwnerTheftTimer = 20;
                 this->stateAndTimer = 0;
@@ -5620,152 +5709,66 @@ void Fishing_QuitAtDoor(Fishing* this, PlayState* play) {
 }
 // #endregion
 
-void Fishing_UpdateOwner(Actor* thisx, PlayState* play2) {
-    PlayState* play = play2;
-    Fishing* this = (Fishing*)thisx;
+// Reel Fishing III mod: one CSV row of the rod, line, lure and hooked fish (owner or portable).
+static void Fishing_RF3LogFrame(PlayState* play, Input* input, Player* player) {
+    if (RF3Log_IsEnabled()) {
+        RF3OwnerFrame logFrame = { 0 };
+
+        logFrame.frame = play->gameplayFrames;
+        logFrame.castState = sRodCastState;
+        logFrame.lureEquipped = sLureEquipped;
+        logFrame.lineHooked = sLineHooked;
+        logFrame.reelLock = sReelLock;
+        logFrame.rodPullback = sRodPullback;
+        logFrame.reelSpeed = sRodReelingSpeed;
+        logFrame.lineSpooled = sRodLineSpooled;
+        logFrame.lurePos[0] = sLurePos.x;
+        logFrame.lurePos[1] = sLurePos.y;
+        logFrame.lurePos[2] = sLurePos.z;
+        logFrame.rodTipPos[0] = sRodTipPos.x;
+        logFrame.rodTipPos[1] = sRodTipPos.y;
+        logFrame.rodTipPos[2] = sRodTipPos.z;
+        logFrame.waterSurfaceY = WATER_SURFACE_Y(play);
+        logFrame.stickX = input->rel.stick_x;
+        logFrame.stickY = input->rel.stick_y;
+        logFrame.buttons = input->cur.button;
+        logFrame.linkPos[0] = player->actor.world.pos.x;
+        logFrame.linkPos[1] = player->actor.world.pos.y;
+        logFrame.linkPos[2] = player->actor.world.pos.z;
+        // Same guard the game uses before touching sFishingHookedFish; it is never cleared.
+        if (((sRodCastState == 4) || (sRodCastState == 5)) && (sFishingHookedFish != NULL)) {
+            logFrame.hasFish = 1;
+            logFrame.fishState = sFishingHookedFish->fishState;
+            logFrame.fishStateNext = sFishingHookedFish->fishStateNext;
+            logFrame.fishLength = sFishingHookedFish->fishLength;
+            logFrame.fishPos[0] = sFishingHookedFish->actor.world.pos.x;
+            logFrame.fishPos[1] = sFishingHookedFish->actor.world.pos.y;
+            logFrame.fishPos[2] = sFishingHookedFish->actor.world.pos.z;
+            logFrame.fishSpeedXZ = sFishingHookedFish->actor.speedXZ;
+            logFrame.fishFloorY = sFishingHookedFish->actor.floorHeight;
+            logFrame.fishYaw = sFishingHookedFish->actor.world.rot.y;
+            logFrame.fishTailStep = sFishingHookedFish->fishLimbRotPhaseStep;
+            logFrame.fishTailMag = sFishingHookedFish->fishLimbRotPhaseMag;
+        }
+        logFrame.sceneNum = play->sceneNum; // step 15c
+        logFrame.portable = sRF3Portable;
+        logFrame.lureInWater = sRF3Portable ? sRF3PortableInWater : !Fishing_RF3OnLand(SQ(sLurePos.x) + SQ(sLurePos.z));
+        logFrame.lureFloorY = sRF3PortableFloorY;
+        RF3Log_OwnerFrame(&logFrame);
+    }
+}
+
+// The pond's camera and cinematic states: the lure camera (Z changes the view), reeling in, returning
+// the rod, the sinking lure, the catch. Moved out of Fishing_UpdateOwner unchanged so the portable rod
+// (step 15e) gets the same lure camera; outside the pond only states 1-3 are ever set.
+static void Fishing_UpdateCinematics(Fishing* this, PlayState* play) {
     Vec3f multiVecSrc;
     Vec3f eyeTarget;
     Vec3f lureDist;
-    s16 headRotTarget;
-    s16 playerShadowAlpha;
-    f32 target;
     f32 subCamAtMaxVelFrac;
     f32 lureDistXZ;
-    s32 pad;
     Player* player = GET_PLAYER(play);
     Input* input = &play->state.input[0];
-
-    if (0) {
-        // Strings existing only in rodata
-        osSyncPrintf(VT_FGCOL(GREEN));
-        osSyncPrintf(VT_FGCOL(YELLOW));
-        osSyncPrintf("plays %x\n");
-        osSyncPrintf("ys %x\n");
-        osSyncPrintf(VT_RST);
-    }
-
-    playerShadowAlpha = player->actor.shape.shadowAlpha;
-
-    if ((SQ(player->actor.world.pos.x) + SQ(player->actor.world.pos.z)) < SQ(920.0f)) {
-        Math_ApproachS(&playerShadowAlpha, 0, 1, 40);
-    } else {
-        Math_ApproachS(&playerShadowAlpha, 200, 1, 40);
-    }
-
-    player->actor.shape.shadowAlpha = playerShadowAlpha;
-
-    SkelAnime_Update(&this->skelAnime);
-
-    if ((sOwnerTheftTimer != 0) || (Message_GetState(&play->msgCtx) != TEXT_STATE_NONE)) {
-        this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
-    } else {
-        this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
-    }
-
-    if ((this->actor.xzDistToPlayer < 120.0f) || (Message_GetState(&play->msgCtx) != TEXT_STATE_NONE)) {
-        headRotTarget = this->actor.shape.rot.y - this->actor.yawTowardsPlayer;
-    } else {
-        headRotTarget = 0;
-    }
-
-    if (headRotTarget > 0x2710) {
-        headRotTarget = 0x2710;
-    } else if (headRotTarget < -0x2710) {
-        headRotTarget = -0x2710;
-    }
-
-    Math_ApproachS(&this->unk_164, headRotTarget, 3, 0x1388);
-
-    if (((play->gameplayFrames % 32) == 0) && (Rand_ZeroOne() < 0.3f)) {
-        this->unk_162 = 4;
-    }
-
-    this->unk_160 = sOwnerBlinkIndex[this->unk_162];
-
-    if (this->unk_162 != 0) {
-        this->unk_162--;
-    }
-
-    if (sOwnerTheftTimer != 0) {
-        sOwnerTheftTimer--;
-    }
-
-    // steal the owner's hat
-    if (!sIsOwnersHatHooked && (sLureEquipped != FS_LURE_SINKING) && (sRodCastState > 0) &&
-        (sOwnerHair == FS_OWNER_CAPPED) && (sOwnerTheftTimer == 0)) {
-        f32 dx = sOwnerHeadPos.x - sLurePos.x;
-        f32 dy = sOwnerHeadPos.y - sLurePos.y;
-        f32 dz = sOwnerHeadPos.z - sLurePos.z;
-
-        if ((sqrtf(SQ(dx) + SQ(dy) + SQ(dz)) < 25.0f) || (KREG(77) > 0)) {
-            KREG(77) = 0;
-            sOwnerHair = FS_OWNER_BALD;
-            sIsOwnersHatHooked = true;
-            Message_StartTextbox(play, 0x4087, NULL);
-        }
-    }
-
-    // update hat flag.
-    if (sOwnerHair == FS_OWNER_BALD) {
-        HIGH_SCORE(HS_FISHING) |= HS_FISH_STOLE_HAT;
-    } else if (sOwnerHair == FS_OWNER_CAPPED) {
-        HIGH_SCORE(HS_FISHING) &= ~HS_FISH_STOLE_HAT;
-    }
-
-    if (KREG(77) < 0) {
-        KREG(77) = 0;
-        sIsOwnersHatSunk = true;
-    }
-
-    if (sFishingCaughtTextDelay != 0) {
-        sFishingCaughtTextDelay--;
-        if (sFishingCaughtTextDelay == 0) {
-            Message_StartTextbox(play, sFishingCaughtTextId, NULL);
-        }
-    }
-
-    Fishing_HandleOwnerDialog(this, play);
-
-    sFishingLineScale = 0.0015f;
-    sFishingTimePlayed++;
-
-    if ((sFishingPlayingState != 0) && sIsRodVisible) {
-        Fishing_UpdateLure(this, play);
-    }
-
-    Fishing_UpdateEffects(play->specialEffects, play);
-    Fishing_UpdatePondProps(play);
-    Fishing_UpdateGroupFishes(play);
-    // can't leave with the rod
-    if ((sFishingPlayingState != 0) && (sFishingPlayerCinematicState == 0) && (player->actor.world.pos.z > 1360.0f) &&
-        (fabsf(player->actor.world.pos.x) < 25.0f)) {
-        player->actor.world.pos.z = 1360.0f;
-        player->actor.speedXZ = 0.0f;
-
-        if (sFishingCinematicTimer == 0) {
-            sFishingPlayerCinematicState = 10;
-        }
-    }
-
-    if ((sSinkingLureLocation != 0) &&
-        (fabsf(player->actor.world.pos.x - sSinkingLureLocationPos[sSinkingLureLocation - 1].x) < 25.0f) &&
-        (fabsf(player->actor.world.pos.y - sSinkingLureLocationPos[sSinkingLureLocation - 1].y) < 10.0f) &&
-        (fabsf(player->actor.world.pos.z - sSinkingLureLocationPos[sSinkingLureLocation - 1].z) < 25.0f)) {
-        sSinkingLureLocation = 0;
-        sFishingPlayerCinematicState = 20;
-        func_800A9F6C(0.0f, 150, 10, 10);
-        Sfx_PlaySfxCentered(NA_SE_SY_TRE_BOX_APPEAR);
-        Audio_QueueSeqCmd(0x1 << 28 | SEQ_PLAYER_BGM_MAIN << 24 | 0x1400FF);
-    }
-
-    if (KREG(0) != 0) {
-        KREG(0) = 0;
-        sLureEquipped = FS_LURE_STOCK;
-        sFishingPlayerCinematicState = 20;
-        func_800A9F6C(0.0f, 150, 10, 10);
-        Sfx_PlaySfxCentered(NA_SE_SY_TRE_BOX_APPEAR);
-        Audio_QueueSeqCmd(0x1 << 28 | SEQ_PLAYER_BGM_MAIN << 24 | 0x1400FF);
-    }
 
     if (sFishingCinematicTimer != 0) {
         sFishingCinematicTimer--;
@@ -6082,6 +6085,154 @@ void Fishing_UpdateOwner(Actor* thisx, PlayState* play2) {
             play->envCtx.adjFogNear = 0;
         }
     }
+}
+
+void Fishing_UpdateOwner(Actor* thisx, PlayState* play2) {
+    PlayState* play = play2;
+    Fishing* this = (Fishing*)thisx;
+    Vec3f multiVecSrc;
+    s16 headRotTarget;
+    s16 playerShadowAlpha;
+    f32 target;
+    s32 pad;
+    Player* player = GET_PLAYER(play);
+    Input* input = &play->state.input[0];
+
+    if (0) {
+        // Strings existing only in rodata
+        osSyncPrintf(VT_FGCOL(GREEN));
+        osSyncPrintf(VT_FGCOL(YELLOW));
+        osSyncPrintf("plays %x\n");
+        osSyncPrintf("ys %x\n");
+        osSyncPrintf(VT_RST);
+    }
+
+    sRF3RodBtn = BTN_B; // step 15c: the pond's rod is always on B
+
+    playerShadowAlpha = player->actor.shape.shadowAlpha;
+
+    if ((SQ(player->actor.world.pos.x) + SQ(player->actor.world.pos.z)) < SQ(920.0f)) {
+        Math_ApproachS(&playerShadowAlpha, 0, 1, 40);
+    } else {
+        Math_ApproachS(&playerShadowAlpha, 200, 1, 40);
+    }
+
+    player->actor.shape.shadowAlpha = playerShadowAlpha;
+
+    SkelAnime_Update(&this->skelAnime);
+
+    if ((sOwnerTheftTimer != 0) || (Message_GetState(&play->msgCtx) != TEXT_STATE_NONE)) {
+        this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
+    } else {
+        this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
+    }
+
+    if ((this->actor.xzDistToPlayer < 120.0f) || (Message_GetState(&play->msgCtx) != TEXT_STATE_NONE)) {
+        headRotTarget = this->actor.shape.rot.y - this->actor.yawTowardsPlayer;
+    } else {
+        headRotTarget = 0;
+    }
+
+    if (headRotTarget > 0x2710) {
+        headRotTarget = 0x2710;
+    } else if (headRotTarget < -0x2710) {
+        headRotTarget = -0x2710;
+    }
+
+    Math_ApproachS(&this->unk_164, headRotTarget, 3, 0x1388);
+
+    if (((play->gameplayFrames % 32) == 0) && (Rand_ZeroOne() < 0.3f)) {
+        this->unk_162 = 4;
+    }
+
+    this->unk_160 = sOwnerBlinkIndex[this->unk_162];
+
+    if (this->unk_162 != 0) {
+        this->unk_162--;
+    }
+
+    if (sOwnerTheftTimer != 0) {
+        sOwnerTheftTimer--;
+    }
+
+    // steal the owner's hat
+    if (!sIsOwnersHatHooked && (sLureEquipped != FS_LURE_SINKING) && (sRodCastState > 0) &&
+        (sOwnerHair == FS_OWNER_CAPPED) && (sOwnerTheftTimer == 0)) {
+        f32 dx = sOwnerHeadPos.x - sLurePos.x;
+        f32 dy = sOwnerHeadPos.y - sLurePos.y;
+        f32 dz = sOwnerHeadPos.z - sLurePos.z;
+
+        if ((sqrtf(SQ(dx) + SQ(dy) + SQ(dz)) < 25.0f) || (KREG(77) > 0)) {
+            KREG(77) = 0;
+            sOwnerHair = FS_OWNER_BALD;
+            sIsOwnersHatHooked = true;
+            Message_StartTextbox(play, 0x4087, NULL);
+        }
+    }
+
+    // update hat flag.
+    if (sOwnerHair == FS_OWNER_BALD) {
+        HIGH_SCORE(HS_FISHING) |= HS_FISH_STOLE_HAT;
+    } else if (sOwnerHair == FS_OWNER_CAPPED) {
+        HIGH_SCORE(HS_FISHING) &= ~HS_FISH_STOLE_HAT;
+    }
+
+    if (KREG(77) < 0) {
+        KREG(77) = 0;
+        sIsOwnersHatSunk = true;
+    }
+
+    if (sFishingCaughtTextDelay != 0) {
+        sFishingCaughtTextDelay--;
+        if (sFishingCaughtTextDelay == 0) {
+            Message_StartTextbox(play, sFishingCaughtTextId, NULL);
+        }
+    }
+
+    Fishing_HandleOwnerDialog(this, play);
+
+    sFishingLineScale = 0.0015f;
+    sFishingTimePlayed++;
+
+    if ((sFishingPlayingState != 0) && sIsRodVisible) {
+        Fishing_UpdateLure(this, play);
+    }
+
+    Fishing_UpdateEffects(sFishingEffects, play);
+    Fishing_UpdatePondProps(play);
+    Fishing_UpdateGroupFishes(play);
+    // can't leave with the rod
+    if ((sFishingPlayingState != 0) && (sFishingPlayerCinematicState == 0) && (player->actor.world.pos.z > 1360.0f) &&
+        (fabsf(player->actor.world.pos.x) < 25.0f)) {
+        player->actor.world.pos.z = 1360.0f;
+        player->actor.speedXZ = 0.0f;
+
+        if (sFishingCinematicTimer == 0) {
+            sFishingPlayerCinematicState = 10;
+        }
+    }
+
+    if ((sSinkingLureLocation != 0) &&
+        (fabsf(player->actor.world.pos.x - sSinkingLureLocationPos[sSinkingLureLocation - 1].x) < 25.0f) &&
+        (fabsf(player->actor.world.pos.y - sSinkingLureLocationPos[sSinkingLureLocation - 1].y) < 10.0f) &&
+        (fabsf(player->actor.world.pos.z - sSinkingLureLocationPos[sSinkingLureLocation - 1].z) < 25.0f)) {
+        sSinkingLureLocation = 0;
+        sFishingPlayerCinematicState = 20;
+        func_800A9F6C(0.0f, 150, 10, 10);
+        Sfx_PlaySfxCentered(NA_SE_SY_TRE_BOX_APPEAR);
+        Audio_QueueSeqCmd(0x1 << 28 | SEQ_PLAYER_BGM_MAIN << 24 | 0x1400FF);
+    }
+
+    if (KREG(0) != 0) {
+        KREG(0) = 0;
+        sLureEquipped = FS_LURE_STOCK;
+        sFishingPlayerCinematicState = 20;
+        func_800A9F6C(0.0f, 150, 10, 10);
+        Sfx_PlaySfxCentered(NA_SE_SY_TRE_BOX_APPEAR);
+        Audio_QueueSeqCmd(0x1 << 28 | SEQ_PLAYER_BGM_MAIN << 24 | 0x1400FF);
+    }
+
+    Fishing_UpdateCinematics(this, play); // moved into a function, unchanged (step 15e)
 
     if ((player->actor.floorHeight < (WATER_SURFACE_Y(play) - 3.0f)) &&
         (player->actor.world.pos.y < (player->actor.floorHeight + 3.0f)) && (player->actor.speedXZ > 1.0f) &&
@@ -6091,7 +6242,7 @@ void Fishing_UpdateOwner(Actor* thisx, PlayState* play2) {
         pos.x = Rand_CenteredFloat(20.0f) + player->actor.world.pos.x;
         pos.z = Rand_CenteredFloat(20.0f) + player->actor.world.pos.z;
         pos.y = player->actor.floorHeight + 5.0f;
-        Fishing_SpawnWaterDust(NULL, play->specialEffects, &pos, 0.5f);
+        Fishing_SpawnWaterDust(NULL, sFishingEffects, &pos, 0.5f);
     }
 
     if ((player->actor.floorHeight < WATER_SURFACE_Y(play)) &&
@@ -6116,7 +6267,7 @@ void Fishing_UpdateOwner(Actor* thisx, PlayState* play2) {
             pos.x += 2.0f * vel.x;
             pos.y = WATER_SURFACE_Y(play);
             pos.z += 2.0f * vel.z;
-            Fishing_SpawnDustSplash(NULL, play->specialEffects, &pos, &vel, Rand_ZeroFloat(0.01f) + 0.020000001f);
+            Fishing_SpawnDustSplash(NULL, sFishingEffects, &pos, &vel, Rand_ZeroFloat(0.01f) + 0.020000001f);
         }
     }
 
@@ -6216,7 +6367,7 @@ void Fishing_UpdateOwner(Actor* thisx, PlayState* play2) {
                 if (projectedPos.z < 0.0f) {
                     i--;
                 } else {
-                    Fishing_SpawnRainDrop(play->specialEffects, &pos, &rot);
+                    Fishing_SpawnRainDrop(sFishingEffects, &pos, &rot);
                 }
             }
         }
@@ -6243,48 +6394,7 @@ void Fishing_UpdateOwner(Actor* thisx, PlayState* play2) {
         sRF3PrevLurePos = sLurePos;
     }
 
-    // Reel Fishing III mod: log this frame's pond state. Read-only.
-    if (RF3Log_IsEnabled()) {
-        RF3OwnerFrame logFrame = { 0 };
-
-        logFrame.frame = play->gameplayFrames;
-        logFrame.castState = sRodCastState;
-        logFrame.lureEquipped = sLureEquipped;
-        logFrame.lineHooked = sLineHooked;
-        logFrame.reelLock = sReelLock;
-        logFrame.rodPullback = sRodPullback;
-        logFrame.reelSpeed = sRodReelingSpeed;
-        logFrame.lineSpooled = sRodLineSpooled;
-        logFrame.lurePos[0] = sLurePos.x;
-        logFrame.lurePos[1] = sLurePos.y;
-        logFrame.lurePos[2] = sLurePos.z;
-        logFrame.rodTipPos[0] = sRodTipPos.x;
-        logFrame.rodTipPos[1] = sRodTipPos.y;
-        logFrame.rodTipPos[2] = sRodTipPos.z;
-        logFrame.waterSurfaceY = WATER_SURFACE_Y(play);
-        logFrame.stickX = input->rel.stick_x;
-        logFrame.stickY = input->rel.stick_y;
-        logFrame.buttons = input->cur.button;
-        logFrame.linkPos[0] = player->actor.world.pos.x;
-        logFrame.linkPos[1] = player->actor.world.pos.y;
-        logFrame.linkPos[2] = player->actor.world.pos.z;
-        // Same guard the game uses before touching sFishingHookedFish; it is never cleared.
-        if (((sRodCastState == 4) || (sRodCastState == 5)) && (sFishingHookedFish != NULL)) {
-            logFrame.hasFish = 1;
-            logFrame.fishState = sFishingHookedFish->fishState;
-            logFrame.fishStateNext = sFishingHookedFish->fishStateNext;
-            logFrame.fishLength = sFishingHookedFish->fishLength;
-            logFrame.fishPos[0] = sFishingHookedFish->actor.world.pos.x;
-            logFrame.fishPos[1] = sFishingHookedFish->actor.world.pos.y;
-            logFrame.fishPos[2] = sFishingHookedFish->actor.world.pos.z;
-            logFrame.fishSpeedXZ = sFishingHookedFish->actor.speedXZ;
-            logFrame.fishFloorY = sFishingHookedFish->actor.floorHeight;
-            logFrame.fishYaw = sFishingHookedFish->actor.world.rot.y;
-            logFrame.fishTailStep = sFishingHookedFish->fishLimbRotPhaseStep;
-            logFrame.fishTailMag = sFishingHookedFish->fishLimbRotPhaseMag;
-        }
-        RF3Log_OwnerFrame(&logFrame);
-    }
+    Fishing_RF3LogFrame(play, input, player); // Reel Fishing III mod: log this frame. Read-only.
 
     osSyncPrintf("HI_SCORE = %x\n", HIGH_SCORE(HS_FISHING));
 }
@@ -6339,7 +6449,7 @@ void Fishing_DrawOwner(Actor* thisx, PlayState* play) {
     }
 
     Fishing_DrawPondProps(play);
-    Fishing_DrawEffects(play->specialEffects, play);
+    Fishing_DrawEffects(sFishingEffects, play);
     Fishing_DrawGroupFishes(play);
     Fishing_DrawStreamSplash(play);
 
@@ -6394,4 +6504,441 @@ void Fishing_Reset(void) {
     // or re-entering the scene while the fishing rod was cast
     sSubCamId = 0;
     sFishingPlayerCinematicState = 0;
+}
+
+// --- Reel Fishing III mod (step 15c): the portable rod ---------------------------------------------
+
+// The button holding the rod outside the pond: a D-pad button (step 15b), else B.
+static u16 Fishing_RF3RodButton(void) {
+    static const u16 sDpadButtons[4] = { BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
+    s32 i;
+
+    if (gSaveContext.equips.buttonItems[0] == ITEM_FISHING_POLE) {
+        return BTN_B;
+    }
+    for (i = 0; i < 4; i++) {
+        if (gSaveContext.equips.buttonItems[4 + i] == ITEM_FISHING_POLE) {
+            return sDpadButtons[i];
+        }
+    }
+    return BTN_B;
+}
+
+// Step 15e: while the portable rod runs, B holds the rod (it casts with B, as at the pond) and B's own
+// item waits here. Restored when the rod is put away or the instance ends.
+static u8 sRF3StashedBItem = ITEM_NONE;
+static u8 sRF3BSwapped = false;
+
+static void Fishing_RF3RodOnB(PlayState* play) {
+    if (gSaveContext.equips.buttonItems[0] != ITEM_FISHING_POLE) {
+        sRF3StashedBItem = gSaveContext.equips.buttonItems[0];
+        sRF3BSwapped = true;
+        gSaveContext.equips.buttonItems[0] = ITEM_FISHING_POLE;
+        Interface_LoadItemIcon1(play, 0);
+    }
+}
+
+static void Fishing_RF3RestoreB(PlayState* play) {
+    if (sRF3BSwapped && (gSaveContext.equips.buttonItems[0] == ITEM_FISHING_POLE)) {
+        gSaveContext.equips.buttonItems[0] = sRF3StashedBItem;
+        if (sRF3StashedBItem != ITEM_NONE) {
+            Interface_LoadItemIcon1(play, 0);
+        }
+    }
+    sRF3BSwapped = false;
+}
+
+// Water and ground under the lure, once per frame before the lure moves.
+static void Fishing_RF3ProbeUnderLure(PlayState* play) {
+    CollisionPoly* poly;
+    WaterBox* waterBox;
+    Vec3f probe = sLurePos;
+    f32 surface;
+
+    probe.y += 50.0f;
+    sRF3PortableFloorY = BgCheck_EntityRaycastFloor1(&play->colCtx, &poly, &probe);
+    if (WaterBox_GetSurface1(play, &play->colCtx, sLurePos.x, sLurePos.z, &surface, &waterBox) &&
+        (surface > sRF3PortableFloorY)) {
+        sRF3PortableInWater = true;
+        sRF3PortableSurfaceY = surface;
+    } else {
+        sRF3PortableInWater = false;
+        sRF3PortableSurfaceY = sRF3PortableFloorY - 50.0f; // no water: "below the ground", as off the pond's banks
+    }
+}
+
+static void Fishing_RF3UpdatePortable(Actor* thisx, PlayState* play) {
+    Fishing* this = (Fishing*)thisx;
+    Player* player = GET_PLAYER(play);
+    Input* input = &play->state.input[0];
+    s16 prevCinematicState;
+
+    // Put away with the line in: this instance ends (it is spawned again when the rod comes out).
+    if ((player->heldItemAction != PLAYER_IA_FISHING_POLE) && (sRodCastState == 0)) {
+        Actor_Kill(thisx);
+        return;
+    }
+
+    sRF3RodBtn = Fishing_RF3RodButton();
+    Fishing_RF3ProbeUnderLure(play);
+
+    sFishingLineScale = 0.0015f;
+    sFishingTimePlayed++;
+    Fishing_UpdateLure(this, play);
+    Fishing_UpdateEffects(sFishingEffects, play);
+
+    // Step 16d: RF3's lure action meter, as the owner runs it in the pond, so region fish notice the lure.
+    if (RF3_IsEnabled()) {
+        static Vec3f sRF3PortablePrevLurePos = { 0.0f, 0.0f, 0.0f };
+        f32 lureMoved = sqrtf(SQ(sLurePos.x - sRF3PortablePrevLurePos.x) + SQ(sLurePos.y - sRF3PortablePrevLurePos.y) +
+                              SQ(sLurePos.z - sRF3PortablePrevLurePos.z));
+
+        RF3Approach_UpdateMeter(sRodCastState == 3, lureMoved, CHECK_BTN_ALL(input->cur.button, BTN_A), RF3_SUBSTEPS);
+        sRF3PortablePrevLurePos = sLurePos;
+    }
+
+    // Step 16e: the owner's caught/escaped text delay, and the music: after a fight or catch, the
+    // scene's own music comes back (the pond's owner would start Kakariko's).
+    if (sFishingCaughtTextDelay != 0) {
+        sFishingCaughtTextDelay--;
+        if (sFishingCaughtTextDelay == 0) {
+            Message_StartTextbox(play, sFishingCaughtTextId, NULL);
+        }
+    }
+    if (sFishingMusicDelay != 0) {
+        sFishingMusicDelay--;
+        if (sFishingMusicDelay == 0) {
+            Audio_QueueSeqCmd(SEQ_PLAYER_BGM_MAIN << 24 | play->sequenceCtx.seqId);
+        }
+    }
+
+    // Step 15e: the pond's lure camera. In the pond the first fish to update starts it a few frames
+    // after the lure leaves the rod (D_80B7E0B2 == 1); there are no fish here, so start it the same way.
+    if ((sRodCastState != 0) && (D_80B7E0B2 == 1) && (sFishingPlayerCinematicState == 0)) {
+        sFishingPlayerCinematicState = 1;
+        D_80B7FED0 = 0.0f;
+        sLureCameraZoomLevel = 2;
+    }
+    // The owner's states 1-3: follow the lure (Z changes the view), then on reel-in hand Link back
+    // his normal stance (player->unk_860 = -5).
+    prevCinematicState = sFishingPlayerCinematicState;
+    Fishing_UpdateCinematics(this, play);
+    if ((prevCinematicState != 0) && (sFishingPlayerCinematicState == 0)) {
+        Interface_ChangeHudVisibilityMode(HUD_VISIBILITY_ALL); // the pond keeps its own HUD; restore ours
+    }
+
+    Fishing_RF3LogFrame(play, input, player);
+}
+
+static void Fishing_RF3DrawPortable(Actor* thisx, PlayState* play) {
+    Input* input = &play->state.input[0];
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+
+    Fishing_DrawEffects(sFishingEffects, play);
+
+    Fishing_DrawRod(play);
+    Fishing_UpdateLinePos(sReelLinePos);
+    Fishing_UpdateLine(play, &sRodTipPos, sReelLinePos, sReelLineRot, sReelLineUnk);
+    Fishing_DrawLureAndLine(play, sReelLinePos, sReelLineRot);
+
+    sStickAdjXPrev = input->rel.stick_x;
+    sStickAdjYPrev = input->rel.stick_y;
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static void Fishing_RF3InitPortable(Fishing* this, PlayState* play) {
+    s16 i;
+
+    Actor_ChangeCategory(play, &play->actorCtx, &this->actor, ACTORCAT_MISC);
+    this->actor.flags &= ~(ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY);
+    this->actor.flags |= ACTOR_FLAG_DRAW_CULLING_DISABLED;
+    this->actor.update = Fishing_RF3UpdatePortable;
+    this->actor.draw = Fishing_RF3DrawPortable;
+
+    sRF3Portable = true;
+    sRF3PortableInWater = false;
+    sFishingPlayingState = 1; // Fishing_UpdateLure resets the rod, line and lure on its first frame
+    sFishingPlayerCinematicState = 0;
+    sSubCamId = 0;
+    sIsOwnersHatHooked = false;
+    sIsOwnersHatSunk = false;
+    sLineHooked = 0;
+    sReelLock = 0;
+    sLureBitTimer = 0;
+    sFishingCaughtTextDelay = 0;
+    sFishingHookedFish = NULL;
+    for (i = 0; i < FISHING_EFFECT_COUNT; i++) {
+        sFishingEffects[i].type = FS_EFF_NONE;
+    }
+    Fishing_RF3RodOnB(play); // step 15e
+    RF3Rod_LogEvent("portable-start", play->sceneNum);
+}
+
+static void Fishing_RF3DestroyPortable(PlayState* play) {
+    sRF3Portable = false;
+    sFishingPlayingState = 0;
+    sRodCastState = 0;
+    Fishing_RF3RestoreB(play); // step 15e
+    if (sSubCamId != 0) {
+        Interface_ChangeHudVisibilityMode(HUD_VISIBILITY_ALL);
+    }
+    Fishing_Reset(); // no camera or cinematic state carries over (as on death / scene change)
+    RF3Rod_LogEvent("portable-end", play->sceneNum);
+}
+
+// Called from RF3Rod.cpp (step 15c).
+s32 Fishing_RF3PortableActive(void) {
+    return sRF3Portable;
+}
+
+// Step 15e: the rod's D-pad button while the rod is out: B gets its item back. Only with the line in.
+// Returns true if the caller should put the rod away.
+s32 Fishing_RF3PutAwayRod(PlayState* play) {
+    if (!sRF3Portable || (sRodCastState != 0)) {
+        return false;
+    }
+    Fishing_RF3RestoreB(play);
+    return true;
+}
+
+// Link holds the rod outside the pond: start the portable instance if none runs.
+void Fishing_RF3SpawnPortable(PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    if (sRF3Portable || (play->sceneNum == SCENE_FISHING_POND)) {
+        return;
+    }
+    Actor_Spawn(&play->actorCtx, play, ACTOR_FISHING, player->actor.world.pos.x, player->actor.world.pos.y,
+                player->actor.world.pos.z, 0, 0, 0, EN_FISH_PORTABLE);
+}
+
+// Link's own rod at the pond (D-pad): start a session as the paid rental does, without paying.
+// Returns true if a session started.
+s32 Fishing_RF3StartOwnRod(PlayState* play) {
+    if ((play->sceneNum != SCENE_FISHING_POND) || (sFishingPlayingState != 0) ||
+        (play->interfaceCtx.unk_260 != 0) || (Message_GetState(&play->msgCtx) != TEXT_STATE_NONE)) {
+        return false;
+    }
+    play->interfaceCtx.unk_260 = 1;
+    play->startPlayerFishing(play);
+    sFishingPlayingState = 1;
+    sOwnerTheftTimer = 20;
+    return true;
+}
+
+// --- Reel Fishing III mod (step 16d): region fish ------------------------------------------------
+
+static s32 Fishing_RF3LureInBiteArea(void) {
+    if (sRF3CurRegion != NULL) {
+        // Step 16f: inside the box (plus margin) and over water deep enough, not on the shore shelf.
+        return !Fishing_RF3OutOfArea(sLurePos.x, sLurePos.z) && sRF3PortableInWater &&
+               (sRF3PortableFloorY < (sRF3CurRegion->surfaceY - RF3_REGION_MIN_DEPTH));
+    }
+    return (SQ(sLurePos.x) + SQ(sLurePos.z)) < SQ(800.0f);
+}
+
+// Step 16i: a region box is turned by its angle about its centre. World <-> the box's own frame.
+static void Fishing_RF3ToBox(RF3RegionBox* box, f32 x, f32 z, f32* bx, f32* bz) {
+    f32 cx = (box->minX + box->maxX) * 0.5f;
+    f32 cz = (box->minZ + box->maxZ) * 0.5f;
+    f32 c = cosf(-box->angle);
+    f32 s = sinf(-box->angle);
+
+    *bx = cx + ((x - cx) * c) - ((z - cz) * s);
+    *bz = cz + ((x - cx) * s) + ((z - cz) * c);
+}
+
+static void Fishing_RF3ToWorld(RF3RegionBox* box, f32 bx, f32 bz, f32* x, f32* z) {
+    f32 cx = (box->minX + box->maxX) * 0.5f;
+    f32 cz = (box->minZ + box->maxZ) * 0.5f;
+    f32 c = cosf(box->angle);
+    f32 s = sinf(box->angle);
+
+    *x = cx + ((bx - cx) * c) - ((bz - cz) * s);
+    *z = cz + ((bx - cx) * s) + ((bz - cz) * c);
+}
+
+// Beyond the fishing area: the pond's 800 from its centre, or 100 outside the region's box.
+static s32 Fishing_RF3OutOfArea(f32 x, f32 z) {
+    if (sRF3CurRegion != NULL) {
+        f32 bx;
+        f32 bz;
+
+        Fishing_RF3ToBox(sRF3CurRegion, x, z, &bx, &bz);
+        return (bx < (sRF3CurRegion->minX - 100.0f)) || (bx > (sRF3CurRegion->maxX + 100.0f)) ||
+               (bz < (sRF3CurRegion->minZ - 100.0f)) || (bz > (sRF3CurRegion->maxZ + 100.0f));
+    }
+    return sqrtf(SQ(x) + SQ(z)) > 800.0f;
+}
+
+// The bridge's fish index: pond fish 0..31 (params - 100), region fish 32 + slot.
+static s32 Fishing_RF3FishIndex(Fishing* this) {
+    return RF3_IS_REGION_FISH(this) ? (32 + this->actor.params - EN_FISH_REGION) : (this->actor.params - EN_FISH_PARAM);
+}
+
+static f32 Fishing_RF3Perception(Fishing* this) {
+    return RF3_IS_REGION_FISH(this) ? 0.1f : sFishInits[this->actor.params - EN_FISH_PARAM].perception;
+}
+
+// OoT's wander target is +-150 around the pond's centre: for a region fish, around the box centre,
+// inside the box, and not below the ground.
+static void Fishing_RF3RegionTarget(Fishing* this) {
+    f32 centreX;
+    f32 centreZ;
+
+    if (sRF3CurRegion == NULL) {
+        return;
+    }
+    centreX = (sRF3CurRegion->minX + sRF3CurRegion->maxX) * 0.5f;
+    centreZ = (sRF3CurRegion->minZ + sRF3CurRegion->maxZ) * 0.5f;
+    // In the box's own frame, then turned into the world (step 16i).
+    centreX = CLAMP(centreX + this->fishTargetPos.x, sRF3CurRegion->minX + 10.0f, sRF3CurRegion->maxX - 10.0f);
+    centreZ = CLAMP(centreZ + this->fishTargetPos.z, sRF3CurRegion->minZ + 10.0f, sRF3CurRegion->maxZ - 10.0f);
+    Fishing_RF3ToWorld(sRF3CurRegion, centreX, centreZ, &this->fishTargetPos.x, &this->fishTargetPos.z);
+    if (this->fishTargetPos.y < (this->actor.floorHeight + 10.0f)) {
+        this->fishTargetPos.y = this->actor.floorHeight + 10.0f;
+    }
+}
+
+// The hooked fish's steering target stays in the fishing area: the pond's 750 radius (unchanged), or the
+// region's box.
+static void Fishing_RF3ClampFightTarget(Vec3f* target) {
+    f32 targetSq;
+    f32 scale;
+
+    if (sRF3CurRegion != NULL) {
+        f32 bx;
+        f32 bz;
+
+        Fishing_RF3ToBox(sRF3CurRegion, target->x, target->z, &bx, &bz); // step 16i: clamp in the box's frame
+        bx = CLAMP(bx, sRF3CurRegion->minX, sRF3CurRegion->maxX);
+        bz = CLAMP(bz, sRF3CurRegion->minZ, sRF3CurRegion->maxZ);
+        Fishing_RF3ToWorld(sRF3CurRegion, bx, bz, &target->x, &target->z);
+        return;
+    }
+    targetSq = SQ(target->x) + SQ(target->z);
+    if (targetSq > SQ(750.0f)) {
+        scale = 750.0f / sqrtf(targetSq);
+        target->x *= scale;
+        target->z *= scale;
+    }
+}
+
+static void Fishing_RF3InitRegionFish(Fishing* this, PlayState* play) {
+    s32 slot = this->actor.params - EN_FISH_REGION;
+    RF3RegionFishInfo info;
+
+    if ((slot < 0) || (slot >= RF3_REGION_SLOTS) || !RF3RegionFish_Get(slot, &info)) {
+        Actor_Kill(&this->actor);
+        return;
+    }
+    SkelAnime_InitFlex(play, &this->skelAnime, &gFishingFishSkel, &gFishingFishAnim, NULL, NULL, 0);
+    Animation_MorphToLoop(&this->skelAnime, &gFishingFishAnim, 0.0f);
+    SkelAnime_Update(&this->skelAnime);
+
+    sRF3RegionBoxes[slot].minX = info.minX;
+    sRF3RegionBoxes[slot].maxX = info.maxX;
+    sRF3RegionBoxes[slot].minZ = info.minZ;
+    sRF3RegionBoxes[slot].maxZ = info.maxZ;
+    sRF3RegionBoxes[slot].surfaceY = info.surfaceY;
+    sRF3RegionBoxes[slot].angle = info.angle; // step 16i
+    sRF3RegionLastGood[slot] = this->actor.world.pos; // spawned over deep water (RF3RegionFish.cpp)
+
+    this->fishState = 10;
+    this->fishStateNext = 10;
+    this->isLoach = 0;
+    this->perception = 0.1f;
+    this->fishLength = info.ootLength;
+    this->actor.home.pos = this->actor.world.pos;
+}
+
+// Called from RF3RegionFish.cpp: remove this scene's region fish (editor "respawn"). Not while one is
+// hooked. Returns how many were removed, or -1 if a fight is running.
+s32 Fishing_RF3KillRegionFish(PlayState* play) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_NPC].head;
+    s32 count = 0;
+
+    if (sRodCastState >= 4) {
+        return -1;
+    }
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_FISHING) && (actor->params >= EN_FISH_REGION)) {
+            Actor_Kill(actor);
+            count++;
+        }
+        actor = actor->next;
+    }
+    return count;
+}
+
+// --- Reel Fishing III mod (step 16f): region fish stay in water --------------------------------------
+
+static f32 Fishing_RF3FloorAt(PlayState* play, f32 x, f32 z) {
+    CollisionPoly* poly;
+    Vec3f probe;
+
+    probe.x = x;
+    probe.y = sRF3CurRegion->surfaceY + 10.0f;
+    probe.z = z;
+    return BgCheck_EntityRaycastFloor1(&play->colCtx, &poly, &probe);
+}
+
+// A region box can take in the shore. Over ground shallower than RF3_REGION_MIN_DEPTH the fish goes
+// back to its last good spot, and it never rises out of the water (OoT's airborne-fish code would
+// throw it). Not while it is being landed (state 6: lifted to Link's hand).
+static void Fishing_RF3KeepInWater(Fishing* this, PlayState* play) {
+    s32 slot;
+    f32 floorY;
+
+    if ((sRF3CurRegion == NULL) || (this->actor.update == NULL) || (this->fishState == 6)) {
+        return;
+    }
+    slot = this->actor.params - EN_FISH_REGION;
+    floorY = Fishing_RF3FloorAt(play, this->actor.world.pos.x, this->actor.world.pos.z);
+    if (floorY > (sRF3CurRegion->surfaceY - RF3_REGION_MIN_DEPTH)) {
+        this->actor.world.pos.x = sRF3RegionLastGood[slot].x;
+        this->actor.world.pos.z = sRF3RegionLastGood[slot].z;
+    } else {
+        sRF3RegionLastGood[slot] = this->actor.world.pos;
+    }
+    if (this->actor.world.pos.y > (sRF3CurRegion->surfaceY - 3.0f)) {
+        this->actor.world.pos.y = sRF3CurRegion->surfaceY - 3.0f;
+        this->actor.velocity.y = 0.0f;
+    }
+}
+
+// Distance from Link to where the water gets shallow, walking from the hooked fish toward Link.
+static f32 Fishing_RF3ShoreDistance(Fishing* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+    f32 dx = player->actor.world.pos.x - this->actor.world.pos.x;
+    f32 dz = player->actor.world.pos.z - this->actor.world.pos.z;
+    f32 dist = sqrtf(SQ(dx) + SQ(dz));
+    f32 step;
+    s32 i;
+
+    if (dist < 1.0f) {
+        return 0.0f;
+    }
+    for (i = 0; i < 80; i++) {
+        step = i * 15.0f;
+        if (step >= dist) {
+            break;
+        }
+        if (Fishing_RF3FloorAt(play, this->actor.world.pos.x + (dx * step / dist),
+                               this->actor.world.pos.z + (dz * step / dist)) >
+            (sRF3CurRegion->surfaceY - RF3_REGION_MIN_DEPTH)) {
+            return (dist - step) + 15.0f; // land just before the shallows
+        }
+    }
+    return 0.0f; // deep water all the way to Link
+}
+
+// Step 16h: the rod's cast state (0 = line in), so the region editor's camera doesn't fight the lure camera.
+s32 Fishing_RF3CastState(void) {
+    return sRodCastState;
 }

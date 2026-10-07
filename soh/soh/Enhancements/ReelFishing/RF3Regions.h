@@ -1,0 +1,116 @@
+#pragma once
+
+// Reel Fishing III mod (step 16c): fish regions outside the pond. A region is a box on a body of
+// water in one scene, with how many fish live there and which RF3 records (species and size class)
+// may spawn. Placed with the editor window (RF3RegionWindow) and kept in rf3_fish_regions.json in the
+// SoH fork. See docs/DESIGN.md step 16.
+
+#include <cmath>
+#include <string>
+#include <vector>
+
+namespace rf3 {
+
+// A box on the water. minX..maxX / minZ..maxZ are the box in its own frame, turned by `angle` (degrees,
+// seen from above) about its centre (step 16i). With angle 0 it is a plain world box.
+//   world     = centre + R(angle)  * (box point - centre)
+//   box point = centre + R(-angle) * (world - centre)
+struct FishRegion {
+    std::string name;
+    int scene = -1;
+    float minX = 0.0f;
+    float maxX = 0.0f;
+    float minZ = 0.0f;
+    float maxZ = 0.0f;
+    float angle = 0.0f;    // degrees (step 16i)
+    float surfaceY = 0.0f; // the water surface, read from the water box when placed
+    int fishCount = 6;
+    std::vector<int> records; // fishdata.fdt records that may spawn here
+
+    float CentreX() const { return (minX + maxX) * 0.5f; }
+    float CentreZ() const { return (minZ + maxZ) * 0.5f; }
+    float Radians() const { return angle * 3.14159265f / 180.0f; }
+
+    // Turn (dx, dz) by `radians` seen from above.
+    static void Turn(float radians, float dx, float dz, float* outX, float* outZ) {
+        float c = std::cos(radians), s = std::sin(radians);
+        *outX = dx * c - dz * s;
+        *outZ = dx * s + dz * c;
+    }
+    void ToBox(float x, float z, float* bx, float* bz) const {
+        Turn(-Radians(), x - CentreX(), z - CentreZ(), bx, bz);
+        *bx += CentreX();
+        *bz += CentreZ();
+    }
+    void ToWorld(float bx, float bz, float* x, float* z) const {
+        Turn(Radians(), bx - CentreX(), bz - CentreZ(), x, z);
+        *x += CentreX();
+        *z += CentreZ();
+    }
+    bool Contains(float x, float z) const {
+        float bx, bz;
+        ToBox(x, z, &bx, &bz);
+        return (bx >= minX) && (bx <= maxX) && (bz >= minZ) && (bz <= maxZ);
+    }
+    // Corners in the world: 0 = (minX, minZ), 1 = (maxX, minZ), 2 = (maxX, maxZ), 3 = (minX, maxZ).
+    void Corner(int i, float* x, float* z) const {
+        float bx = (i == 0 || i == 3) ? minX : maxX;
+        float bz = (i == 0 || i == 1) ? minZ : maxZ;
+        ToWorld(bx, bz, x, z);
+    }
+    // Move the box (same size and angle) so its centre is (x, z).
+    void MoveTo(float x, float z) {
+        float hx = (maxX - minX) * 0.5f, hz = (maxZ - minZ) * 0.5f;
+        minX = x - hx;
+        maxX = x + hx;
+        minZ = z - hz;
+        maxZ = z + hz;
+    }
+    // Make the box the one with world corners (ax, az) and (bx, bz) opposite each other, angle kept.
+    void SetFromCornersWorld(float ax, float az, float bx, float bz) {
+        float dx, dz;
+        Turn(-Radians(), bx - ax, bz - az, &dx, &dz);
+        float hx = std::fabs(dx) * 0.5f, hz = std::fabs(dz) * 0.5f;
+        float cx = (ax + bx) * 0.5f, cz = (az + bz) * 0.5f;
+        minX = cx - hx;
+        maxX = cx + hx;
+        minZ = cz - hz;
+        maxZ = cz + hz;
+    }
+};
+
+// All regions of all scenes, as loaded or edited.
+std::vector<FishRegion>& FishRegions();
+// The file in use: the fork's tracked copy if the source tree is present, else next to soh.exe.
+std::string FishRegionsPath();
+// Read the file (a missing file means no regions). Returns false and sets error on a bad file.
+bool LoadFishRegions(std::string* error);
+// Write the file. Returns false and sets error if it can't be written.
+bool SaveFishRegions(std::string* error);
+// Records a region may list: the juvenile, normal and big records of the 22 species (not the
+// legendary or Red/Black Carp records, which are for later).
+bool IsRegionRecord(int record);
+// Step 16d (RF3RegionFish.cpp): remove this scene's region fish and spawn them again from the regions
+// as they are now (saved or not). Returns the count, or -1 (status says why).
+int RespawnRegionFish(std::string* status);
+
+// Step 16h: shared by the window and edit mode.
+int& SelectedRegion(); // index into FishRegions(), -1 = none
+bool& RegionsDirty();  // edits not saved yet
+
+// Step 16h (RF3RegionEdit.cpp): edit mode, a cursor and an editor camera, placement without Link.
+bool RegionEditActive();
+// Returns false and sets status if edit mode can't start now (no scene, a cast is out).
+bool RegionEditStart(std::string* status);
+void RegionEditStop();
+struct RegionEditView {
+    bool active = false;
+    float cursorX = 0, cursorY = 0, cursorZ = 0;
+    bool cursorOnWater = false;
+    bool hasCorner1 = false;
+    float corner1X = 0, corner1Z = 0;
+    const char* grab = ""; // what B is holding: "", "corner", "edge", "box"
+};
+RegionEditView GetRegionEditView();
+
+} // namespace rf3

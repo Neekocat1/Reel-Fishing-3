@@ -1,0 +1,92 @@
+{
+  "regions": [
+    {
+      "angle": -16.60000228881836,
+      "fishCount": 6,
+      "maxX": 1052.007080078125,
+      "maxZ": 4189.892578125,
+      "minX": 664.1992797851563,
+      "minZ": 3883.94873046875,
+      "name": "Scene 87 region 1",
+      "records": [
+        {
+          "name": "Florida Bass n",
+          "record": 17
+        },
+        {
+          "name": "Florida Bass b",
+          "record": 18
+        },
+        {
+          "name": "Largemouth Bass n",
+          "record": 15
+        },
+        {
+          "name": "Largemouth Bass b",
+          "record": 16
+        }
+      ],
+      "scene": 87,
+      "surfaceY": -1313.0
+    },
+    {
+      "angle": -20.0,
+      "fishCount": 6,
+      "maxX": -110.82696533203125,
+      "maxZ": 3457.982666015625,
+      "minX": -454.19830322265625,
+      "minZ": 3209.649658203125,
+      "name": "Scene 87 region 2",
+      "records": [
+        {
+          "name": "Rainbow Trout n",
+          "record": 22
+        },
+        {
+          "name": "Rainbow Trout b",
+          "record": 23
+        },
+        {
+          "name": "Pink Salmon s",
+          "record": 28
+        },
+        {
+          "name": "Pink Salmon n",
+          "record": 29
+        },
+        {
+          "name": "Rainbow Trout s",
+          "record": 21
+        }
+      ],
+      "scene": 87,
+      "surfaceY": -1313.0
+    },
+    {
+      "angle": 0.0,
+      "fishCount": 4,
+      "maxX": 794.6702880859375,
+      "maxZ": 193.88314819335938,
+      "minX": 664.9039916992188,
+      "minZ": -242.28933715820313,
+      "name": "Scene 95 region 1",
+      "records": [
+        {
+          "name": "Char n",
+          "record": 1
+        },
+        {
+          "name": "Char s",
+          "record": 0
+        },
+        {
+          "name": "Bitterling n",
+          "record": 13
+        }
+      ],
+      "scene": 95,
+      "surfaceY": 1510.0
+    }
+  ],
+  "version": 1
+}

@@ -37,6 +37,10 @@ typedef struct RF3OwnerFrame {
     int32_t fishYaw;    // step 8h: world.rot.y, binary angle units
     float fishTailStep; // step 8h: tail beat speed (phase step per game frame)
     float fishTailMag;  // step 8h: tail beat amplitude
+    int32_t sceneNum;    // step 15c: the scene (the pond is SCENE_FISHING_POND)
+    int32_t portable;    // step 15c: 1 = the rod used outside the pond
+    int32_t lureInWater; // step 15c: the lure is over water (pond: inside its 920-unit radius)
+    float lureFloorY;    // step 15c: ground under the lure (portable only)
 } RF3OwnerFrame;
 
 // True when CSV logging is switched on in the Enhancements menu.

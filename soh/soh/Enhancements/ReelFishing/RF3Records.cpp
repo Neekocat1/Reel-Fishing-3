@@ -33,6 +33,29 @@ struct FishIdentity {
 FishIdentity sOnHand;
 FishIdentity sRecord[2]; // [0] adult, [1] child: OoT's two record slots in HIGH_SCORE(HS_FISHING)
 
+bool sHasRod = false; // step 15a: Link has bought the rod at the pond (saved per file)
+
+// Step 16a: the mod's own records, one per fishdata.fdt record (so juvenile, normal and lunker of a
+// species are separate). The longest fish wins. Saved per file; the pond's OoT record is separate.
+constexpr int kRecordSlots = 50; // fishdata.fdt holds 50 records
+struct BestCatch {
+    bool valid = false;
+    int32_t species = -1;
+    float mm = 0.0f;
+    int32_t weightG = 0;
+};
+BestCatch sBest[kRecordSlots];
+
+// The last catch submitted, so building the catch message twice can't turn a record into a non-record.
+struct SubmittedCatch {
+    int32_t record = -1;
+    float mm = -1.0f;
+    int32_t weightG = -1;
+    bool newRecord = false;
+    float previousMm = 0.0f;
+};
+SubmittedCatch sLastSubmitted;
+
 float sWeighOotLength = 0.0f;
 int32_t sWeighSource = RF3_WEIGH_RECORD;
 int32_t sWeighIsChild = 0;
@@ -91,11 +114,29 @@ void LoadIdentity(const char* name, FishIdentity& id) {
 void SaveSection(const SaveContext& saveContext, int sectionID, bool fullSave) {
     SaveIdentity("adultRecord", sRecord[0]);
     SaveIdentity("childRecord", sRecord[1]);
+    SaveManager::Instance->SaveData("hasRod", sHasRod); // step 15a
+    SaveManager::Instance->SaveArray("bestCatches", kRecordSlots, [](size_t i) { // step 16a
+        SaveManager::Instance->SaveStruct("", [&]() {
+            SaveManager::Instance->SaveData("valid", sBest[i].valid);
+            SaveManager::Instance->SaveData("species", sBest[i].species);
+            SaveManager::Instance->SaveData("mm", sBest[i].mm);
+            SaveManager::Instance->SaveData("weightG", sBest[i].weightG);
+        });
+    });
 }
 
 void LoadSection() {
     LoadIdentity("adultRecord", sRecord[0]);
     LoadIdentity("childRecord", sRecord[1]);
+    SaveManager::Instance->LoadData("hasRod", sHasRod, false); // step 15a; absent in older saves
+    SaveManager::Instance->LoadArray("bestCatches", kRecordSlots, [](size_t i) { // step 16a; absent = none
+        SaveManager::Instance->LoadStruct("", [&]() {
+            SaveManager::Instance->LoadData("valid", sBest[i].valid, false);
+            SaveManager::Instance->LoadData("species", sBest[i].species, -1);
+            SaveManager::Instance->LoadData("mm", sBest[i].mm, 0.0f);
+            SaveManager::Instance->LoadData("weightG", sBest[i].weightG, 0);
+        });
+    });
 }
 
 // New file, or before a file's sections load: no remembered records. The kept fish is not saved by
@@ -104,6 +145,11 @@ void InitFile(bool isDebug) {
     sRecord[0] = {};
     sRecord[1] = {};
     sOnHand = {};
+    sHasRod = false;
+    for (BestCatch& b : sBest) {
+        b = {};
+    }
+    sLastSubmitted = {};
 }
 
 void RegisterRF3Records() {
@@ -174,4 +220,75 @@ extern "C" void RF3Size_SetRecord(int32_t isChild, float ootLength) {
     if (RF3_IsEnabled()) {
         LogIdentity(isChild ? "record-child" : "record-adult", r, ootLength);
     }
+}
+
+// --- The rod as an item (step 15a) ------------------------------------------------------------
+
+extern "C" void RF3Rod_SetOwned(void) {
+    if (!RF3_IsEnabled()) {
+        return;
+    }
+    if (!sHasRod) {
+        LogIdentity("rod-bought", FishIdentity{}, 0.0f);
+    }
+    sHasRod = true;
+}
+
+extern "C" int32_t RF3Rod_IsOwned(void) {
+    return sHasRod ? 1 : 0;
+}
+
+extern "C" void RF3Rod_LogEvent(const char* what, int32_t value) {
+    if (!RF3_IsEnabled()) {
+        return;
+    }
+    FishIdentity none;
+    LogIdentity(what, none, static_cast<float>(value)); // value shows in the ootLength column
+}
+
+// --- The mod's records (step 16a) ------------------------------------------------------------
+
+extern "C" int32_t RF3Records_SubmitCatch(int32_t record, int32_t species, float mm, int32_t weightG,
+                                          float* previousMm) {
+    if (!RF3_IsEnabled() || (record < 0) || (record >= kRecordSlots)) {
+        *previousMm = 0.0f;
+        return 0;
+    }
+    if ((sLastSubmitted.record == record) && (sLastSubmitted.mm == mm) && (sLastSubmitted.weightG == weightG)) {
+        *previousMm = sLastSubmitted.previousMm; // the same catch again (message rebuilt): same answer
+        return sLastSubmitted.newRecord ? 1 : 0;
+    }
+    BestCatch& best = sBest[record];
+    float previous = best.valid ? best.mm : 0.0f;
+    bool newRecord = !best.valid || (mm > best.mm);
+    if (newRecord) {
+        best.valid = true;
+        best.species = species;
+        best.mm = mm;
+        best.weightG = weightG;
+    }
+    sLastSubmitted = { record, mm, weightG, newRecord, previous };
+    *previousMm = previous;
+
+    std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+    char stamp[32];
+    std::time_t now = std::time(nullptr);
+    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+    char line[192];
+    std::snprintf(line, sizeof(line), "%s catch record=%d species=%d mm=%.1f g=%d previousMm=%.1f newRecord=%d\n",
+                  stamp, record, species, mm, weightG, previous, newRecord ? 1 : 0);
+    out << line;
+    return newRecord ? 1 : 0;
+}
+
+extern "C" int32_t RF3Records_GetBest(int32_t record, float* mm, int32_t* weightG) {
+    if ((record < 0) || (record >= kRecordSlots) || !sBest[record].valid) {
+        return 0;
+    }
+    *mm = sBest[record].mm;
+    *weightG = sBest[record].weightG;
+    return 1;
 }

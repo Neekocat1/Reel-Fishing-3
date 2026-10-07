@@ -1832,6 +1832,12 @@ void SohMenu::AddMenuEnhancements() {
         .WindowName("Reel Fishing III Debug")
         .Options(WindowButtonOptions().Tooltip(
             "Live view of the Reel Fishing III fight: state, tension, hook, stamina, distance and inputs."));
+    AddWidget(path, "Reel Fishing III Fish Regions", WIDGET_WINDOW_BUTTON)
+        .CVar(CVAR_WINDOW("ReelFishing3Regions"))
+        .WindowName("Reel Fishing III Fish Regions")
+        .Options(WindowButtonOptions().Tooltip(
+            "Editor for fish regions outside the pond: boxes on bodies of water with a fish count and the "
+            "species and size classes that live there. Saved to rf3_fish_regions.json."));
     AddWidget(path, "Log Fishing Data (CSV)", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("ReelFishing3.Log"))
         .Options(CheckboxOptions().Tooltip("Write the Fishing Pond state to logs/rf3_fishing_<date>.csv next to "

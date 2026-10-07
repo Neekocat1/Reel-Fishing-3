@@ -22,6 +22,7 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/SaveManager.h"
 #include "soh/Enhancements/kaleido.h"
+#include "soh/Enhancements/ReelFishing/RF3PausePage.h"
 #include <soh_assets.h>
 #include <libultraship/bridge/consolevariablebridge.h>
 
@@ -1616,10 +1617,15 @@ void KaleidoScope_DrawPages(PlayState* play, GraphicsContext* gfxCtx) {
 
             gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
 
-            POLY_OPA_DISP = KaleidoScope_DrawPageSections(POLY_OPA_DISP, pauseCtx->equipPageVtx,
-                                                          sEquipmentTexs[gSaveContext.language]);
+            if (RF3Pause_FishingPageActive()) { // Reel Fishing III mod (step 15b), seen while turning
+                POLY_OPA_DISP = KaleidoScope_DrawPageSections(POLY_OPA_DISP, pauseCtx->saveVtx, sGameOverTexs);
+                RF3Pause_DrawFishingPage(play, false);
+            } else {
+                POLY_OPA_DISP = KaleidoScope_DrawPageSections(POLY_OPA_DISP, pauseCtx->equipPageVtx,
+                                                              sEquipmentTexs[gSaveContext.language]);
 
-            KaleidoScope_DrawEquipment(play);
+                KaleidoScope_DrawEquipment(play);
+            }
         }
 
         if (pauseCtx->pageIndex != PAUSE_QUEST) {
@@ -1750,6 +1756,13 @@ void KaleidoScope_DrawPages(PlayState* play, GraphicsContext* gfxCtx) {
                 Matrix_RotateY(1.57f, MTXMODE_APPLY);
 
                 gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+
+                // Reel Fishing III mod (step 15b): the Fishing page replaces the Equipment page.
+                if (RF3Pause_FishingPageActive()) {
+                    POLY_OPA_DISP = KaleidoScope_DrawPageSections(POLY_OPA_DISP, pauseCtx->saveVtx, sGameOverTexs);
+                    RF3Pause_DrawFishingPage(play, true);
+                    break;
+                }
 
                 POLY_OPA_DISP = KaleidoScope_DrawPageSections(POLY_OPA_DISP, pauseCtx->equipPageVtx,
                                                               sEquipmentTexs[gSaveContext.language]);
@@ -4285,6 +4298,9 @@ void KaleidoScope_Update(PlayState* play) {
                         Audio_PlaySfxGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                              &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
                         pauseCtx->randoQuestMode ^= 1;
+                    }
+                    if (pauseCtx->state == 6) {
+                        RF3Pause_UpdateToggle(play); // Reel Fishing III mod (step 15b): C-Up tap, Fishing page
                     }
                     break;
 

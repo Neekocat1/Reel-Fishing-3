@@ -35,6 +35,7 @@
 #include "soh/Enhancements/debugger/SohStatsWindow.h"
 #include "soh/Enhancements/ReelFishing/RF3DebugWindow.h"
 #include "soh/Enhancements/ReelFishing/RF3TensionGauge.h"
+#include "soh/Enhancements/ReelFishing/RF3RegionWindow.h"
 #include "soh/Enhancements/debugger/valueViewer.h"
 #include "soh/Enhancements/gameplaystatswindow.h"
 #include "soh/Enhancements/randomizer/randomizer_check_tracker.h"
@@ -84,6 +85,7 @@ std::shared_ptr<Ship::GuiWindow> mConsoleWindow;
 std::shared_ptr<SohStatsWindow> mStatsWindow;
 std::shared_ptr<RF3DebugWindow> mRF3DebugWindow;
 std::shared_ptr<RF3TensionGauge> mRF3TensionGauge;
+std::shared_ptr<RF3RegionWindow> mRF3RegionWindow;
 std::shared_ptr<Ship::GuiWindow> mGfxDebuggerWindow;
 
 std::shared_ptr<SohMenu> mSohMenu;
@@ -131,6 +133,7 @@ std::vector<std::shared_ptr<Ship::GuiWindow>> GetAllGuiWindows() {
         mStatsWindow,
         mRF3DebugWindow,
         mRF3TensionGauge,
+        mRF3RegionWindow,
         mGfxDebuggerWindow,
         mModMenuWindow,
         mAudioEditorWindow,
@@ -200,6 +203,9 @@ void SetupGuiElements() {
     gui->AddGuiWindow(mRF3DebugWindow);
     mRF3TensionGauge = std::make_shared<RF3TensionGauge>(CVAR_WINDOW("ReelFishing3Gauge"), "Reel Fishing III Gauge");
     gui->AddGuiWindow(mRF3TensionGauge);
+    mRF3RegionWindow = std::make_shared<RF3RegionWindow>(CVAR_WINDOW("ReelFishing3Regions"),
+                                                         "Reel Fishing III Fish Regions", ImVec2(560, 520));
+    gui->AddGuiWindow(mRF3RegionWindow);
 
     /*mInputEditorWindow = gui->GetGuiWindow("Controller Configuration");
     if (mInputEditorWindow == nullptr) {
@@ -312,6 +318,7 @@ void Destroy() {
     mStatsWindow = nullptr;
     mRF3DebugWindow = nullptr;
     mRF3TensionGauge = nullptr;
+    mRF3RegionWindow = nullptr;
     mConsoleWindow = nullptr;
     mGfxDebuggerWindow = nullptr;
     mInputViewer = nullptr;

@@ -14,6 +14,7 @@
 #include "soh/cvar_prefixes.h"
 #include "RF3Sim.h"
 #include "RF3SizeMap.h"
+#include "RF3FishTable.h"
 
 namespace {
 
@@ -47,9 +48,30 @@ int RollSpecies() {
     return static_cast<int>(sSpeciesRng % rf3::kSpeciesCount);
 }
 
+// Step 16d: a region fish (index 32 + slot) has a fixed record and RF3 length, set when it spawned.
+const rf3::FishRecord* RegionRecord(int32_t fishIndex, float* mm) {
+    RF3RegionFishInfo info;
+    if ((fishIndex < RF3_REGION_FISH_INDEX_BASE) ||
+        !RF3RegionFish_Get(fishIndex - RF3_REGION_FISH_INDEX_BASE, &info)) {
+        return nullptr;
+    }
+    for (const rf3::FishRecord& r : rf3::kFishRecords) {
+        if (r.record == info.record) {
+            if (mm != nullptr) {
+                *mm = info.mm;
+            }
+            return &r;
+        }
+    }
+    return nullptr;
+}
+
 // The fish's species; one not rolled yet (option switched on mid-visit) rolls now.
 // Out-of-range indices fall back to largemouth bass (species 8).
 int SpeciesOf(int32_t fishIndex) {
+    if (const rf3::FishRecord* region = RegionRecord(fishIndex, nullptr)) {
+        return region->species;
+    }
     if (fishIndex < 0 || fishIndex >= kMaxSpeciesFish) {
         return 8;
     }
@@ -105,6 +127,9 @@ constexpr float kPlaceholderStrengthB = 0.8f;
 
 // Steps 12 and 14b: the fish's species, and the size class its mapped RF3 length falls in.
 const rf3::FishRecord& RecordFor(int32_t fishIndex, float oFishLength) {
+    if (const rf3::FishRecord* region = RegionRecord(fishIndex, nullptr)) {
+        return *region; // step 16d
+    }
     int species = SpeciesOf(fishIndex);
     return rf3::SpeciesRecordForMm(species, rf3::OotLengthToSpeciesMm(species, oFishLength));
 }
@@ -121,7 +146,10 @@ void StartFightFish(int32_t fishIndex, float oFishLength) {
     sFightFishIndex = fishIndex;
     sFightOotLength = oFishLength;
     sFightRecord = &RecordFor(fishIndex, oFishLength);
-    sFightLengthMm = rf3::OotLengthToSpeciesMm(SpeciesOf(fishIndex), oFishLength);
+    float regionMm = 0.0f;
+    sFightLengthMm = (RegionRecord(fishIndex, &regionMm) != nullptr)
+                         ? regionMm // step 16d: drawn at spawn
+                         : rf3::OotLengthToSpeciesMm(SpeciesOf(fishIndex), oFishLength);
     sFightWeightG = rf3::WeightFromLength(sFightRecord->params, static_cast<int>(sFightLengthMm),
                                           static_cast<int>(sSizeRng % 10));
 }
@@ -232,7 +260,7 @@ extern "C" void RF3Cast_GetLast(float* power, float* distanceFactor) {
 
 namespace {
 
-constexpr int kMaxFish = 32;
+constexpr int kMaxFish = 96; // pond fish 0..31, region fish 32 + slot (step 16d)
 rf3::LureMeter sMeter;
 rf3::ApproachFish sApproach[kMaxFish];
 bool sApproachInit[kMaxFish] = {};
