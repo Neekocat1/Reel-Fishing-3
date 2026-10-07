@@ -20,6 +20,7 @@
 #include "soh/ShipInit.hpp"
 #include "soh/cvar_prefixes.h"
 #include "RF3Bridge.h"
+#include "RF3TackleScreen.h"
 
 extern "C" {
 #include "z64.h"
@@ -105,10 +106,31 @@ void PlayCursorSfx() {
 
 // Input on the page: the D-pad equips the rod (same rule as the item page), the stick and, with
 // "D-pad on pause", the D-pad move to the page-turn arrows.
+// Step 17e: with RF3's tackle box screen available, the D-pad equips from anywhere on it and the
+// screen takes the stick, C-Left/C-Right and A (RF3TackleScreen.cpp).
 void HandleInput(PlayState* play) {
     PauseContext* pauseCtx = &play->pauseCtx;
     Input* input = &play->state.input[0];
     bool dpadOnPause = CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) != 0;
+
+    if (RF3TackleScreen_Usable()) {
+        bool canEquip = RF3Rod_IsOwned() && CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) &&
+                        (!dpadOnPause || CHECK_BTN_ALL(input->cur.button, BTN_CUP));
+        static const u16 kDpad[4] = { BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
+        for (int d = 0; d < 4; d++) {
+            if (CHECK_BTN_ALL(input->press.button, kDpad[d])) {
+                if (canEquip) {
+                    EquipRod(play, 4 + d);
+                } else {
+                    Audio_PlaySfxGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                }
+                return;
+            }
+        }
+        RF3TackleScreen_HandleInput(play);
+        return;
+    }
 
     if (pauseCtx->cursorSpecialPos == 0) {
         bool canEquip = RF3Rod_IsOwned() && CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) &&
@@ -146,6 +168,10 @@ void HandleInput(PlayState* play) {
 }
 
 } // namespace
+
+extern "C" void RF3Pause_CloseFishingPage(void) {
+    sPageActive = false;
+}
 
 extern "C" int RF3Pause_FishingPageActive(void) {
     return (sPageActive && RF3_IsEnabled()) ? 1 : 0;

@@ -167,6 +167,32 @@ int32_t RF3Records_SubmitCatch(int32_t record, int32_t species, float mm, int32_
 // The record for a fishdata record. Returns 0 if none yet.
 int32_t RF3Records_GetBest(int32_t record, float* mm, int32_t* weightG);
 
+// --- The tackle choice (step 17c, RF3Tackle.cpp) -----------------------------
+
+// RF3's tackle boxes in this mod. The box decides the rod (box n = RROD n) and the reel.
+#define RF3_TACKLE_BOX_BASS 0
+#define RF3_TACKLE_BOX_TROUT 1
+#define RF3_TACKLE_BOXES 2
+
+// All indices are RF3's own: line = rigdata RLIN record, lure = RLRE record, target = fishdata record.
+typedef struct RF3TackleChoice {
+    int32_t box;    // RF3_TACKLE_BOX_*
+    int32_t rod;    // RROD record of the box
+    int32_t line;   // the box's chosen line
+    int32_t lure;   // the box's chosen lure
+    int32_t target; // the target fish (shared by both boxes)
+} RF3TackleChoice;
+void RF3Tackle_Get(RF3TackleChoice* out);
+int32_t RF3Tackle_GetBoxLine(int32_t box);
+int32_t RF3Tackle_GetBoxLure(int32_t box);
+// Setters return 0 for an index out of range (nothing changes). A real change writes a
+// "tackle-select" line to logs/rf3_records.txt with why (e.g. "debug-window"). Saved per file;
+// the fishing does not use the choice yet.
+int32_t RF3Tackle_SetBox(int32_t box, const char* why);
+int32_t RF3Tackle_SetLine(int32_t box, int32_t line, const char* why);
+int32_t RF3Tackle_SetLure(int32_t box, int32_t lure, const char* why);
+int32_t RF3Tackle_SetTarget(int32_t record, const char* why);
+
 // --- Cast (step 11) ---------------------------------------------------------
 
 // At the launch frame: B was held for heldFrames of a windupFrames-long wind-up (game frames,

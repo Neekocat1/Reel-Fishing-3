@@ -17,6 +17,8 @@ void RF3Pause_UpdateToggle(PlayState* play);
 // Draws the page's entries after the caller drew the blank page sections. handleInput: the page is
 // the one shown and takes input (cursor, D-pad equip).
 void RF3Pause_DrawFishingPage(PlayState* play, int handleInput);
+// Step 17e: back to the Equipment page (the tackle box screen's Finish).
+void RF3Pause_CloseFishingPage(void);
 
 #ifdef __cplusplus
 }

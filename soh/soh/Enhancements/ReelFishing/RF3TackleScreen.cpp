@@ -1,0 +1,805 @@
+// Reel Fishing III mod (step 17e): RF3's tackle box screen in place of the Fishing pause page.
+// Built from RF3's own layouts (menu_01 + menu_02) and pictures, which tools/rf3_menuassets.py makes
+// from the player's disc (mods/rf3_tackle.o2r; RF3TackleAssets.cpp loads them). RF3 draws on a
+// 640 x 480 screen; this draws the same rectangles at half size on OoT's 320 x 240 screen with
+// texture rectangles on the overlay display list, on top of the pause menu.
+// Controls (user's decisions, DESIGN step 17): stick up/down moves the red cursor between RF3's rows
+// (Reel Lines, Lures, Finish); stick left/right switches tackle box (RF3's L1/R1); C-Left/C-Right
+// change the target fish (RF3's L2/R2); A on Finish goes back to the Equipment page; the D-pad equips the
+// rod (RF3PausePage.cpp).
+// Step 17f: A on Reel Lines makes the Line Dia bar active (stick left/right moves RF3's blue cell);
+// A on Lures opens a list of the box's lures in the right-hand pane (stick up/down). Both preview the
+// choice live; A keeps it, B goes back. RF3 itself picks lures from its 3D tackle trays, which this 2D
+// screen doesn't have, so the lure list is the mod's own, drawn with RF3's font and cursor.
+// Log, don't look: every open, change and close goes to logs/rf3_menu.txt with what was drawn.
+
+#include "RF3TackleScreen.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <string>
+
+#include <ship/Context.h>
+
+#include "RF3Bridge.h"
+#include "RF3PausePage.h"
+#include "RF3TackleAssets.h"
+
+extern "C" {
+#include "functions.h"
+#include "macros.h"
+#include "variables.h"
+}
+
+namespace {
+
+using namespace rf3tackle;
+
+enum Row { ROW_LINES, ROW_LURES, ROW_FINISH, ROW_COUNT };
+const char* kRowNames[ROW_COUNT] = { "lines", "lures", "finish" };
+
+constexpr int kStickThreshold = 30; // same as the pause menu's own cursor
+constexpr int kRepeatDelay = 8;     // game frames (20 Hz) before a held stick repeats
+constexpr int kRepeatEvery = 3;
+constexpr float kScale = 0.5f;      // RF3's 640 x 480 -> OoT's 320 x 240
+constexpr int kScreenW = 640;
+constexpr int kScreenH = 480;
+
+int sRow = ROW_LURES; // RF3 opened on the Lures row in the user's screenshot
+
+// Step 17f: the open list, if any. The previewed item is shown everywhere (names, numbers, the bar)
+// but only saved when A keeps it.
+enum Mode { MODE_ROWS, MODE_LINE, MODE_LURE };
+const char* kModeNames[] = { "rows", "line-list", "lure-list" };
+Mode sMode = MODE_ROWS;
+int32_t sPreview = -1;  // RF3 index (RLIN or RLRE) under the list cursor
+int32_t sListTop = 0;   // first lure shown in the pane
+int32_t sListMoves = 0; // cursor moves since the list opened (logged on close)
+u32 sFrames = 0;        // for the active line cell's pulse
+bool sOpen = false;
+bool sLogPending = false;
+std::string sLogWhy;
+
+struct Repeat {
+    int dir = 0;
+    int frames = 0;
+};
+Repeat sRepX, sRepY;
+
+// Per-frame drawing counts, logged with each open and change.
+struct Counts {
+    int elements = 0;
+    int sprites = 0;
+    int strips = 0;
+    int glyphs = 0;
+    int numbers = 0;
+    int missingPieces = 0;
+};
+Counts sCounts;
+std::string sDrawn; // names of the elements drawn, for the log
+
+// -1, 0 or +1 for a stick axis: once on the push, then repeated while held.
+int StickStep(Repeat& r, int value) {
+    int dir = value > kStickThreshold ? 1 : (value < -kStickThreshold ? -1 : 0);
+    if (dir == 0) {
+        r = {};
+        return 0;
+    }
+    if (dir != r.dir) {
+        r.dir = dir;
+        r.frames = 0;
+        return dir;
+    }
+    r.frames++;
+    return (r.frames >= kRepeatDelay && (r.frames - kRepeatDelay) % kRepeatEvery == 0) ? dir : 0;
+}
+
+void Sfx(u16 id) {
+    Audio_PlaySfxGeneral(id, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
+}
+
+void WriteLog(const std::string& text) {
+    std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::ofstream out(dir + "/rf3_menu.txt", std::ios::app);
+    char stamp[32];
+    std::time_t now = std::time(nullptr);
+    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+    out << stamp << " screen " << text << "\n";
+}
+
+void RequestLog(const std::string& why) {
+    sLogPending = true;
+    sLogWhy = sLogWhy.empty() ? why : sLogWhy + "," + why;
+}
+
+const Box* CurrentBox() {
+    const Assets& a = Get();
+    RF3TackleChoice c;
+    RF3Tackle_Get(&c);
+    return (c.box >= 0 && c.box < static_cast<int32_t>(a.boxes.size())) ? &a.boxes[c.box] : nullptr;
+}
+
+// --- Drawing ---------------------------------------------------------------------------------
+
+int Prim(int32_t v) { // RF3 colour 0x80 = 1.0
+    return v * 2 > 255 ? 255 : v * 2;
+}
+
+// One texture rectangle: RF3 screen rectangle (x0, y0)-(x1, y1) showing texels [s0, s0 + sw) x
+// [t0, t0 + th) of the loaded texture.
+void TexRect(Gfx*& g, float x0, float y0, float x1, float y1, float s0, float t0, float sw, float th) {
+    if (x1 <= x0 || y1 <= y0 || sw <= 0 || th <= 0) {
+        return;
+    }
+    // Screen in 10.2 fixed point (RF3 x 0.5 x 4), texture start in 10.5, steps in 5.10.
+    s32 xl = static_cast<s32>(std::lround(x0 * kScale * 4));
+    s32 yl = static_cast<s32>(std::lround(y0 * kScale * 4));
+    s32 xh = static_cast<s32>(std::lround(x1 * kScale * 4));
+    s32 yh = static_cast<s32>(std::lround(y1 * kScale * 4));
+    s32 dsdx = static_cast<s32>(std::lround(sw * 1024.0 / ((x1 - x0) * kScale)));
+    s32 dtdy = static_cast<s32>(std::lround(th * 1024.0 / ((y1 - y0) * kScale)));
+    gSPWideTextureRectangle(g++, xl, yl, xh, yh, G_TX_RENDERTILE, static_cast<s32>(s0 * 32),
+                            static_cast<s32>(t0 * 32), dsdx, dtdy);
+}
+
+void LoadTexture(Gfx*& g, const std::string& path, int32_t w, int32_t h) {
+    gDPLoadTextureBlock(g++, path.c_str(), G_IM_FMT_RGBA, G_IM_SIZ_32b, w, h, 0, G_TX_NOMIRROR | G_TX_CLAMP,
+                        G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+}
+
+// A whole piece stretched over an RF3 rectangle, strip by strip.
+void DrawPiece(Gfx*& g, const std::string& name, float x0, float y0, float x1, float y1) {
+    const Piece* p = FindPiece(name);
+    if (p == nullptr || p->w <= 0 || p->h <= 0) {
+        sCounts.missingPieces++;
+        return;
+    }
+    // Strip edges are snapped to the quarter-pixel grid TexRect uses, and each strip starts at the
+    // exact (fractional) texel row that falls on its snapped top, so a shrunk or stretched piece samples
+    // continuously across strips (user's screenshot, 2026-10-07: a line through the bass shadow).
+    float perRow = (y1 - y0) / p->h;
+    auto snap = [](float y) { return std::round(y * kScale * 4) / (kScale * 4); };
+    for (const Strip& st : p->strips) {
+        float top = snap(y0 + st.y * perRow);
+        float bottom = snap(y0 + (st.y + st.h) * perRow);
+        // Loaded at its stored (padded) width; only the piece's w columns are drawn.
+        LoadTexture(g, st.path, p->texW > 0 ? p->texW : p->w, st.h);
+        TexRect(g, x0, top, x1, bottom, 0, (top - y0) / perRow - st.y, static_cast<float>(p->w),
+                (bottom - top) / perRow);
+        sCounts.strips++;
+    }
+}
+
+// Mode 5 (the wood background): the piece repeated at one texel per RF3 pixel. A 48-pixel tile can't
+// use the hardware's wrap (powers of two only), so it is drawn as a grid.
+void DrawTiled(Gfx*& g, const rf3tackle::Sprite& s) {
+    const Piece* p = FindPiece(s.piece);
+    if (p == nullptr || p->w <= 0 || p->h <= 0) {
+        sCounts.missingPieces++;
+        return;
+    }
+    int x1 = std::min(s.rect[2], kScreenW);
+    int y1 = std::min(s.rect[3], kScreenH);
+    for (int y = s.rect[1]; y < y1; y += p->h) {
+        for (int x = s.rect[0]; x < x1; x += p->w) {
+            DrawPiece(g, s.piece, static_cast<float>(x), static_cast<float>(y), static_cast<float>(x + p->w),
+                      static_cast<float>(y + p->h));
+        }
+    }
+}
+
+void DrawSprite(Gfx*& g, const rf3tackle::Sprite& s) {
+    gDPSetPrimColor(g++, 0, 0, Prim(s.rgba[0]), Prim(s.rgba[1]), Prim(s.rgba[2]), Prim(s.rgba[3]));
+    if (s.mode == 5) {
+        DrawTiled(g, s);
+    } else {
+        DrawPiece(g, s.piece, static_cast<float>(s.rect[0]), static_cast<float>(s.rect[1]),
+                  static_cast<float>(s.rect[2]), static_cast<float>(s.rect[3]));
+    }
+    sCounts.sprites++;
+}
+
+// Proportional width of RF3 text at a scale (the font's per-letter widths).
+float TextWidth(const std::string& text, float scale) {
+    const Assets& a = Get();
+    float w = 0;
+    for (unsigned char ch : text) {
+        int code = static_cast<int>(ch) - 0x10;
+        if (code >= 0 && code < static_cast<int>(a.fontSpans.size())) {
+            w += static_cast<float>(a.fontSpans[code][1] - a.fontSpans[code][0]) * scale;
+        }
+    }
+    return w;
+}
+
+// RF3 text at (x, y). pitch > 0: fixed advance per letter; 0: proportional letters from the font's
+// widths. drawH: letter height; scale narrows proportional letters (the lure list).
+void DrawString(Gfx*& g, float x, float y, const std::string& text, int32_t pitch, float drawH, float scale) {
+    const Assets& a = Get();
+    if (a.fontCell[0] <= 0) {
+        return;
+    }
+    float gw = static_cast<float>(a.fontCell[0]);
+    float gh = static_cast<float>(a.fontCell[1]);
+    gDPSetPrimColor(g++, 0, 0, 255, 255, 255, 255);
+    for (unsigned char ch : text) {
+        int code = static_cast<int>(ch) - 0x10; // RF3 text code = ASCII - 0x10
+        if (code < 0 || code >= static_cast<int>(a.fontSpans.size())) {
+            continue;
+        }
+        float left = 0, right = gw;
+        if (pitch == 0) {
+            left = static_cast<float>(a.fontSpans[code][0]);
+            right = static_cast<float>(a.fontSpans[code][1]);
+        }
+        if (!a.fontPaths[code].empty()) {
+            LoadTexture(g, a.fontPaths[code], a.fontCell[0], a.fontCell[1]);
+            TexRect(g, x, y, x + (right - left) * scale, y + drawH, left, 0, right - left, gh);
+            sCounts.glyphs++;
+        }
+        x += pitch > 0 ? static_cast<float>(pitch) : (right - left) * scale;
+    }
+}
+
+// RF3 text in a TXTX box. head[4] low byte = fixed advance per letter, high byte = letter height
+// (0 = proportional letters, 22 high). Checked against the user's screenshot: the fixed boxes (title,
+// rod, target) and proportional ones (lure, line) match within a few pixels.
+void DrawText(Gfx*& g, const Element& e, const std::string& text) {
+    const Assets& a = Get();
+    if (!e.box) {
+        return;
+    }
+    int32_t cell = e.head[4];
+    int32_t height = (cell >> 8) & 0xFF;
+    float drawH = height > 0 ? static_cast<float>(height) : static_cast<float>(a.fontCell[1]);
+    DrawString(g, static_cast<float>((*e.box)[0]), static_cast<float>((*e.box)[1]), text, cell & 0xFF, drawH,
+               1.0f);
+}
+
+// A NUMX box: a sign cell (plus, minus, or empty for 0), then `digits` cells, 18 RF3 pixels apart
+// (the user's screenshot: "+ _4", "- _2", "_ _0").
+void DrawNumber(Gfx*& g, const Element& e, int32_t value) {
+    const Assets& a = Get();
+    if (e.sprites.empty() || a.digitPaths.size() < 12) {
+        return;
+    }
+    const rf3tackle::Sprite& s = e.sprites[0];
+    float x0 = static_cast<float>(s.rect[0]);
+    float y0 = static_cast<float>(s.rect[1]);
+    float w = static_cast<float>(s.rect[2] - s.rect[0]);
+    float h = static_cast<float>(s.rect[3] - s.rect[1]);
+    float pitch = static_cast<float>(a.digitPitch);
+    int32_t digits = e.head[0] > 0 ? e.head[0] : 2;
+    gDPSetPrimColor(g++, 0, 0, Prim(s.rgba[0]), Prim(s.rgba[1]), Prim(s.rgba[2]), Prim(s.rgba[3]));
+    auto cell = [&](int index, int glyph) {
+        LoadTexture(g, a.digitPaths[glyph], a.digitSize[0], a.digitSize[1]);
+        TexRect(g, x0 + pitch * index, y0, x0 + pitch * index + w, y0 + h, 0, 0,
+                static_cast<float>(a.digitSize[0]), static_cast<float>(a.digitSize[1]));
+    };
+    if (value != 0) {
+        cell(0, value > 0 ? 11 : 10);
+    }
+    int32_t v = std::abs(value);
+    int32_t limit = 1;
+    for (int i = 0; i < digits; i++) {
+        limit *= 10;
+    }
+    v = std::min(v, limit - 1);
+    for (int i = digits; i >= 1; i--) {
+        cell(i, v % 10);
+        v /= 10;
+        if (v == 0) {
+            break; // no leading zeros
+        }
+    }
+    sCounts.numbers++;
+}
+
+struct Values {
+    const Box* box = nullptr;
+    const Target* target = nullptr;
+    const Item* line = nullptr;
+    const Item* lure = nullptr;
+    HeartShield rows[3]; // rod, line, lure
+    std::optional<std::array<int32_t, 2>> total;
+    int32_t lineCell = -1; // the chosen line's place in the box's 5 lines
+};
+
+Values CurrentValues() {
+    Values v;
+    RF3TackleChoice c;
+    RF3Tackle_Get(&c);
+    if (sMode == MODE_LINE) {
+        c.line = sPreview;
+    } else if (sMode == MODE_LURE) {
+        c.lure = sPreview;
+    }
+    v.box = CurrentBox();
+    if (v.box == nullptr) {
+        return v;
+    }
+    v.target = FindTarget(*v.box, c.target);
+    v.line = FindLine(*v.box, c.line);
+    v.lure = FindLure(*v.box, c.lure);
+    if (v.target != nullptr) {
+        v.rows[0] = v.target->rod;
+    }
+    if (v.line != nullptr && v.line->values.count(c.target)) {
+        v.rows[1] = v.line->values.at(c.target);
+    }
+    if (v.lure != nullptr && v.lure->values.count(c.target)) {
+        v.rows[2] = v.lure->values.at(c.target);
+    }
+    if (v.rows[0] && v.rows[1] && v.rows[2]) {
+        v.total = std::array<int32_t, 2>{ (*v.rows[0])[0] + (*v.rows[1])[0] + (*v.rows[2])[0],
+                                          (*v.rows[0])[1] + (*v.rows[1])[1] + (*v.rows[2])[1] };
+    }
+    for (size_t i = 0; i < v.box->lines.size(); i++) {
+        if (v.box->lines[i].index == c.line) {
+            v.lineCell = static_cast<int32_t>(i);
+        }
+    }
+    return v;
+}
+
+// Which of RF3's elements this screen shows, and what goes in its texts and numbers.
+// Not drawn: fish shadows other than the target's, the fly and
+// fly-tippet headings, the "Line Dia" text box (hutosa: RF3 shows it as a picture, part of the
+// reelline element, so the text doubled it: user, 2026-10-07), the Japanese-only labels
+// (hosoi/hutoi/go), the off-screen OTHX quad, and the
+// "end" text (Finish Modification is a picture in menu_02's Image04, 212 x 20, not font text).
+void DrawElement(Gfx*& g, const std::string& layout, const Element& e, const Values& v) {
+    const std::string& n = e.name;
+    bool drawn = false;
+    if (e.kind == "IMGX") {
+        // "Image01-off" / "Image02-off" are the L1/R1 and L2/R2 arrows, which the user's RF3
+        // screenshot shows; they are drawn (17e's first build skipped them).
+        if (n.rfind("gyoei", 0) == 0) {
+            char want[16];
+            std::snprintf(want, sizeof(want), "gyoei%02d", v.target ? v.target->record : -1);
+            if (n != want) {
+                return;
+            }
+        }
+        if (n == "flytippett" || n == "fly") {
+            return;
+        }
+        // menu_01 Image06: 48 light-wood tiles over the whole right pane. The user's RF3 screenshot shows
+        // the dark pane (Image07) and its frame (Image00) there, so RF3 doesn't show Image06 on this
+        // screen (or hides it under the 3D view). Meaning of the element not known.
+        if (layout == "menu_01" && n == "Image06") {
+            return;
+        }
+        if (n.rfind("nodata-", 0) == 0) { // a row with no value for this target (RF3's 99)
+            int row = n == "nodata-rod" ? 0 : (n == "nodata-line" ? 1 : 2);
+            if (v.rows[row]) {
+                return;
+            }
+        }
+        // Within an element, too, the first sprite is the top layer (menu_02 Image04 lists the
+        // "Finish Modification" picture before the button it sits on).
+        for (auto s = e.sprites.rbegin(); s != e.sprites.rend(); ++s) {
+            DrawSprite(g, *s);
+        }
+        drawn = true;
+    } else if (e.kind == "TXTX") {
+        std::string text;
+        if (n == "set-name" && v.box) {
+            text = v.box->title;
+        } else if (n == "fish-name" && v.target) {
+            text = v.target->name;
+        } else if (n == "rod-name" && v.box) {
+            text = v.box->rodName;
+        } else if (n == "reel-name" && v.box) {
+            text = v.box->reelName;
+        } else if (n == "lb" && v.line) {
+            text = v.line->name;
+        } else if (n == "lure-name" && v.lure) {
+            text = v.lure->name;
+        }
+        if (text.empty()) {
+            return;
+        }
+        DrawText(g, e, text);
+        drawn = true;
+    } else if (e.kind == "NUMX") {
+        static const char* kNames[8] = { "numbox1", "numbox2", "numbox3", "numbox4",
+                                         "numbox5", "numbox6", "numbox7", "numbox8" };
+        int which = -1;
+        for (int i = 0; i < 8; i++) {
+            if (n == kNames[i]) {
+                which = i;
+            }
+        }
+        std::optional<int32_t> value;
+        if (which == 0 || which == 1) {
+            if (v.total) {
+                value = (*v.total)[which];
+            }
+        } else if (which >= 2) {
+            int row = (which - 2) / 2;
+            if (v.rows[row]) {
+                value = (*v.rows[row])[(which - 2) % 2];
+            }
+        }
+        if (!value) {
+            return;
+        }
+        DrawNumber(g, e, *value);
+        drawn = true;
+    } else if (e.kind == "LBOX" && e.sprites.size() >= 2) {
+        if (n == "List") {
+            // Sprite 0 is the cursor, placed relative to sprite 1 (row 0's anchor); sprites 1..3 are
+            // the rows' anchors.
+            size_t anchor = 1 + static_cast<size_t>(sRow);
+            if (anchor >= e.sprites.size()) {
+                return;
+            }
+            const rf3tackle::Sprite& cur = e.sprites[0];
+            const rf3tackle::Sprite& a0 = e.sprites[1];
+            const rf3tackle::Sprite& a = e.sprites[anchor];
+            rf3tackle::Sprite moved = cur;
+            for (int i = 0; i < 4; i += 2) {
+                moved.rect[i] = cur.rect[i] - a0.rect[0] + a.rect[0];
+                moved.rect[i + 1] = cur.rect[i + 1] - a0.rect[1] + a.rect[1];
+            }
+            DrawSprite(g, moved);
+            drawn = true;
+        } else if (n == "hutoi") {
+            // RF3's Line Dia bar: menu_02 Image02 already drew the five dark cells (one 65 x 19 picture on
+            // page 1). This list box's sprites 1..5 are where RF3's blue "selected" piece goes, thin to
+            // thick, so only the chosen cell's is drawn, in its own colours (17e had tinted all five
+            // with guessed colours). While the bar is active (17f) the blue cell pulses.
+            size_t cell = static_cast<size_t>(v.lineCell) + 1;
+            if (v.lineCell < 0 || cell >= e.sprites.size()) {
+                return;
+            }
+            rf3tackle::Sprite sel = e.sprites[cell];
+            if (sMode == MODE_LINE) {
+                sel.rgba[3] = (sFrames / 4) % 2 ? 80 : 128;
+            }
+            DrawSprite(g, sel);
+            drawn = true;
+        }
+    }
+    if (drawn) {
+        sCounts.elements++;
+        sDrawn += (sDrawn.empty() ? "" : " ") + layout + "/" + n;
+    }
+}
+
+// Step 17f: the lure list in the right-hand pane (menu_01 Image07, where RF3 shows its 3D view).
+struct ListGeometry {
+    float x0 = 0, y0 = 0, x1 = 0, y1 = 0; // inside the pane, RF3 pixels
+    float scale = 0.75f;                  // letter size vs RF3's 12 x 22
+    float rowH = 0;
+    int32_t rows = 0;
+};
+constexpr float kListCursorW = 14;
+
+ListGeometry LureListGeometry(const Box& box) {
+    ListGeometry gm;
+    const Element* pane = FindElement("menu_01", "Image07");
+    if (pane == nullptr || !pane->box) {
+        return gm;
+    }
+    gm.x0 = static_cast<float>((*pane->box)[0]) + 6;
+    gm.y0 = static_cast<float>((*pane->box)[1]) + 6;
+    gm.x1 = static_cast<float>((*pane->box)[2]) - 6;
+    gm.y1 = static_cast<float>((*pane->box)[3]) - 6;
+    float widest = 0;
+    for (const Item& l : box.lures) {
+        widest = std::max(widest, TextWidth(l.name, 1.0f));
+    }
+    if (widest > 0) {
+        gm.scale = std::min(0.75f, (gm.x1 - gm.x0 - kListCursorW) / widest);
+    }
+    gm.rowH = Get().fontCell[1] * gm.scale + 3;
+    // The last row is kept for the "n/count" line.
+    gm.rows = gm.rowH > 0 ? static_cast<int32_t>((gm.y1 - gm.y0 - gm.rowH) / gm.rowH) : 0;
+    return gm;
+}
+
+int32_t LureIndexInBox(const Box& box, int32_t lure) {
+    for (size_t i = 0; i < box.lures.size(); i++) {
+        if (box.lures[i].index == lure) {
+            return static_cast<int32_t>(i);
+        }
+    }
+    return -1;
+}
+
+void DrawLureList(Gfx*& g, const Box& box) {
+    ListGeometry gm = LureListGeometry(box);
+    if (gm.rows <= 0) {
+        return;
+    }
+    const Element* list = FindElement("menu_02", "List");
+    float textH = Get().fontCell[1] * gm.scale;
+    int32_t at = LureIndexInBox(box, sPreview);
+    int32_t n = static_cast<int32_t>(box.lures.size());
+    for (int32_t r = 0; r < gm.rows && sListTop + r < n; r++) {
+        int32_t i = sListTop + r;
+        float y = gm.y0 + r * gm.rowH;
+        DrawString(g, gm.x0 + kListCursorW, y, box.lures[i].name, 0, textH, gm.scale);
+        if (i == at && list != nullptr && !list->sprites.empty()) {
+            // RF3's red cursor (the List box's sprite 0), shrunk to the row
+            const rf3tackle::Sprite& cur = list->sprites[0];
+            float h = gm.rowH - 2;
+            float w = h * (cur.rect[2] - cur.rect[0]) / std::max(1, cur.rect[3] - cur.rect[1]);
+            gDPSetPrimColor(g++, 0, 0, 255, 255, 255, 255);
+            DrawPiece(g, cur.piece, gm.x0, y, gm.x0 + w, y + h);
+        }
+    }
+    char count[32];
+    std::snprintf(count, sizeof(count), "%d/%d", at + 1, n);
+    DrawString(g, gm.x1 - TextWidth(count, gm.scale), gm.y1 - textH, count, 0, textH, gm.scale);
+}
+
+void ScrollToPreview(const Box& box) {
+    ListGeometry gm = LureListGeometry(box);
+    if (gm.rows <= 0) {
+        return;
+    }
+    int32_t at = std::max(0, LureIndexInBox(box, sPreview));
+    int32_t n = static_cast<int32_t>(box.lures.size());
+    if (at < sListTop) {
+        sListTop = at;
+    } else if (at >= sListTop + gm.rows) {
+        sListTop = at - gm.rows + 1;
+    }
+    sListTop = std::max(0, std::min(sListTop, std::max(0, n - gm.rows)));
+}
+
+void CloseList(const char* how) {
+    char buf[96];
+    std::snprintf(buf, sizeof(buf), "%s-%s preview=%d moves=%d", kModeNames[sMode], how, sPreview, sListMoves);
+    RequestLog(buf);
+    sMode = MODE_ROWS;
+    sPreview = -1;
+    sListMoves = 0;
+}
+
+bool Visible(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+    return RF3Pause_FishingPageActive() && RF3TackleScreen_Usable() && (pauseCtx->pageIndex == PAUSE_EQUIP) &&
+           (pauseCtx->state == 6) && (pauseCtx->unk_1E4 == 0) && (pauseCtx->debugState == 0);
+}
+
+std::string HsText(const HeartShield& hs) {
+    if (!hs) {
+        return "none";
+    }
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%+d/%+d", (*hs)[0], (*hs)[1]);
+    return buf;
+}
+
+void LogState(const Values& v) {
+    RF3TackleChoice c;
+    RF3Tackle_Get(&c);
+    char head[320];
+    std::snprintf(head, sizeof(head),
+                  "%s row=%s mode=%s preview=%d box=%d target=%d line=%d lure=%d lineCell=%d rod=%s lineHS=%s "
+                  "lureHS=%s total=%s elements=%d sprites=%d strips=%d glyphs=%d numbers=%d missingPieces=%d",
+                  sLogWhy.c_str(), kRowNames[sRow], kModeNames[sMode], sPreview, c.box, c.target, c.line, c.lure,
+                  v.lineCell,
+                  HsText(v.rows[0]).c_str(), HsText(v.rows[1]).c_str(), HsText(v.rows[2]).c_str(),
+                  HsText(v.total).c_str(), sCounts.elements, sCounts.sprites, sCounts.strips, sCounts.glyphs,
+                  sCounts.numbers, sCounts.missingPieces);
+    std::string text = head;
+    text += " texts=[" + (v.box ? v.box->title : std::string("?")) + " | " +
+            (v.target ? v.target->name : std::string("?")) + " | " + (v.box ? v.box->rodName : "?") + " | " +
+            (v.box ? v.box->reelName : "?") + " | " + (v.line ? v.line->name : std::string("?")) + " | " +
+            (v.lure ? v.lure->name : std::string("?")) + "]";
+    if (sLogWhy.find("open") != std::string::npos) {
+        text += " drawn=[" + sDrawn + "]";
+    }
+    WriteLog(text);
+}
+
+} // namespace
+
+extern "C" int RF3TackleScreen_ListOpen(void) {
+    return sMode != MODE_ROWS ? 1 : 0;
+}
+
+extern "C" int RF3TackleScreen_Usable(void) {
+    const Assets& a = Get();
+    return (a.loaded && a.texturesOk && a.boxes.size() >= RF3_TACKLE_BOXES) ? 1 : 0;
+}
+
+extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+    Input* input = &play->state.input[0];
+    pauseCtx->cursorSpecialPos = 0; // the stick is the screen's; Z/R still turn pages
+
+    const Box* listBox = CurrentBox();
+    if (sMode != MODE_ROWS && listBox != nullptr) {
+        RF3TackleChoice c;
+        RF3Tackle_Get(&c);
+        if (sMode == MODE_LINE) {
+            int lx = StickStep(sRepX, pauseCtx->stickRelX);
+            int at = 0;
+            for (size_t i = 0; i < listBox->lines.size(); i++) {
+                if (listBox->lines[i].index == sPreview) {
+                    at = static_cast<int>(i);
+                }
+            }
+            int next = at + lx;
+            if (lx != 0 && next >= 0 && next < static_cast<int>(listBox->lines.size())) {
+                sPreview = listBox->lines[next].index;
+                sListMoves++;
+                Sfx(NA_SE_SY_CURSOR);
+            }
+        } else {
+            int ly = StickStep(sRepY, pauseCtx->stickRelY);
+            int at = std::max(0, LureIndexInBox(*listBox, sPreview));
+            int next = at + (ly > 0 ? -1 : (ly < 0 ? 1 : 0)); // stick up = the lure above
+            if (ly != 0 && next >= 0 && next < static_cast<int>(listBox->lures.size())) {
+                sPreview = listBox->lures[next].index;
+                sListMoves++;
+                ScrollToPreview(*listBox);
+                Sfx(NA_SE_SY_CURSOR);
+            }
+        }
+        if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
+            bool ok = sMode == MODE_LINE ? RF3Tackle_SetLine(c.box, sPreview, "screen-line-list") != 0
+                                         : RF3Tackle_SetLure(c.box, sPreview, "screen-lure-list") != 0;
+            Sfx(ok ? NA_SE_SY_DECIDE : NA_SE_SY_ERROR);
+            CloseList(ok ? "kept" : "refused");
+            return;
+        }
+        if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
+            Sfx(NA_SE_SY_CANCEL);
+            CloseList("cancelled"); // the pause menu's own B (save prompt) is held off while a list is open
+            return;
+        }
+        // C-Left/C-Right still change the target below, so its numbers can be compared while choosing.
+    }
+
+    int y = sMode == MODE_ROWS ? StickStep(sRepY, pauseCtx->stickRelY) : 0;
+    if (y != 0) {
+        int row = sRow + (y > 0 ? -1 : 1); // stick up = the row above
+        if (row >= 0 && row < ROW_COUNT) {
+            sRow = row;
+            Sfx(NA_SE_SY_CURSOR);
+            RequestLog("cursor");
+        }
+    }
+    // User's change (2026-10-07): stick left/right switches box (RF3's L1/R1), C-Left/C-Right the
+    // target (RF3's L2/R2).
+    int x = sMode == MODE_ROWS ? StickStep(sRepX, pauseCtx->stickRelX) : 0;
+    if (x != 0 && sRepX.frames == 0) { // one box per push: holding the stick doesn't flicker boxes
+        RF3TackleChoice c;
+        RF3Tackle_Get(&c);
+        int next = (c.box + x + RF3_TACKLE_BOXES) % RF3_TACKLE_BOXES;
+        if (RF3Tackle_SetBox(next, "screen-box")) {
+            Sfx(NA_SE_SY_DECIDE);
+            RequestLog("box");
+        }
+    }
+    const Box* box = CurrentBox();
+    int t = CHECK_BTN_ALL(input->press.button, BTN_CRIGHT) ? 1 : (CHECK_BTN_ALL(input->press.button, BTN_CLEFT) ? -1 : 0);
+    if (t != 0 && box != nullptr && !box->targets.empty()) {
+        RF3TackleChoice c;
+        RF3Tackle_Get(&c);
+        int n = static_cast<int>(box->targets.size());
+        int at = 0;
+        for (int i = 0; i < n; i++) {
+            if (box->targets[i].record == c.target) {
+                at = i;
+            }
+        }
+        int next = (at + t + n) % n;
+        if (RF3Tackle_SetTarget(box->targets[next].record, "screen-target")) {
+            Sfx(NA_SE_SY_CURSOR);
+            RequestLog("target");
+        }
+    }
+    if (sMode == MODE_ROWS && CHECK_BTN_ALL(input->press.button, BTN_A) && box != nullptr) {
+        RF3TackleChoice c;
+        RF3Tackle_Get(&c);
+        if (sRow == ROW_FINISH) {
+            Sfx(NA_SE_SY_DECIDE);
+            RequestLog("finish");
+            RF3Pause_CloseFishingPage();
+        } else if (sRow == ROW_LINES && !box->lines.empty()) {
+            sMode = MODE_LINE;
+            sPreview = c.line;
+            sListMoves = 0;
+            sRepX = {};
+            Sfx(NA_SE_SY_DECIDE);
+            RequestLog("line-list-open");
+        } else if (sRow == ROW_LURES && !box->lures.empty()) {
+            sMode = MODE_LURE;
+            sPreview = c.lure;
+            sListMoves = 0;
+            sRepY = {};
+            sListTop = 0;
+            ScrollToPreview(*box);
+            Sfx(NA_SE_SY_DECIDE);
+            RequestLog("lure-list-open");
+        }
+    }
+}
+
+extern "C" void RF3Pause_DrawTackleScreen(PlayState* play) {
+    if (!Visible(play)) {
+        if (sOpen) {
+            if (sMode != MODE_ROWS) {
+                CloseList("cancelled-by-hiding"); // page turn or pause closed: nothing is kept
+            }
+            sOpen = false;
+            std::string why = sLogWhy.empty() ? "" : " after " + sLogWhy;
+            WriteLog("close" + why);
+            sLogPending = false;
+            sLogWhy.clear();
+        }
+        return;
+    }
+    if (!sOpen) {
+        sOpen = true;
+        sRow = ROW_LURES;
+        sMode = MODE_ROWS;
+        sRepX = {};
+        sRepY = {};
+        RequestLog("open");
+    }
+
+    // OoT draws its HUD after the pause menu, so its A/B/START/C buttons ("Decide", "Save",
+    // "Return") would sit on top of the Target panel (user's screenshot, 2026-10-07). Hide them while
+    // the screen shows; OoT's own update fades them back in afterwards. The D-pad items stay visible
+    // so a D-pad equip can be seen.
+    InterfaceContext* interfaceCtx = &play->interfaceCtx;
+    interfaceCtx->aAlpha = 0;
+    interfaceCtx->bAlpha = 0;
+    interfaceCtx->cLeftAlpha = 0;
+    interfaceCtx->cDownAlpha = 0;
+    interfaceCtx->cRightAlpha = 0;
+    interfaceCtx->startAlpha = 0;
+
+    sFrames++;
+    Values v = CurrentValues();
+    sCounts = {};
+    sDrawn.clear();
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_39Overlay(play->state.gfxCtx);
+    Gfx* g = OVERLAY_DISP;
+    gDPPipeSync(g++);
+    gDPSetCycleType(g++, G_CYC_1CYCLE);
+    gDPSetRenderMode(g++, G_RM_XLU_SURF, G_RM_XLU_SURF2);
+    gDPSetCombineMode(g++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+    gDPSetTexturePersp(g++, G_TP_NONE);
+    gDPSetTextureFilter(g++, G_TF_POINT); // strips must meet without filtering seams
+    // menu_01 is the base screen, menu_02 the rows on top. Within a layout the last element is the
+    // bottom layer (menu_01's last element is the full-screen background), so draw back to front.
+    for (const char* layout : { "menu_01", "menu_02" }) {
+        auto it = Get().layouts.find(layout);
+        if (it == Get().layouts.end()) {
+            continue;
+        }
+        for (auto e = it->second.rbegin(); e != it->second.rend(); ++e) {
+            DrawElement(g, layout, *e, v);
+        }
+    }
+    if (sMode == MODE_LURE && v.box != nullptr) {
+        DrawLureList(g, *v.box);
+    }
+    gDPPipeSync(g++);
+    OVERLAY_DISP = g;
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    if (sLogPending) {
+        LogState(v);
+        sLogPending = false;
+        sLogWhy.clear();
+    }
+}

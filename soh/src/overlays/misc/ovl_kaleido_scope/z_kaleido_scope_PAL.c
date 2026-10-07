@@ -23,6 +23,7 @@
 #include "soh/SaveManager.h"
 #include "soh/Enhancements/kaleido.h"
 #include "soh/Enhancements/ReelFishing/RF3PausePage.h"
+#include "soh/Enhancements/ReelFishing/RF3TackleScreen.h"
 #include <soh_assets.h>
 #include <libultraship/bridge/consolevariablebridge.h>
 
@@ -3554,6 +3555,8 @@ void KaleidoScope_Draw(PlayState* play) {
         KaleidoScope_DrawDebugEditor(play);
     }
 
+    RF3Pause_DrawTackleScreen(play); // Reel Fishing III mod (step 17e): tackle box screen, on top
+
     func_800AAA50(&play->view, 15);
 
     CLOSE_DISPS(play->state.gfxCtx);
@@ -4279,7 +4282,8 @@ void KaleidoScope_Update(PlayState* play) {
                         pauseCtx->state = 0x12;
                         WREG(2) = -6240;
                         func_800F64E0(0);
-                    } else if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
+                    } else if (CHECK_BTN_ALL(input->press.button, BTN_B) &&
+                               !RF3TackleScreen_ListOpen()) { // Reel Fishing III mod (17f): B closes the list
                         pauseCtx->mode = 0;
                         pauseCtx->promptChoice = 0;
                         Audio_PlaySfxGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,

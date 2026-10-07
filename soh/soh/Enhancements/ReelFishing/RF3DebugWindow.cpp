@@ -1,8 +1,11 @@
 #include "RF3DebugWindow.h"
 
 #include <cstdio>
+#include <string>
+#include <vector>
 
 #include "RF3Bridge.h"
+#include "RF3TackleAssets.h"
 
 namespace {
 
@@ -84,12 +87,117 @@ static void DrawApproach() {
                 factor * 100.0f);
 }
 
+// Step 17c/17d: the tackle choice, changeable here until the tackle box screen exists. With
+// mods/rf3_tackle.o2r loaded (17d) it shows RF3's names and heart/shield values; without it, RF3's
+// index numbers. Saved with the file; the fishing ignores it.
+static void HeartShieldText(const char* label, const rf3tackle::HeartShield& hs) {
+    if (hs) {
+        ImGui::Text("  %-13s heart %+d  shield %+d", label, (*hs)[0], (*hs)[1]);
+    } else {
+        ImGui::Text("  %-13s (not usable for this target)", label);
+    }
+}
+
+template <typename T, typename Name, typename Key>
+static bool PickFrom(const char* label, const std::vector<T>& items, int32_t current, Name name, Key key,
+                     int32_t* picked) {
+    const T* cur = nullptr;
+    for (const T& i : items) {
+        if (key(i) == current) {
+            cur = &i;
+        }
+    }
+    bool changed = false;
+    if (ImGui::BeginCombo(label, cur ? name(*cur).c_str() : "?")) {
+        for (const T& i : items) {
+            if (ImGui::Selectable(name(i).c_str(), key(i) == current)) {
+                *picked = key(i);
+                changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
+
+static void DrawTackle() {
+    if (!ImGui::CollapsingHeader("Tackle choice (step 17, saved, not used by the fishing yet)")) {
+        return;
+    }
+    const rf3tackle::Assets& a = rf3tackle::Get();
+    ImGui::Text("Tackle box pictures/data (mods/rf3_tackle.o2r): %s, textures %d needed, %d missing",
+                a.loaded ? "loaded" : "NOT loaded (run tools/rf3_menuassets.py build)", a.texturesNeeded,
+                a.texturesMissing);
+    RF3TackleChoice c;
+    RF3Tackle_Get(&c);
+    static const char* kBoxNames[RF3_TACKLE_BOXES] = { "Bass (rod 0)", "Trout (rod 1)" };
+    int box = c.box;
+    if (ImGui::Combo("Box", &box, kBoxNames, RF3_TACKLE_BOXES)) {
+        RF3Tackle_SetBox(box, "debug-window");
+    }
+    if (!a.loaded || c.box >= static_cast<int32_t>(a.boxes.size())) {
+        int line = c.line;
+        if (ImGui::InputInt("Line (RLIN 0-27)", &line)) {
+            RF3Tackle_SetLine(c.box, line, "debug-window");
+        }
+        int lure = c.lure;
+        if (ImGui::InputInt("Lure (RLRE 0-90)", &lure)) {
+            RF3Tackle_SetLure(c.box, lure, "debug-window");
+        }
+        int target = c.target;
+        if (ImGui::InputInt("Target (fish record 0-49)", &target)) {
+            RF3Tackle_SetTarget(target, "debug-window");
+        }
+        ImGui::Text("Bass box: line %d, lure %d   Trout box: line %d, lure %d", RF3Tackle_GetBoxLine(0),
+                    RF3Tackle_GetBoxLure(0), RF3Tackle_GetBoxLine(1), RF3Tackle_GetBoxLure(1));
+        return;
+    }
+    const rf3tackle::Box& b = a.boxes[c.box];
+    auto itemName = [](const rf3tackle::Item& i) { return std::to_string(i.index) + " " + i.name; };
+    auto itemKey = [](const rf3tackle::Item& i) { return i.index; };
+    auto targetName = [](const rf3tackle::Target& t) { return std::to_string(t.record) + " " + t.name; };
+    auto targetKey = [](const rf3tackle::Target& t) { return t.record; };
+    int32_t picked;
+    if (PickFrom("Line", b.lines, c.line, itemName, itemKey, &picked)) {
+        RF3Tackle_SetLine(c.box, picked, "debug-window");
+    }
+    if (PickFrom("Lure", b.lures, c.lure, itemName, itemKey, &picked)) {
+        RF3Tackle_SetLure(c.box, picked, "debug-window");
+    }
+    if (PickFrom("Target", b.targets, c.target, targetName, targetKey, &picked)) {
+        RF3Tackle_SetTarget(picked, "debug-window");
+    }
+    // The screen's numbers for this choice; with the defaults they must read like the user's RF3
+    // screenshot: rod +1/+4, line -2/+5, lure +5/0, total +4/+9.
+    const rf3tackle::Target* t = rf3tackle::FindTarget(b, c.target);
+    const rf3tackle::Item* line = rf3tackle::FindLine(b, c.line);
+    const rf3tackle::Item* lure = rf3tackle::FindLure(b, c.lure);
+    ImGui::Text("%s: %s + %s, target %s", b.title.c_str(), b.rodName.c_str(), b.reelName.c_str(),
+                t ? t->name.c_str() : "?");
+    rf3tackle::HeartShield none;
+    rf3tackle::HeartShield rows[3] = { t ? t->rod : none, none, none };
+    if (line && line->values.count(c.target)) {
+        rows[1] = line->values.at(c.target);
+    }
+    if (lure && lure->values.count(c.target)) {
+        rows[2] = lure->values.at(c.target);
+    }
+    HeartShieldText("Rods & Reels", rows[0]);
+    HeartShieldText("Reel Lines", rows[1]);
+    HeartShieldText("Lures", rows[2]);
+    if (rows[0] && rows[1] && rows[2]) {
+        ImGui::Text("  %-13s heart %+d  shield %+d", "Total", (*rows[0])[0] + (*rows[1])[0] + (*rows[2])[0],
+                    (*rows[0])[1] + (*rows[1])[1] + (*rows[2])[1]);
+    }
+}
+
 void RF3DebugWindow::DrawElement() {
     RF3FightStatus s;
     RF3Fight_GetStatus(&s);
 
     ImGui::Text("Reel Fishing III mechanics: %s", RF3_IsEnabled() ? "ON" : "OFF");
     ImGui::Text("Fishing rod owned (this save file): %s", RF3Rod_IsOwned() ? "yes" : "no"); // step 15a
+    DrawTackle();
     if (!s.active) {
         ImGui::Separator();
         DrawApproach();
