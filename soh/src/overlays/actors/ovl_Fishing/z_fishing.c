@@ -37,6 +37,7 @@ static u8 sRF3PortableInWater = false;  // the lure is over a water box whose su
 static f32 sRF3PortableSurfaceY = 0.0f; // that surface; over land, 50 units below the ground
 static f32 sRF3PortableFloorY = 0.0f;   // the ground under the lure
 static u16 sRF3RodBtn = BTN_B;          // the button holding the rod: B at the pond, else a D-pad button
+static u8 sRF3Cancelled = false;        // step 20a-6: the rod button cancelled a fight; no "got away" text
 
 // Reel Fishing III mod (step 16d): fish in hand-placed regions outside the pond (params EN_FISH_REGION
 // + slot). While a region fish updates or draws, sRF3CurRegion is its region: its water surface and box
@@ -56,6 +57,14 @@ static Vec3f sRF3RegionLastGood[RF3_REGION_SLOTS]; // step 16f: last spot over w
 #define WATER_SURFACE_Y(play)                         \
     ((sRF3CurRegion != NULL) ? sRF3CurRegion->surfaceY \
                              : (sRF3Portable ? sRF3PortableSurfaceY : play->colCtx.colHeader->waterBoxes->ySurface))
+
+// Step 20a-5: OoT's sinking lure sinks only with RF3 off; with RF3 on, a lure box's lure follows RF3's
+// lure depth and flies and bait sets stay at the surface (user's decisions, 2026-10-07).
+#define FISHING_LURE_SINKS() ((sLureEquipped == FS_LURE_SINKING) && !RF3_IsEnabled())
+// Step 20c-3c: while a fly cast charges, OoT's cast timer is held here (the launch is at 18).
+#define RF3_FLY_HOLD_TIMER 30
+// Step 20a-6: with the lure sim active, a lure this close to the rod tip horizontally (OoT units) is reeled in.
+#define RF3_LURE_REELED_IN_UNITS 10.0f
 
 // Is the lure (or a line point) on land? The pond: beyond its 920-unit radius. Portable: no water under the lure.
 static s32 Fishing_RF3OnLand(f32 xzLenSq) {
@@ -2209,6 +2218,62 @@ void Fishing_DrawRod(PlayState* play) {
 
 static Vec3f sSoundPos = { 0.0f, 0.0f, 0.0f };
 
+// Step 20a-5: where the lure rests on the bottom, as metres below the surface (OoT's sinking lure rests
+// 5 units above the floor). Portable: the known ground under the lure.
+static f32 Fishing_RF3LureFloorDepthM(PlayState* play) {
+    f32 floorY;
+
+    if (sRF3Portable) {
+        floorY = sRF3PortableFloorY;
+    } else {
+        CollisionPoly* poly;
+        Vec3f probe = sLurePos;
+
+        probe.y = WATER_SURFACE_Y(play) + 10.0f;
+        floorY = BgCheck_EntityRaycastFloor1(&play->colCtx, &poly, &probe);
+    }
+    return (WATER_SURFACE_Y(play) - (floorY + 5.0f)) / RF3_UNITS_PER_METRE;
+}
+
+// Step 20a-5: RF3's lure depth sets the lure's height; OoT keeps moving it horizontally.
+static void Fishing_RF3LureDepthApply(PlayState* play, Input* input) {
+    f32 depthM = RF3Lure_Step(CHECK_BTN_ALL(input->cur.button, BTN_A), input->rel.stick_y,
+                              Fishing_RF3LureFloorDepthM(play), RF3_SUBSTEPS);
+
+    sReelLinePos[LINE_SEG_COUNT - 1].y = sLurePos.y = WATER_SURFACE_Y(play) - (depthM * RF3_UNITS_PER_METRE);
+}
+
+// Step 20a-6: with the lure sim active the lure leads and the line follows it, so the rod's swing doesn't drag
+// it (user, 2026-10-07). Only the reel moves it horizontally: straight toward the rod tip by reelUnits.
+static void Fishing_RF3LureReel(f32 reelUnits) {
+    f32 dx = sRodTipPos.x - sLurePos.x;
+    f32 dz = sRodTipPos.z - sLurePos.z;
+    f32 dist = sqrtf(SQ(dx) + SQ(dz));
+
+    if ((reelUnits > 0.0f) && (dist > 0.001f)) {
+        if (reelUnits > dist) {
+            reelUnits = dist;
+        }
+        sLurePos.x += dx / dist * reelUnits;
+        sLurePos.z += dz / dist * reelUnits;
+    }
+}
+
+// Step 20a-6: RF3's cancel (user, 2026-10-07). The rod button (B at the pond) ends the cast at once, as OoT's own
+// reeled-in end does. With a fish on, OoT's escape path (sRodCastState < 3) then ends the RF3 fight and lets the
+// fish go on its next update.
+static void Fishing_RF3Cancel(void) {
+    s32 fishOn = (sRodCastState == 4);
+
+    RF3Rod_LogEvent("rf3-cancel", fishOn);
+    RF3Lure_End();
+    sRF3Cancelled = fishOn;
+    sRodLineSpooled = 195.0f;
+    sRodCastState = 0;
+    D_80B7E148 = 520.0f;
+    sFishingPlayerCinematicState = 3;
+}
+
 void Fishing_UpdateLure(Fishing* this, PlayState* play) {
     f32 spE4;
     f32 spE0;
@@ -2234,6 +2299,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
     Vec3f sp64;
     Vec3f sp58;
     s32 pad;
+    f32 rf3ReelUnits = 0.0f; // step 20a-6: this frame's reel, OoT units
 
     sLureTimer++;
 
@@ -2299,6 +2365,20 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
 
     SkinMatrix_Vec3fMtxFMultXYZW(&play->viewProjectionMtxF, &sLurePos, &sSoundPos, &sProjectedW);
 
+    if (RF3Lure_IsActive() && (sRodCastState != 2) && (sRodCastState != 3)) {
+        RF3Lure_End(); // step 20a-5: a fish took the lure, or it was reeled in
+    }
+    if (RF3FlyCast_IsCharging() && ((sRodCastState != 0) || (sRodCastTimer == 0))) {
+        RF3FlyCast_SetCharging(false); // step 20c-3c: the cast ended another way
+    }
+
+    // Step 20a-6: with RF3 on, the rod button cancels (lure in the water or on land, or a fish on). It replaces
+    // OoT's rod-button wiggle and its pull on a lure on land.
+    if (RF3_IsEnabled() && ((sRodCastState == 2) || (sRodCastState == 3) || (sRodCastState == 4)) &&
+        CHECK_BTN_ALL(play->state.input[0].press.button, sRF3RodBtn)) {
+        Fishing_RF3Cancel();
+    }
+
     if (sRodCastState == 0) {
         Math_ApproachF(&sLurePosZOffset, -800.0f, 1.0f, 20.0f);
     } else {
@@ -2338,7 +2418,21 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                 // Step 11: RF3 charges while B is held; letting go fixes the power.
                 if (sRF3CastCharging && CHECK_BTN_ALL(input->cur.button, sRF3RodBtn)) {
                     sRF3CastHeldFrames++;
+                    // Step 20c-3c: a fly cast charges for as long as the button is held. The throw waits and Link
+                    // false-casts (z_player.c).
+                    if (RF3_IsEnabled() && RF3FlyCast_IsFlyBox() && (sRodCastTimer <= RF3_FLY_HOLD_TIMER)) {
+                        sRodCastTimer = RF3_FLY_HOLD_TIMER;
+                        RF3FlyCast_SetCharging(true);
+                    }
                 } else {
+                    if (RF3FlyCast_IsCharging()) {
+                        // Step 20c-3c: released. Cast when Link's throw reaches its release frame (1.5 animation
+                        // frames per game frame).
+                        f32 framesLeft = (RF3FlyCast_Tuning(3) - player->skelAnime.curFrame) / (R_UPDATE_RATE * 0.5f);
+                        s32 wait = (s32)ceilf(framesLeft);
+                        sRodCastTimer = 18 + CLAMP(wait, 1, 30);
+                        RF3FlyCast_SetCharging(false);
+                    }
                     sRF3CastCharging = false;
                 }
 
@@ -2353,7 +2447,9 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     if (RF3_IsEnabled()) {
                         // Step 11: scale OoT's forward launch speed by the charged power
                         // (a full hold through the wind-up = OoT's normal full cast).
-                        f32 castFactor = RF3Cast_Launch(sRF3CastHeldFrames, RF3_CAST_WINDUP_FRAMES, RF3_SUBSTEPS);
+                        f32 castFactor = RF3FlyCast_IsFlyBox()
+                                             ? RF3Cast_LaunchFly(sRF3CastHeldFrames, RF3_SUBSTEPS) // step 20c-3c
+                                             : RF3Cast_Launch(sRF3CastHeldFrames, RF3_CAST_WINDUP_FRAMES, RF3_SUBSTEPS);
                         sLurePosDelta.x *= castFactor;
                         sLurePosDelta.z *= castFactor;
                     }
@@ -2450,8 +2546,9 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     sRodCastState = 2;
                     sReelLinePosStep = 0.0f;
                     sLurePosDelta.x = sLurePosDelta.z = 0.0f;
+                    RF3Lure_Begin(); // step 20a-5 (inactive with RF3 off)
 
-                    if (sLureEquipped == FS_LURE_SINKING) {
+                    if (FISHING_LURE_SINKS()) {
                         sLureMoveDelay = 0;
                     } else {
                         sLureMoveDelay = 10;
@@ -2498,12 +2595,14 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
             break;
 
         case 2:
-            if (sLurePos.y <= WATER_SURFACE_Y(play)) {
+            if (RF3Lure_IsActive()) {
+                Fishing_RF3LureDepthApply(play, input); // step 20a-5
+            } else if (sLurePos.y <= WATER_SURFACE_Y(play)) {
                 sLurePos.y += sLurePosDelta.y;
 
                 Math_ApproachZeroF(&sLurePosDelta.y, 1.0f, 1.0f);
 
-                if (sLureEquipped != FS_LURE_SINKING) {
+                if (!FISHING_LURE_SINKS()) {
                     Math_ApproachF(&sLurePos.y, WATER_SURFACE_Y(play), 0.5f, 1.0f);
                 }
             }
@@ -2543,7 +2642,9 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                 if (sLurePos.y <= (spE4 + 4.0f)) {
                     wiggle = 0.0f;
 
-                    if (D_80B7E150 == 0) {
+                    // Step 20a-5: with RF3's lure depth active the stick twitches the lure RF3's way
+                    // (RF3Lure_Step), so OoT's stick wiggle is off (user, 2026-10-07).
+                    if ((D_80B7E150 == 0) && !RF3Lure_IsActive()) {
                         if (fabsf(input->rel.stick_x) > 30.0f) {
                             wiggle = fabsf((input->rel.stick_x - sStickAdjXPrev) * (1.0f / 60.0f));
                         } else if (fabsf(input->rel.stick_y) > 30.0f) {
@@ -2586,7 +2687,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
 
                         func_800F436C(&sSoundPos, NA_SE_EV_LURE_MOVE_W, (wiggle * 1.999f * 0.25f) + 0.75f);
 
-                        if (sLureEquipped == FS_LURE_SINKING) {
+                        if (FISHING_LURE_SINKS()) {
                             sLureLineSegPosDelta.y = 5.0f * wiggle;
                             sReelLinePos[LINE_SEG_COUNT - 1].y += sLureLineSegPosDelta.y;
                             sLurePos.y += sLureLineSegPosDelta.y;
@@ -2596,7 +2697,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                         sLureWiggleRotYTarget = sReelLineRot[LINE_SEG_COUNT - 2].y + M_PI;
                         sLureRot.x = 0.0f;
                         sLureRotXTarget = 0.5f;
-                        if (sLureEquipped == FS_LURE_SINKING) {
+                        if (FISHING_LURE_SINKS()) {
                             sLureLineSegPosDelta.y = 0.2f;
                             sReelLinePos[LINE_SEG_COUNT - 1].y += sLureLineSegPosDelta.y;
                             sLurePos.y += sLureLineSegPosDelta.y;
@@ -2640,7 +2741,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
 
             Matrix_RotateY(sLureRot.y, MTXMODE_NEW);
 
-            if (sLureEquipped == FS_LURE_SINKING) {
+            if (FISHING_LURE_SINKS()) {
                 Matrix_MultVec3f(&sp90, &sp64);
                 sLureLineSegPosDelta.x = sp64.x;
                 sLureLineSegPosDelta.z = sp64.z;
@@ -2660,8 +2761,8 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                 } else {
                     sLure1Rotate = -0.5f;
                 }
-            } else if (sReelLinePos[LINE_SEG_COUNT - 1].y < (WATER_SURFACE_Y(play) + phi_f0)) {
-                if (sLureEquipped == FS_LURE_SINKING) {
+            } else if (!RF3Lure_IsActive() && (sReelLinePos[LINE_SEG_COUNT - 1].y < (WATER_SURFACE_Y(play) + phi_f0))) {
+                if (FISHING_LURE_SINKS()) {
                     sp58 = this->actor.world.pos;
                     this->actor.prevPos = this->actor.world.pos = sLurePos;
                     Actor_UpdateBgCheckInfo(play, &this->actor, 15.0f, 30.0f, 30.0f, 0x44);
@@ -2697,12 +2798,19 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
             sLurePosDelta.x = sLurePosDelta.y = sLurePosDelta.z = sLureCastDelta.y = 0.0f;
 
             if (CHECK_BTN_ALL(input->cur.button, BTN_A)) {
+                // Step 20a-6: OoT's line segments are 5 units, so a spool step of s = 5 s units of line.
                 if (CHECK_BTN_ALL(input->cur.button, BTN_R)) {
-                    sRodLineSpooled += 1.5f;
+                    rf3ReelUnits = 1.5f * 5.0f;
+                    if (!RF3Lure_IsActive()) {
+                        sRodLineSpooled += 1.5f;
+                    }
                     Sfx_PlaySfxCentered(NA_SE_IT_FISHING_REEL_HIGH - SFX_FLAG);
                     Math_ApproachF(&sReelLinePosStep, 1000.0f, 1.0f, 2.0f);
                 } else {
-                    sRodLineSpooled += sRodReelingSpeed;
+                    rf3ReelUnits = sRodReelingSpeed * 5.0f;
+                    if (!RF3Lure_IsActive()) {
+                        sRodLineSpooled += sRodReelingSpeed;
+                    }
                     Sfx_PlaySfxCentered(NA_SE_IT_FISHING_REEL_SLOW - SFX_FLAG);
                     Math_ApproachF(&sReelLinePosStep, 1000.0f, 1.0f, 0.2f);
                 }
@@ -2716,9 +2824,40 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                 Math_ApproachF(&D_80B7E148, 2.0f, 1.0f, 0.2f);
             }
 
-            Math_ApproachF(&sLurePos.x, sReelLinePos[LINE_SEG_COUNT - 1].x, 1.0f, sReelLinePosStep);
-            Math_ApproachF(&sLurePos.y, sReelLinePos[LINE_SEG_COUNT - 1].y, 1.0f, sReelLinePosStep);
-            Math_ApproachF(&sLurePos.z, sReelLinePos[LINE_SEG_COUNT - 1].z, 1.0f, sReelLinePosStep);
+            if (RF3Lure_IsActive()) {
+                Fishing_RF3LureReel(rf3ReelUnits); // step 20a-6: the lure leads
+                if (rf3ReelUnits == 0.0f) {
+                    // Step 20c-3b/4: a resting rig drifts with the current (RF3-MECHANICS 2.9), a lure at its share.
+                    f32 curX, curZ;
+                    if (RF3Current_At(!sRF3Portable, play->sceneNum, sLurePos.x, sLurePos.z, &curX, &curZ)) {
+                        f32 share = RF3Lure_DriftScale() * (RF3_SUBSTEPS / 60.0f);
+                        sLurePos.x += curX * share;
+                        sLurePos.z += curZ * share;
+                    }
+                }
+            } else {
+                Math_ApproachF(&sLurePos.x, sReelLinePos[LINE_SEG_COUNT - 1].x, 1.0f, sReelLinePosStep);
+                Math_ApproachF(&sLurePos.y, sReelLinePos[LINE_SEG_COUNT - 1].y, 1.0f, sReelLinePosStep);
+                Math_ApproachF(&sLurePos.z, sReelLinePos[LINE_SEG_COUNT - 1].z, 1.0f, sReelLinePosStep);
+            }
+
+            if (RF3Lure_IsActive()) { // step 20a-5
+                if (Fishing_RF3OnLand(SQ(sLurePos.x) + SQ(sLurePos.z))) {
+                    RF3Lure_End();
+                } else {
+                    Fishing_RF3LureDepthApply(play, input);
+                    // Step 20a-6: the line follows the lure. OoT's fish-on line mode draws it from the rod tip to
+                    // its end and sets the spooled length from their distance (Fishing_UpdateLine).
+                    sReelLinePos[LINE_SEG_COUNT - 1] = sLurePos;
+                    D_80B7A6A4 = 2;
+                    // The reel only closes the horizontal gap and the tip is 75-94 units above the water (user's
+                    // log, 2026-10-07), so that distance never gets short enough for OoT's check below. Under the
+                    // tip, the lure is reeled in.
+                    if (SQ(sLurePos.x - sRodTipPos.x) + SQ(sLurePos.z - sRodTipPos.z) < SQ(RF3_LURE_REELED_IN_UNITS)) {
+                        sRodLineSpooled = 195.0f;
+                    }
+                }
+            }
 
             if (sLureWigglePosY > 1.0f) {
                 Math_ApproachF(&sReelLinePosStep, 1000.0f, 1.0f, 1.0f);
@@ -4304,6 +4443,10 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                     sFishingCaughtTextId = 0x4082;
                     func_800A9F6C(0.0f, 1, 3, 1);
                     Audio_QueueSeqCmd(0x1 << 28 | SEQ_PLAYER_BGM_MAIN << 24 | 0x0A00FF);
+                }
+                if (sRF3Cancelled) {
+                    sFishingCaughtTextDelay = 0; // step 20a-6: the player cancelled; no text
+                    sRF3Cancelled = false;
                 }
 
                 this->fishState = this->fishStateNext = 0;

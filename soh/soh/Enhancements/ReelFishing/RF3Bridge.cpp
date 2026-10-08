@@ -15,6 +15,8 @@
 #include "RF3Sim.h"
 #include "RF3SizeMap.h"
 #include "RF3FishTable.h"
+#include "RF3TackleRules.h"
+#include "RF3TackleAssets.h"
 
 namespace {
 
@@ -29,6 +31,7 @@ int32_t sFightWeightG = 0;
 uint32_t sSizeRng = 0x9E3779B9u;
 // Step 14b: the current fight's fish and its table record.
 int32_t sFightFishIndex = -1;
+bool sForceCatch = false; // debug: land the hooked fish on the next update (RF3Fight_ForceCatch)
 float sFightOotLength = 0.0f; // step 14d: OoT length the fight started with, to match the kept fish
 const rf3::FishRecord* sFightRecord = nullptr;
 
@@ -154,6 +157,16 @@ void StartFightFish(int32_t fishIndex, float oFishLength) {
                                           static_cast<int>(sSizeRng % 10));
 }
 
+// Step 18b: the fight's sim with the tackle box choice (rod limits, line step, the shield sum for this
+// fish's record), or the default tackle without tackle.json. Logs a "fight-tackle" line.
+void EmplaceFight() {
+    rf3tackle::FightTackle ft = rf3tackle::ForFight(sFightRecord->record, sFightRecord->params.tensionBonus);
+    rf3::FishParams fish = sFightRecord->params;
+    fish.tensionBonus = ft.tensionBonus;
+    sFight.emplace(fish, ft.tackle);
+    rf3tackle::LogFightTackle(ft, sFightRecord->record, sFight->GetTensionLimit());
+}
+
 // OoT relative stick (about -60..60) to RF3 -1..1; RF3's positive Y = rod raised = OoT stick down.
 float StickToRf3(float oStick) {
     return std::clamp(oStick / 60.0f, -1.0f, 1.0f);
@@ -171,9 +184,19 @@ extern "C" int RF3Fight_IsActive(void) {
 
 extern "C" void RF3Fight_StartStrike(int32_t fishIndex, float fishLength) {
     StartFightFish(fishIndex, fishLength);
-    sFight.emplace(sFightRecord->params, rf3::kDefaultTackle);
+    EmplaceFight();
+    sForceCatch = false;
     sFight->StartStrike();
     sFight->SetBodyLength(sFightLengthMm / 1000.0f); // AWAY surge (DESIGN step 8f)
+}
+
+extern "C" int32_t RF3Fight_ForceCatch(void) {
+    if (!sFight.has_value() || !sFight->IsHooked() || sFight->GetOutcome() != rf3::Outcome::None) {
+        return 0;
+    }
+    sForceCatch = true;
+    RF3Rod_LogEvent("debug-force-catch", sFightFishIndex);
+    return 1;
 }
 
 extern "C" int32_t RF3Fight_Update(const RF3FightInput* in, RF3FightOutput* out) {
@@ -182,7 +205,7 @@ extern "C" int32_t RF3Fight_Update(const RF3FightInput* in, RF3FightOutput* out)
         // Fallback only (option switched on mid-fight): no strike was seen, so
         // start the fight as if hooked with a mid-window rod jerk.
         StartFightFish(in->fishIndex, in->fishLength);
-        sFight.emplace(sFightRecord->params, rf3::kDefaultTackle);
+        EmplaceFight();
         sFight->StartFight(kPlaceholderTimingA, kPlaceholderStrengthB, fishDistM);
         sFight->SetBodyLength(sFightLengthMm / 1000.0f);
     }
@@ -194,6 +217,9 @@ extern "C" int32_t RF3Fight_Update(const RF3FightInput* in, RF3FightOutput* out)
     frame.fishDistance = fishDistM;
     frame.distanceCap = in->lineMaxUnits / RF3_UNITS_PER_METRE;
     frame.landingDistance = in->catchDistUnits / RF3_UNITS_PER_METRE;
+    if (sForceCatch) {
+        frame.landingDistance = 1.0e6f; // debug: any distance counts as landed (RF3Fight_ForceCatch)
+    }
     frame.lureDepth = in->lureDepthUnits / RF3_UNITS_PER_METRE; // used only by HIT
     // OoT's game logic runs at 20 Hz (R_UPDATE_RATE = 3); RF3 steps are 1/60 s.
     int steps = std::clamp(static_cast<int>(in->substeps), 1, 6);
@@ -202,6 +228,9 @@ extern "C" int32_t RF3Fight_Update(const RF3FightInput* in, RF3FightOutput* out)
         if (sFight->IsHooked() && i + 1 < steps) {
             frame.fishDistance = sFight->GetDistance(); // later sub-steps: the fish follows the target
         }
+    }
+    if (sFight->GetOutcome() != rf3::Outcome::None) {
+        sForceCatch = false;
     }
     sLastFrame = frame;
     sLastFishDepthUnits = in->waterY - in->fishY;
@@ -274,8 +303,54 @@ uint32_t sApproachRng = 0x1234567u;
 int ActivityOf(const rf3::FishParams& fish) {
     return rf3::ActivityLevel(fish, rf3::kConditionsTestSession);
 }
-float SightRangeOf(const rf3::FishParams& fish) {
-    return rf3::SightRange(fish, ActivityOf(fish));
+
+// Step 18c: the sight range with the chosen tackle (heart sum, lure appeal) for a fish record.
+float SightRangeOf(const rf3::FishRecord& rec, const rf3tackle::ApproachTackle& at) {
+    rf3::FishParams fish = rec.params;
+    fish.sightBonus = at.sightBonus;
+    return rf3::SightRangeWithAppeal(fish, ActivityOf(fish), at.appeal);
+}
+
+// Step 18c: why fish ignored the lure this pond visit, for the log (once per fish) and debug window.
+enum Blocked : uint8_t { BLOCK_NONE, BLOCK_ROD, BLOCK_APPEAL };
+uint8_t sBlocked[96] = {};
+int32_t sBlockedRod = 0;
+int32_t sBlockedAppeal = 0;
+
+void LogApproach(const char* what, int32_t fishIndex, int32_t record, const rf3tackle::ApproachTackle& at,
+                 float sightRange) {
+    std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+    char stamp[32];
+    std::time_t now = std::time(nullptr);
+    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+    RF3TackleChoice c;
+    RF3Tackle_Get(&c);
+    char line[256];
+    std::snprintf(line, sizeof(line),
+                  "%s %s fish=%d record=%d box=%d rod=%d line=%d lure=%d rodAllowed=%d appeal=%d sightBonus=%d "
+                  "sightRange=%.2f source=%s\n",
+                  stamp, what, fishIndex, record, c.box, c.rod, c.line, c.lure, at.rodAllowed ? 1 : 0, at.appeal,
+                  at.sightBonus, sightRange, at.fromChoice ? "choice" : "default");
+    out << line;
+}
+
+// Step 20b-5: the chosen box's rod kind (2.9). Step 20c-3b: flies too.
+rf3::RodKind CurrentRodKind() {
+    RF3TackleChoice c;
+    RF3Tackle_Get(&c);
+    const rf3tackle::Assets& a = rf3tackle::Get();
+    if (a.loaded && c.box >= 0 && c.box < static_cast<int32_t>(a.boxes.size())) {
+        if (a.boxes[c.box].kind == "bait") {
+            return rf3::RodKind::Bait;
+        }
+        if (a.boxes[c.box].kind == "fly") {
+            return rf3::RodKind::Fly;
+        }
+    }
+    return rf3::RodKind::Lure;
 }
 
 uint32_t NextApproachRandom() {
@@ -303,12 +378,14 @@ extern "C" void RF3Approach_UpdateMeter(int32_t lureInWater, float lureMovedUnit
     sApproachFrame++;
     int steps = std::clamp(static_cast<int>(substeps), 1, 6);
     // "Moved" is per RF3 step (1/60 s): share the game frame's movement across the steps.
-    bool moved = (lureMovedUnits / steps / RF3_UNITS_PER_METRE) > 0.0005f;
+    float movedM = lureMovedUnits / steps / RF3_UNITS_PER_METRE; // per RF3 step
+    bool moved = movedM > 0.0005f;
+    rf3::RodKind kind = CurrentRodKind(); // step 20b-5
     for (int s = 0; s < steps; s++) {
         sMeter.Update(lureInWater != 0, moved, reelHeld != 0);
         for (int i = 0; i < kMaxFish; i++) {
             if (sApproachInit[i]) {
-                sApproach[i].Tick(sMeter.Get());
+                sApproach[i].Tick(sMeter.Get(), kind, lureInWater ? movedM : 0.0f);
             }
         }
     }
@@ -331,12 +408,29 @@ extern "C" int32_t RF3Approach_Notice(int32_t fishIndex, float fishLength, float
     in.horizontalDistance = fishToLureXZUnits / RF3_UNITS_PER_METRE;
     in.distance = fishToLureUnits / RF3_UNITS_PER_METRE;
     in.angleFromHeading = angleFromHeading;
-    in.sightRange = SightRangeOf(FishFor(fishIndex, fishLength));
+    const rf3::FishRecord& rec = RecordFor(fishIndex, fishLength);
+    rf3tackle::ApproachTackle at = rf3tackle::ForApproach(rec.record, rec.params.sightBonus);
+    in.sightRange = SightRangeOf(rec, at);
+    // Step 18c, RF3's rules (user's decision): a fish that can't take the rod, or whose appeal for the
+    // lure is 0, never notices it. Logged once per fish per pond visit.
+    uint8_t blocked = !at.rodAllowed ? BLOCK_ROD : (at.appeal <= 0 ? BLOCK_APPEAL : BLOCK_NONE);
+    if (blocked != BLOCK_NONE) {
+        if (fishIndex >= 0 && fishIndex < kMaxFish && sBlocked[fishIndex] != blocked) {
+            if (sBlocked[fishIndex] == BLOCK_NONE) {
+                (blocked == BLOCK_ROD ? sBlockedRod : sBlockedAppeal)++;
+            }
+            sBlocked[fishIndex] = blocked;
+            LogApproach(blocked == BLOCK_ROD ? "approach-blocked-rod" : "approach-blocked-appeal", fishIndex,
+                        rec.record, at, in.sightRange);
+        }
+        return 0;
+    }
     if (!fish->TryNotice(in)) {
         return 0;
     }
     sChaser = fishIndex;
     sChaserPingFrame = sApproachFrame;
+    LogApproach("approach-notice", fishIndex, rec.record, at, in.sightRange);
     return 1;
 }
 
@@ -389,6 +483,11 @@ extern "C" void RF3Approach_Reset(void) {
         sApproachInit[i] = false;
     }
     sChaser = -1;
+    for (uint8_t& b : sBlocked) {
+        b = BLOCK_NONE;
+    }
+    sBlockedRod = 0;
+    sBlockedAppeal = 0;
 }
 
 extern "C" void RF3Approach_GetStatus(RF3ApproachStatus* status) {
@@ -398,7 +497,23 @@ extern "C" void RF3Approach_GetStatus(RF3ApproachStatus* status) {
     // The chaser's own values; with no chaser, a normal adult bass (as before step 14b).
     const rf3::FishParams& shown = (sChaser >= 0) ? sApproach[sChaser].GetFish() : rf3::kBassNormal;
     status->activityLevel = ActivityOf(shown);
-    status->sightRangeM = SightRangeOf(shown);
+    // Step 18c: with the chosen tackle. The shown fish's record: the chaser's, or normal bass (15).
+    int32_t shownRecord = 15;
+    for (const rf3::FishRecord& r : rf3::kFishRecords) {
+        if (&r.params == &shown) {
+            shownRecord = r.record;
+        }
+    }
+    rf3tackle::ApproachTackle at = rf3tackle::ForApproach(shownRecord, shown.sightBonus);
+    status->rodKind = static_cast<int32_t>(CurrentRodKind()); // step 20b-6
+    status->chaserRecord = -1;
+    rf3::FishParams withTackle = shown;
+    withTackle.sightBonus = at.sightBonus;
+    status->sightRangeM = rf3::SightRangeWithAppeal(withTackle, status->activityLevel, at.appeal);
+    status->sightBonus = at.sightBonus;
+    status->lureAppeal = at.appeal;
+    status->blockedRod = sBlockedRod;
+    status->blockedAppeal = sBlockedAppeal;
     for (int i = 0; i < kMaxFish; i++) {
         if (sApproachInit[i] && sApproach[i].GetWary() > 0.0f) {
             status->waryFish++;
@@ -410,6 +525,10 @@ extern "C" void RF3Approach_GetStatus(RF3ApproachStatus* status) {
         status->chaserMemory = f.GetMemory();
         status->chaserInterested = f.IsInterested() ? 1 : 0;
         status->chaserWaitLeft = f.GetWaitLeft();
+        status->chaserRecord = shownRecord; // step 20b-6
+        status->chaserC = shown.resistExtra;
+        status->chaserWaits = f.GetWaits();
+        status->chasePingAgo = static_cast<int32_t>(sApproachFrame - sChaserPingFrame);
     }
 }
 

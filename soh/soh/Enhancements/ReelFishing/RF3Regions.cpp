@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 #include <ship/Context.h>
 
+#include "RF3Bridge.h"
 #include "RF3FishTable.h"
 
 namespace rf3 {
@@ -90,6 +91,12 @@ bool LoadFishRegions(std::string* error) {
             r.surfaceY = j.at("surfaceY").get<float>();
             r.angle = j.value("angle", 0.0f); // step 16i; absent in older files = not turned
             r.fishCount = std::clamp(j.value("fishCount", 6), 0, 16);
+            if (j.contains("currentYaw")) { // step 20c-3a; absent = the box's long axis
+                r.currentSet = true;
+                r.currentYaw = j.at("currentYaw").get<float>();
+                r.currentSpeed = std::clamp(j.value("currentSpeed", 0.2f), 0.0f, 2.0f);
+            }
+            r.currentReachM = std::clamp(j.value("currentReach", 5.0f), 0.0f, 50.0f); // step 20c-4
             for (const nlohmann::json& rec : j.value("records", nlohmann::json::array())) {
                 int index = rec.is_object() ? rec.at("record").get<int>() : rec.get<int>();
                 if (IsRegionRecord(index) && (std::find(r.records.begin(), r.records.end(), index) == r.records.end())) {
@@ -123,6 +130,11 @@ bool SaveFishRegions(std::string* error) {
         j["surfaceY"] = r.surfaceY;
         j["angle"] = r.angle; // step 16i
         j["fishCount"] = r.fishCount;
+        if (r.currentSet) { // step 20c-3a
+            j["currentYaw"] = r.currentYaw;
+            j["currentSpeed"] = r.currentSpeed;
+        }
+        j["currentReach"] = r.currentReachM; // step 20c-4
         j["records"] = nlohmann::json::array();
         for (int record : r.records) {
             j["records"].push_back({ { "record", record }, { "name", RecordLabel(record) } });
@@ -141,3 +153,40 @@ bool SaveFishRegions(std::string* error) {
 }
 
 } // namespace rf3
+
+// Step 20c-3a: the water current at a point (RF3Bridge.h).
+extern "C" int32_t RF3Current_At(int32_t inPond, int32_t scene, float x, float z, float* vx, float* vz) {
+    constexpr float kUnitsPerMetre = RF3_UNITS_PER_METRE;
+    constexpr float kPondSpeed = 0.2f; // [assumed] the recorded median river drift (RF3-MECHANICS 2.9)
+    *vx = *vz = 0.0f;
+    // Step 20c-4: the closest region in the scene. Inside it the full current; outside, falling off linearly to 0
+    // at its reach.
+    const rf3::FishRegion* best = nullptr;
+    float bestDist = 0.0f;
+    for (const rf3::FishRegion& r : rf3::FishRegions()) {
+        if (r.scene != scene) {
+            continue;
+        }
+        float d = r.DistanceOutside(x, z);
+        if (best == nullptr || d < bestDist) {
+            best = &r;
+            bestDist = d;
+        }
+    }
+    if (best != nullptr) {
+        float reach = best->currentReachM * kUnitsPerMetre;
+        float falloff = (bestDist <= 0.0f) ? 1.0f : (reach > 0.0f ? std::max(1.0f - bestDist / reach, 0.0f) : 0.0f);
+        float yaw = best->CurrentYawDeg() * 3.14159265f / 180.0f;
+        float speed = (best->currentSet ? best->currentSpeed : 0.2f) * kUnitsPerMetre * falloff;
+        *vx = std::sin(yaw) * speed;
+        *vz = std::cos(yaw) * speed;
+        if (speed > 0.0f) {
+            return 1;
+        }
+    }
+    if (inPond) {
+        *vx = kPondSpeed * kUnitsPerMetre; // toward +X
+        return 1;
+    }
+    return 0;
+}

@@ -62,6 +62,10 @@ void RF3Fight_StartStrike(int32_t fishIndex, float fishLength);
 // Start a fight if none is active (call on each hooked frame). Then advance it one frame.
 // Returns the outcome; any outcome other than NONE ends the fight.
 int32_t RF3Fight_Update(const RF3FightInput* in, RF3FightOutput* out);
+// Debug (testing aid, user request 2026-10-07): land the hooked fish on the next fight update, through
+// the sim's normal catch check. Does nothing unless a fish is hooked and the fight is still running.
+// Returns 1 if a catch was queued.
+int32_t RF3Fight_ForceCatch(void);
 
 // Abandon the current fight (fish lost by OoT's own rules, area left, ...).
 void RF3Fight_End(void);
@@ -113,6 +117,30 @@ void RF3Fight_GetStatus(RF3FightStatus* status);
 void RF3Species_RollAll(int32_t fishCount);
 // The fish's RF3 species id (rolled now if it wasn't yet).
 int32_t RF3Species_Get(int32_t fishIndex);
+
+// --- Fly cast (step 20c-3c/d, RF3FlyCast.cpp) -----------------------------------
+
+// The chosen box is a fly box.
+int32_t RF3FlyCast_IsFlyBox(void);
+// z_fishing.c: a fly cast is charging (the throw waits; z_player.c false-casts while this is 1).
+void RF3FlyCast_SetCharging(int32_t charging);
+int32_t RF3FlyCast_IsCharging(void);
+// Throw-animation tuning, saved as CVars: 0 back frame, 1 forward frame, 2 swing speed (animation frames per
+// 30 Hz frame), 3 release frame (the fly is cast when the throw reaches it).
+float RF3FlyCast_Tuning(int32_t which);
+void RF3FlyCast_SetTuning(int32_t which, float value);
+// z_player.c, once per charge: logs the throw animation's length and frame, for tuning.
+void RF3FlyCast_NoteAnim(float animLength, float curFrame);
+// At the launch: the share of a full fly cast for heldFrames game frames (RF3's recorded table); logs it.
+float RF3Cast_LaunchFly(int32_t heldFrames, int32_t updateRate);
+
+// --- Water current (step 20c-3a, RF3Regions.cpp) -------------------------------
+
+// The current at (x, z) in OoT units per second: from the scene's closest region (its set direction and speed,
+// or its box's long axis at 0.2 m/s), full inside it and falling off linearly to 0 at its reach outside
+// (step 20c-4); with no region, the pond's default (inPond: 0.2 m/s toward +X, [assumed]); else none.
+// Returns 1 if there is a current.
+int32_t RF3Current_At(int32_t inPond, int32_t scene, float x, float z, float* vx, float* vz);
 
 // --- Region fish (step 16d, RF3RegionFish.cpp) --------------------------------
 
@@ -172,7 +200,9 @@ int32_t RF3Records_GetBest(int32_t record, float* mm, int32_t* weightG);
 // RF3's tackle boxes in this mod. The box decides the rod (box n = RROD n) and the reel.
 #define RF3_TACKLE_BOX_BASS 0
 #define RF3_TACKLE_BOX_TROUT 1
-#define RF3_TACKLE_BOXES 2
+#define RF3_TACKLE_BOXES 10 // RF3's 10 boxes (step 19); box n uses rod n
+// How many boxes the loaded tackle.json has (step 19a: the 5 lure and fly boxes), 2 without it.
+int32_t RF3Tackle_BoxCount(void);
 
 // All indices are RF3's own: line = rigdata RLIN record, lure = RLRE record, target = fishdata record.
 typedef struct RF3TackleChoice {
@@ -181,6 +211,12 @@ typedef struct RF3TackleChoice {
     int32_t line;   // the box's chosen line
     int32_t lure;   // the box's chosen lure
     int32_t target; // the target fish (shared by both boxes)
+    // Step 19c, bait/pole sets: RFLT float, float depth 0..4 (Surface .. Deepest), RBIT bait group
+    // (-1 = none, as RF3's "---"), hook size 0..4 (small .. big).
+    int32_t floatIdx;
+    int32_t depth;
+    int32_t bait;
+    int32_t size;
 } RF3TackleChoice;
 void RF3Tackle_Get(RF3TackleChoice* out);
 int32_t RF3Tackle_GetBoxLine(int32_t box);
@@ -192,6 +228,11 @@ int32_t RF3Tackle_SetBox(int32_t box, const char* why);
 int32_t RF3Tackle_SetLine(int32_t box, int32_t line, const char* why);
 int32_t RF3Tackle_SetLure(int32_t box, int32_t lure, const char* why);
 int32_t RF3Tackle_SetTarget(int32_t record, const char* why);
+// Step 19c, bait/pole sets.
+int32_t RF3Tackle_SetFloat(int32_t box, int32_t floatIdx, const char* why);
+int32_t RF3Tackle_SetDepth(int32_t box, int32_t depth, const char* why);
+int32_t RF3Tackle_SetBait(int32_t box, int32_t bait, const char* why);
+int32_t RF3Tackle_SetSize(int32_t box, int32_t size, const char* why);
 
 // --- Cast (step 11) ---------------------------------------------------------
 
@@ -230,11 +271,52 @@ typedef struct RF3ApproachStatus {
     float chaserMemory;   // remembered lure action, 0..1
     int32_t chaserInterested;
     float chaserWaitLeft; // s
-    float sightRangeM;    // for the chaser (or a normal adult bass)
+    float sightRangeM;    // for the chaser (or a normal adult bass), with the chosen tackle (step 18c)
     int32_t waryFish;     // how many fish are wary
     int32_t activityLevel;
+    int32_t sightBonus;   // step 18c: heart sum used for that range
+    int32_t lureAppeal;   // step 18c: the lure's appeal for that fish (15 = no change)
+    int32_t blockedRod;   // step 18c: fish this visit that can't take the rod (RF3's rod mask)
+    int32_t blockedAppeal; // step 18c: fish this visit whose appeal for the lure is 0
+    // Step 20b-6: diagnostics for bait fishing (logged to the CSV).
+    int32_t rodKind;       // rf3::RodKind of the chosen box: 0 lure (flies too), 2 bait
+    int32_t chaserRecord;  // the chaser's fishdata record, -1 = no chaser
+    int32_t chaserC;       // its record +0x36 (bait strike rule, WAIT length; RF3-MECHANICS 2.9)
+    int32_t chaserWaits;   // WAITs in this chase
+    int32_t chasePingAgo;  // game frames since the chaser's last RF3Approach_Chase call (1 = every frame)
 } RF3ApproachStatus;
 void RF3Approach_GetStatus(RF3ApproachStatus* status);
+
+// --- Lure depth (step 20a-5, RF3-MECHANICS 3.2; RF3LureDepth.cpp) ---------
+
+// At the splash. Starts the lure's depth when RF3 is on, the chosen box is a lure box and its lure has
+// movement data; logs a "lure-move" line. Returns 1 if active (else the lure keeps OoT's surface lure).
+int32_t RF3Lure_Begin(void);
+int32_t RF3Lure_IsActive(void);
+// Step 20c-3b: the active rig: 0 lure, 1 fly, 2 bait, -1 none.
+int32_t RF3Lure_Kind(void);
+// Step 20c-4: the share of the region's current that moves the active rig at rest (flies and bait 1).
+float RF3Lure_DriftScale(void);
+// Once per game frame while the lure is in the water. reeling: A held. stickY: OoT rel.stick_y
+// (negative = pulled back; below -48 = RF3's rod held back, which twitches the lure).
+// floorDepthM: m below the surface where the lure rests on the bottom.
+// substeps: RF3 steps (1/60 s) per game frame. Returns the depth below the surface in m.
+float RF3Lure_Step(int32_t reeling, float stickY, float floorDepthM, int32_t substeps);
+// The cast ended (fish on, reeled in, lure on land).
+void RF3Lure_End(void);
+
+typedef struct RF3LureStatus {
+    int32_t active;
+    int32_t kind;    // step 20b-5: 0 lure, 1 fly (20c-3b), 2 bait
+    int32_t lure;    // RLRE record (a bait: the RBIT bait group), -1 = none
+    float depthM;    // below the surface
+    float t;         // s, the lure timer
+    int32_t mode;    // 1 reeling, 2 resting
+    int32_t twitch;  // 1 during a twitch
+    int32_t bottom;  // 1 on the bottom
+    int32_t stopped; // 1 held by the [assumed] dive stop
+} RF3LureStatus;
+void RF3Lure_GetStatus(RF3LureStatus* status);
 
 #ifdef __cplusplus
 }

@@ -11,6 +11,9 @@
 // A on Lures opens a list of the box's lures in the right-hand pane (stick up/down). Both preview the
 // choice live; A keeps it, B goes back. RF3 itself picks lures from its 3D tackle trays, which this 2D
 // screen doesn't have, so the lure list is the mod's own, drawn with RF3's font and cursor.
+// Step 19: every box. Lure and fly boxes use menu_02; the bait/pole sets use menu_03/04/05 with rows for
+// the float (list), float depth (bar), line (bar), bait (list, "---" = none) and hook size (bar). The
+// cursor stops on the rows each layout's List box has anchors for (RF3's own rows).
 // Log, don't look: every open, change and close goes to logs/rf3_menu.txt with what was drawn.
 
 #include "RF3TackleScreen.h"
@@ -18,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -39,8 +43,10 @@ namespace {
 
 using namespace rf3tackle;
 
-enum Row { ROW_LINES, ROW_LURES, ROW_FINISH, ROW_COUNT };
-const char* kRowNames[ROW_COUNT] = { "lines", "lures", "finish" };
+// Step 19c: what a cursor row edits. Each layout has its own rows, in RF3's order (the List box's
+// anchors, top to bottom).
+enum RowKind { RK_LINE, RK_ITEM, RK_FLOAT, RK_DEPTH, RK_BAIT, RK_SIZE, RK_FINISH };
+const char* kRowKindNames[] = { "lines", "lures", "float", "depth", "bait", "size", "finish" };
 
 constexpr int kStickThreshold = 30; // same as the pause menu's own cursor
 constexpr int kRepeatDelay = 8;     // game frames (20 Hz) before a held stick repeats
@@ -49,17 +55,18 @@ constexpr float kScale = 0.5f;      // RF3's 640 x 480 -> OoT's 320 x 240
 constexpr int kScreenW = 640;
 constexpr int kScreenH = 480;
 
-int sRow = ROW_LURES; // RF3 opened on the Lures row in the user's screenshot
+int sRow = 1; // index into RowsFor(): RF3 opens on the item row (Lures; Baits & Hooks in the user's screenshots)
 
-// Step 17f: the open list, if any. The previewed item is shown everywhere (names, numbers, the bar)
-// but only saved when A keeps it.
-enum Mode { MODE_ROWS, MODE_LINE, MODE_LURE };
-const char* kModeNames[] = { "rows", "line-list", "lure-list" };
+// Step 17f / 19c: the open bar or list, if any. The previewed value is shown everywhere (names,
+// numbers, the bar) but only saved when A keeps it.
+enum Mode { MODE_ROWS, MODE_BAR, MODE_LIST };
+const char* kModeNames[] = { "rows", "bar", "list" };
 Mode sMode = MODE_ROWS;
-int32_t sPreview = -1;  // RF3 index (RLIN or RLRE) under the list cursor
-int32_t sListTop = 0;   // first lure shown in the pane
-int32_t sListMoves = 0; // cursor moves since the list opened (logged on close)
-u32 sFrames = 0;        // for the active line cell's pulse
+RowKind sEdit = RK_LINE; // the row the bar or list edits
+int32_t sPreview = -1;   // RLIN line, RLRE/RFLY item, RFLT float, depth 0..4, RBIT bait (-1 none), size 0..4
+int32_t sListTop = 0;    // first entry shown in the pane
+int32_t sListMoves = 0;  // cursor moves since the bar or list opened (logged on close)
+u32 sFrames = 0;         // for the active cell's pulse
 bool sOpen = false;
 bool sLogPending = false;
 std::string sLogWhy;
@@ -124,6 +131,38 @@ const Box* CurrentBox() {
     RF3TackleChoice c;
     RF3Tackle_Get(&c);
     return (c.box >= 0 && c.box < static_cast<int32_t>(a.boxes.size())) ? &a.boxes[c.box] : nullptr;
+}
+
+const std::string& LayoutOf(const Box* box) {
+    static const std::string kLure = "menu_02";
+    return (box != nullptr && !box->layout.empty()) ? box->layout : kLure;
+}
+
+// The cursor rows of a box's layout. menu_03/04/05 differ by which settings the set has: menu_04 (the
+// All-Purpose set, one float) has no float row, menu_05 (bitterling, one float, no depth) has neither.
+const std::vector<RowKind>& RowsFor(const Box* box) {
+    static const std::vector<RowKind> kLure = { RK_LINE, RK_ITEM, RK_FINISH };
+    static const std::vector<RowKind> k03 = { RK_FLOAT, RK_DEPTH, RK_LINE, RK_BAIT, RK_SIZE, RK_FINISH };
+    static const std::vector<RowKind> k04 = { RK_DEPTH, RK_LINE, RK_BAIT, RK_SIZE, RK_FINISH };
+    static const std::vector<RowKind> k05 = { RK_LINE, RK_BAIT, RK_SIZE, RK_FINISH };
+    const std::string& l = LayoutOf(box);
+    return l == "menu_03" ? k03 : (l == "menu_04" ? k04 : (l == "menu_05" ? k05 : kLure));
+}
+
+// The row the cursor starts on: the lure/fly or bait row, as in the user's RF3 screenshots.
+int DefaultRow(const Box* box) {
+    const std::vector<RowKind>& rows = RowsFor(box);
+    for (size_t i = 0; i < rows.size(); i++) {
+        if (rows[i] == RK_ITEM || rows[i] == RK_BAIT) {
+            return static_cast<int>(i);
+        }
+    }
+    return 0;
+}
+
+RowKind CurrentRowKind() {
+    const std::vector<RowKind>& rows = RowsFor(CurrentBox());
+    return rows[std::clamp(sRow, 0, static_cast<int>(rows.size()) - 1)];
 }
 
 // --- Drawing ---------------------------------------------------------------------------------
@@ -302,24 +341,42 @@ void DrawNumber(Gfx*& g, const Element& e, int32_t value) {
     sCounts.numbers++;
 }
 
+// The heart/shield rows a screen shows (numbox pairs: 3/4 rod, 5/6 line, 7/8 lure or fly, 9/10 bait,
+// 11/12 float; 1/2 the totals).
+enum Hs { HS_ROD, HS_LINE, HS_ITEM, HS_BAIT, HS_FLOAT, HS_COUNT };
+
 struct Values {
     const Box* box = nullptr;
     const Target* target = nullptr;
     const Item* line = nullptr;
-    const Item* lure = nullptr;
-    HeartShield rows[3]; // rod, line, lure
+    const Item* lure = nullptr;      // lure or fly
+    const Item* flt = nullptr;       // step 19c: float
+    const Bait* bait = nullptr;      // step 19c: nullptr = no bait ("---")
+    HeartShield rows[HS_COUNT];
     std::optional<std::array<int32_t, 2>> total;
     int32_t lineCell = -1; // the chosen line's place in the box's 5 lines
+    int32_t depthCell = -1;
+    int32_t sizeCell = -1;
 };
+
+HeartShield ValueFor(const Item* item, int32_t target) {
+    return (item != nullptr && item->values.count(target)) ? item->values.at(target) : HeartShield{};
+}
 
 Values CurrentValues() {
     Values v;
     RF3TackleChoice c;
     RF3Tackle_Get(&c);
-    if (sMode == MODE_LINE) {
-        c.line = sPreview;
-    } else if (sMode == MODE_LURE) {
-        c.lure = sPreview;
+    if (sMode != MODE_ROWS) {
+        switch (sEdit) {
+            case RK_LINE: c.line = sPreview; break;
+            case RK_ITEM: c.lure = sPreview; break;
+            case RK_FLOAT: c.floatIdx = sPreview; break;
+            case RK_DEPTH: c.depth = sPreview; break;
+            case RK_BAIT: c.bait = sPreview; break;
+            case RK_SIZE: c.size = sPreview; break;
+            default: break;
+        }
     }
     v.box = CurrentBox();
     if (v.box == nullptr) {
@@ -327,19 +384,39 @@ Values CurrentValues() {
     }
     v.target = FindTarget(*v.box, c.target);
     v.line = FindLine(*v.box, c.line);
-    v.lure = FindLure(*v.box, c.lure);
     if (v.target != nullptr) {
-        v.rows[0] = v.target->rod;
+        v.rows[HS_ROD] = v.target->rod;
     }
-    if (v.line != nullptr && v.line->values.count(c.target)) {
-        v.rows[1] = v.line->values.at(c.target);
+    v.rows[HS_LINE] = ValueFor(v.line, c.target);
+    std::vector<Hs> used = { HS_ROD, HS_LINE };
+    if (v.box->kind == "bait") {
+        v.flt = FindFloat(*v.box, c.floatIdx);
+        v.bait = FindBait(*v.box, c.bait);
+        v.rows[HS_FLOAT] = ValueFor(v.flt, c.target);
+        // No bait: the row reads 0/0 (user's screenshots); a bait uses its record at the hook size.
+        v.rows[HS_BAIT] = v.bait ? ValueFor(BaitAtSize(*v.box, c.bait, c.size), c.target)
+                                 : HeartShield(std::array<int32_t, 2>{ 0, 0 });
+        v.depthCell = c.depth;
+        v.sizeCell = c.size;
+        used.push_back(HS_FLOAT);
+        used.push_back(HS_BAIT);
+    } else {
+        v.lure = FindLure(*v.box, c.lure);
+        v.rows[HS_ITEM] = ValueFor(v.lure, c.target);
+        used.push_back(HS_ITEM);
     }
-    if (v.lure != nullptr && v.lure->values.count(c.target)) {
-        v.rows[2] = v.lure->values.at(c.target);
+    std::array<int32_t, 2> sum{ 0, 0 };
+    bool all = true;
+    for (Hs h : used) {
+        if (!v.rows[h]) {
+            all = false;
+        } else {
+            sum[0] += (*v.rows[h])[0];
+            sum[1] += (*v.rows[h])[1];
+        }
     }
-    if (v.rows[0] && v.rows[1] && v.rows[2]) {
-        v.total = std::array<int32_t, 2>{ (*v.rows[0])[0] + (*v.rows[1])[0] + (*v.rows[2])[0],
-                                          (*v.rows[0])[1] + (*v.rows[1])[1] + (*v.rows[2])[1] };
+    if (all) {
+        v.total = sum;
     }
     for (size_t i = 0; i < v.box->lines.size(); i++) {
         if (v.box->lines[i].index == c.line) {
@@ -368,7 +445,13 @@ void DrawElement(Gfx*& g, const std::string& layout, const Element& e, const Val
                 return;
             }
         }
-        if (n == "flytippett" || n == "fly") {
+        // Step 19a: menu_02 holds both headings; lure boxes show "Reel Lines" / "Lures", fly boxes
+        // "Fly Tippet" / "Flies" (RF3's own pictures).
+        bool fly = v.box != nullptr && v.box->kind == "fly";
+        if ((n == "flytippett" || n == "fly") && !fly) {
+            return;
+        }
+        if ((n == "reelline" || n == "lure") && fly) {
             return;
         }
         // menu_01 Image06: 48 light-wood tiles over the whole right pane. The user's RF3 screenshot shows
@@ -378,7 +461,11 @@ void DrawElement(Gfx*& g, const std::string& layout, const Element& e, const Val
             return;
         }
         if (n.rfind("nodata-", 0) == 0) { // a row with no value for this target (RF3's 99)
-            int row = n == "nodata-rod" ? 0 : (n == "nodata-line" ? 1 : 2);
+            Hs row = n == "nodata-rod"    ? HS_ROD
+                     : n == "nodata-line" ? HS_LINE
+                     : n == "nodata-uki"  ? HS_FLOAT
+                     : n == "nodata-bait" ? HS_BAIT
+                                          : HS_ITEM;
             if (v.rows[row]) {
                 return;
             }
@@ -403,6 +490,14 @@ void DrawElement(Gfx*& g, const std::string& layout, const Element& e, const Val
             text = v.line->name;
         } else if (n == "lure-name" && v.lure) {
             text = v.lure->name;
+        } else if (n == "florts-name" && v.flt) { // step 19c, bait sets
+            text = v.flt->name;
+        } else if (n == "suisin" && v.depthCell >= 0 && v.depthCell < static_cast<int32_t>(Get().depthNames.size())) {
+            text = Get().depthNames[v.depthCell]; // the depth word beside the Ldr bar ("Deep")
+        } else if (n == "bait-name" && v.box && v.box->kind == "bait") {
+            text = v.bait ? v.bait->name : "---"; // RF3's "no bait" (user's screenshots)
+        } else if (n == "hook-name" && v.box && v.box->kind == "bait") {
+            text = v.bait ? v.bait->hook : v.box->hookDefault;
         }
         if (text.empty()) {
             return;
@@ -410,23 +505,21 @@ void DrawElement(Gfx*& g, const std::string& layout, const Element& e, const Val
         DrawText(g, e, text);
         drawn = true;
     } else if (e.kind == "NUMX") {
-        static const char* kNames[8] = { "numbox1", "numbox2", "numbox3", "numbox4",
-                                         "numbox5", "numbox6", "numbox7", "numbox8" };
+        // numbox1/2 totals; 3/4 rod, 5/6 line, 7/8 lure or fly, 9/10 bait, 11/12 float (heart, shield).
+        static const Hs kRowOf[6] = { HS_ROD, HS_LINE, HS_ITEM, HS_BAIT, HS_FLOAT, HS_FLOAT };
         int which = -1;
-        for (int i = 0; i < 8; i++) {
-            if (n == kNames[i]) {
-                which = i;
-            }
+        if (n.rfind("numbox", 0) == 0) {
+            which = std::atoi(n.c_str() + 6);
         }
         std::optional<int32_t> value;
-        if (which == 0 || which == 1) {
+        if (which == 1 || which == 2) {
             if (v.total) {
-                value = (*v.total)[which];
+                value = (*v.total)[which - 1];
             }
-        } else if (which >= 2) {
-            int row = (which - 2) / 2;
+        } else if (which >= 3 && which <= 12) {
+            Hs row = kRowOf[(which - 3) / 2];
             if (v.rows[row]) {
-                value = (*v.rows[row])[(which - 2) % 2];
+                value = (*v.rows[row])[(which - 3) % 2];
             }
         }
         if (!value) {
@@ -452,20 +545,22 @@ void DrawElement(Gfx*& g, const std::string& layout, const Element& e, const Val
             }
             DrawSprite(g, moved);
             drawn = true;
-        } else if (n == "hutoi") {
-            // RF3's Line Dia bar: menu_02 Image02 already drew the five dark cells (one 65 x 19 picture on
-            // page 1). This list box's sprites 1..5 are where RF3's blue "selected" piece goes, thin to
-            // thick, so only the chosen cell's is drawn, in its own colours (17e had tinted all five
-            // with guessed colours). While the bar is active (17f) the blue cell pulses.
-            size_t cell = static_cast<size_t>(v.lineCell) + 1;
-            if (v.lineCell < 0 || cell >= e.sprites.size()) {
+        } else if (n == "hutoi" || n == "ukisita" || n == "size") {
+            // RF3's bars: the layout already drew the five dark cells; this list box's sprites 1..5 are
+            // where RF3's blue "selected" piece goes, so only the chosen cell's is drawn, in its own
+            // colours. hutoi = Line Dia, ukisita = Ldr below Flt (depth), size = hook size. While a bar
+            // is being changed its blue cell pulses.
+            RowKind kind = n == "hutoi" ? RK_LINE : (n == "ukisita" ? RK_DEPTH : RK_SIZE);
+            int32_t sel = kind == RK_LINE ? v.lineCell : (kind == RK_DEPTH ? v.depthCell : v.sizeCell);
+            size_t cell = static_cast<size_t>(sel) + 1;
+            if (sel < 0 || cell >= e.sprites.size()) {
                 return;
             }
-            rf3tackle::Sprite sel = e.sprites[cell];
-            if (sMode == MODE_LINE) {
-                sel.rgba[3] = (sFrames / 4) % 2 ? 80 : 128;
+            rf3tackle::Sprite selSprite = e.sprites[cell];
+            if (sMode == MODE_BAR && sEdit == kind) {
+                selSprite.rgba[3] = (sFrames / 4) % 2 ? 80 : 128;
             }
-            DrawSprite(g, sel);
+            DrawSprite(g, selSprite);
             drawn = true;
         }
     }
@@ -484,7 +579,28 @@ struct ListGeometry {
 };
 constexpr float kListCursorW = 14;
 
-ListGeometry LureListGeometry(const Box& box) {
+// The pane list's entries (RF3 index, name) for the row being chosen: lures/flies, floats, or baits
+// with "---" (no bait) first.
+std::vector<std::pair<int32_t, std::string>> ListEntries(const Box& box, RowKind kind) {
+    std::vector<std::pair<int32_t, std::string>> out;
+    if (kind == RK_ITEM) {
+        for (const Item& i : box.lures) {
+            out.push_back({ i.index, i.name });
+        }
+    } else if (kind == RK_FLOAT) {
+        for (const Item& i : box.floats) {
+            out.push_back({ i.index, i.name });
+        }
+    } else if (kind == RK_BAIT) {
+        out.push_back({ -1, "---" });
+        for (const Bait& b : box.baits) {
+            out.push_back({ b.index, b.name });
+        }
+    }
+    return out;
+}
+
+ListGeometry ListGeometryFor(const std::vector<std::pair<int32_t, std::string>>& entries) {
     ListGeometry gm;
     const Element* pane = FindElement("menu_01", "Image07");
     if (pane == nullptr || !pane->box) {
@@ -495,8 +611,8 @@ ListGeometry LureListGeometry(const Box& box) {
     gm.x1 = static_cast<float>((*pane->box)[2]) - 6;
     gm.y1 = static_cast<float>((*pane->box)[3]) - 6;
     float widest = 0;
-    for (const Item& l : box.lures) {
-        widest = std::max(widest, TextWidth(l.name, 1.0f));
+    for (const auto& e : entries) {
+        widest = std::max(widest, TextWidth(e.second, 1.0f));
     }
     if (widest > 0) {
         gm.scale = std::min(0.75f, (gm.x1 - gm.x0 - kListCursorW) / widest);
@@ -507,28 +623,28 @@ ListGeometry LureListGeometry(const Box& box) {
     return gm;
 }
 
-int32_t LureIndexInBox(const Box& box, int32_t lure) {
-    for (size_t i = 0; i < box.lures.size(); i++) {
-        if (box.lures[i].index == lure) {
+int32_t EntryAt(const std::vector<std::pair<int32_t, std::string>>& entries, int32_t index) {
+    for (size_t i = 0; i < entries.size(); i++) {
+        if (entries[i].first == index) {
             return static_cast<int32_t>(i);
         }
     }
     return -1;
 }
 
-void DrawLureList(Gfx*& g, const Box& box) {
-    ListGeometry gm = LureListGeometry(box);
+void DrawList(Gfx*& g, const std::vector<std::pair<int32_t, std::string>>& entries) {
+    ListGeometry gm = ListGeometryFor(entries);
     if (gm.rows <= 0) {
         return;
     }
     const Element* list = FindElement("menu_02", "List");
     float textH = Get().fontCell[1] * gm.scale;
-    int32_t at = LureIndexInBox(box, sPreview);
-    int32_t n = static_cast<int32_t>(box.lures.size());
+    int32_t at = EntryAt(entries, sPreview);
+    int32_t n = static_cast<int32_t>(entries.size());
     for (int32_t r = 0; r < gm.rows && sListTop + r < n; r++) {
         int32_t i = sListTop + r;
         float y = gm.y0 + r * gm.rowH;
-        DrawString(g, gm.x0 + kListCursorW, y, box.lures[i].name, 0, textH, gm.scale);
+        DrawString(g, gm.x0 + kListCursorW, y, entries[i].second, 0, textH, gm.scale);
         if (i == at && list != nullptr && !list->sprites.empty()) {
             // RF3's red cursor (the List box's sprite 0), shrunk to the row
             const rf3tackle::Sprite& cur = list->sprites[0];
@@ -543,13 +659,13 @@ void DrawLureList(Gfx*& g, const Box& box) {
     DrawString(g, gm.x1 - TextWidth(count, gm.scale), gm.y1 - textH, count, 0, textH, gm.scale);
 }
 
-void ScrollToPreview(const Box& box) {
-    ListGeometry gm = LureListGeometry(box);
+void ScrollToPreview(const std::vector<std::pair<int32_t, std::string>>& entries) {
+    ListGeometry gm = ListGeometryFor(entries);
     if (gm.rows <= 0) {
         return;
     }
-    int32_t at = std::max(0, LureIndexInBox(box, sPreview));
-    int32_t n = static_cast<int32_t>(box.lures.size());
+    int32_t at = std::max(0, EntryAt(entries, sPreview));
+    int32_t n = static_cast<int32_t>(entries.size());
     if (at < sListTop) {
         sListTop = at;
     } else if (at >= sListTop + gm.rows) {
@@ -560,7 +676,8 @@ void ScrollToPreview(const Box& box) {
 
 void CloseList(const char* how) {
     char buf[96];
-    std::snprintf(buf, sizeof(buf), "%s-%s preview=%d moves=%d", kModeNames[sMode], how, sPreview, sListMoves);
+    std::snprintf(buf, sizeof(buf), "%s-%s-%s preview=%d moves=%d", kRowKindNames[sEdit], kModeNames[sMode], how,
+                  sPreview, sListMoves);
     RequestLog(buf);
     sMode = MODE_ROWS;
     sPreview = -1;
@@ -585,20 +702,23 @@ std::string HsText(const HeartShield& hs) {
 void LogState(const Values& v) {
     RF3TackleChoice c;
     RF3Tackle_Get(&c);
-    char head[320];
+    char head[400];
     std::snprintf(head, sizeof(head),
-                  "%s row=%s mode=%s preview=%d box=%d target=%d line=%d lure=%d lineCell=%d rod=%s lineHS=%s "
-                  "lureHS=%s total=%s elements=%d sprites=%d strips=%d glyphs=%d numbers=%d missingPieces=%d",
-                  sLogWhy.c_str(), kRowNames[sRow], kModeNames[sMode], sPreview, c.box, c.target, c.line, c.lure,
-                  v.lineCell,
-                  HsText(v.rows[0]).c_str(), HsText(v.rows[1]).c_str(), HsText(v.rows[2]).c_str(),
-                  HsText(v.total).c_str(), sCounts.elements, sCounts.sprites, sCounts.strips, sCounts.glyphs,
-                  sCounts.numbers, sCounts.missingPieces);
+                  "%s row=%s mode=%s edit=%s preview=%d box=%d target=%d line=%d lure=%d float=%d depth=%d bait=%d "
+                  "size=%d lineCell=%d rod=%s lineHS=%s lureHS=%s floatHS=%s baitHS=%s total=%s elements=%d "
+                  "sprites=%d strips=%d glyphs=%d numbers=%d missingPieces=%d",
+                  sLogWhy.c_str(), kRowKindNames[CurrentRowKind()], kModeNames[sMode], kRowKindNames[sEdit], sPreview,
+                  c.box, c.target, c.line, c.lure, c.floatIdx, c.depth, c.bait, c.size, v.lineCell,
+                  HsText(v.rows[HS_ROD]).c_str(), HsText(v.rows[HS_LINE]).c_str(), HsText(v.rows[HS_ITEM]).c_str(),
+                  HsText(v.rows[HS_FLOAT]).c_str(), HsText(v.rows[HS_BAIT]).c_str(), HsText(v.total).c_str(),
+                  sCounts.elements, sCounts.sprites, sCounts.strips, sCounts.glyphs, sCounts.numbers,
+                  sCounts.missingPieces);
     std::string text = head;
     text += " texts=[" + (v.box ? v.box->title : std::string("?")) + " | " +
             (v.target ? v.target->name : std::string("?")) + " | " + (v.box ? v.box->rodName : "?") + " | " +
             (v.box ? v.box->reelName : "?") + " | " + (v.line ? v.line->name : std::string("?")) + " | " +
-            (v.lure ? v.lure->name : std::string("?")) + "]";
+            (v.lure ? v.lure->name : std::string("-")) + " | " + (v.flt ? v.flt->name : std::string("-")) + " | " +
+            (v.bait ? v.bait->name : std::string("-")) + "]";
     if (sLogWhy.find("open") != std::string::npos) {
         text += " drawn=[" + sDrawn + "]";
     }
@@ -613,7 +733,7 @@ extern "C" int RF3TackleScreen_ListOpen(void) {
 
 extern "C" int RF3TackleScreen_Usable(void) {
     const Assets& a = Get();
-    return (a.loaded && a.texturesOk && a.boxes.size() >= RF3_TACKLE_BOXES) ? 1 : 0;
+    return (a.loaded && a.texturesOk && a.boxes.size() >= 2) ? 1 : 0;
 }
 
 extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
@@ -625,34 +745,48 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
     if (sMode != MODE_ROWS && listBox != nullptr) {
         RF3TackleChoice c;
         RF3Tackle_Get(&c);
-        if (sMode == MODE_LINE) {
+        if (sMode == MODE_BAR) {
+            // Line: the box's 5 lines; depth and hook size: cells 0..4.
             int lx = StickStep(sRepX, pauseCtx->stickRelX);
-            int at = 0;
-            for (size_t i = 0; i < listBox->lines.size(); i++) {
-                if (listBox->lines[i].index == sPreview) {
-                    at = static_cast<int>(i);
+            int count = sEdit == RK_LINE ? static_cast<int>(listBox->lines.size()) : 5;
+            int at = sPreview;
+            if (sEdit == RK_LINE) {
+                at = 0;
+                for (size_t i = 0; i < listBox->lines.size(); i++) {
+                    if (listBox->lines[i].index == sPreview) {
+                        at = static_cast<int>(i);
+                    }
                 }
             }
             int next = at + lx;
-            if (lx != 0 && next >= 0 && next < static_cast<int>(listBox->lines.size())) {
-                sPreview = listBox->lines[next].index;
+            if (lx != 0 && next >= 0 && next < count) {
+                sPreview = sEdit == RK_LINE ? listBox->lines[next].index : next;
                 sListMoves++;
                 Sfx(NA_SE_SY_CURSOR);
             }
         } else {
+            std::vector<std::pair<int32_t, std::string>> entries = ListEntries(*listBox, sEdit);
             int ly = StickStep(sRepY, pauseCtx->stickRelY);
-            int at = std::max(0, LureIndexInBox(*listBox, sPreview));
-            int next = at + (ly > 0 ? -1 : (ly < 0 ? 1 : 0)); // stick up = the lure above
-            if (ly != 0 && next >= 0 && next < static_cast<int>(listBox->lures.size())) {
-                sPreview = listBox->lures[next].index;
+            int at = std::max(0, EntryAt(entries, sPreview));
+            int next = at + (ly > 0 ? -1 : (ly < 0 ? 1 : 0)); // stick up = the entry above
+            if (ly != 0 && next >= 0 && next < static_cast<int>(entries.size())) {
+                sPreview = entries[next].first;
                 sListMoves++;
-                ScrollToPreview(*listBox);
+                ScrollToPreview(entries);
                 Sfx(NA_SE_SY_CURSOR);
             }
         }
         if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
-            bool ok = sMode == MODE_LINE ? RF3Tackle_SetLine(c.box, sPreview, "screen-line-list") != 0
-                                         : RF3Tackle_SetLure(c.box, sPreview, "screen-lure-list") != 0;
+            int32_t ok = 0;
+            switch (sEdit) {
+                case RK_LINE: ok = RF3Tackle_SetLine(c.box, sPreview, "screen-line"); break;
+                case RK_ITEM: ok = RF3Tackle_SetLure(c.box, sPreview, "screen-lure"); break;
+                case RK_FLOAT: ok = RF3Tackle_SetFloat(c.box, sPreview, "screen-float"); break;
+                case RK_DEPTH: ok = RF3Tackle_SetDepth(c.box, sPreview, "screen-depth"); break;
+                case RK_BAIT: ok = RF3Tackle_SetBait(c.box, sPreview, "screen-bait"); break;
+                case RK_SIZE: ok = RF3Tackle_SetSize(c.box, sPreview, "screen-size"); break;
+                default: break;
+            }
             Sfx(ok ? NA_SE_SY_DECIDE : NA_SE_SY_ERROR);
             CloseList(ok ? "kept" : "refused");
             return;
@@ -668,7 +802,7 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
     int y = sMode == MODE_ROWS ? StickStep(sRepY, pauseCtx->stickRelY) : 0;
     if (y != 0) {
         int row = sRow + (y > 0 ? -1 : 1); // stick up = the row above
-        if (row >= 0 && row < ROW_COUNT) {
+        if (row >= 0 && row < static_cast<int>(RowsFor(listBox).size())) {
             sRow = row;
             Sfx(NA_SE_SY_CURSOR);
             RequestLog("cursor");
@@ -680,8 +814,10 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
     if (x != 0 && sRepX.frames == 0) { // one box per push: holding the stick doesn't flicker boxes
         RF3TackleChoice c;
         RF3Tackle_Get(&c);
-        int next = (c.box + x + RF3_TACKLE_BOXES) % RF3_TACKLE_BOXES;
+        int count = std::max(1, static_cast<int>(RF3Tackle_BoxCount()));
+        int next = (c.box + x + count) % count;
         if (RF3Tackle_SetBox(next, "screen-box")) {
+            sRow = DefaultRow(CurrentBox()); // the new box may have another layout and other rows
             Sfx(NA_SE_SY_DECIDE);
             RequestLog("box");
         }
@@ -707,26 +843,36 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
     if (sMode == MODE_ROWS && CHECK_BTN_ALL(input->press.button, BTN_A) && box != nullptr) {
         RF3TackleChoice c;
         RF3Tackle_Get(&c);
-        if (sRow == ROW_FINISH) {
+        RowKind kind = CurrentRowKind();
+        if (kind == RK_FINISH) {
             Sfx(NA_SE_SY_DECIDE);
             RequestLog("finish");
             RF3Pause_CloseFishingPage();
-        } else if (sRow == ROW_LINES && !box->lines.empty()) {
-            sMode = MODE_LINE;
-            sPreview = c.line;
+        } else if (kind == RK_LINE || kind == RK_DEPTH || kind == RK_SIZE) {
+            if (kind == RK_LINE && box->lines.empty()) {
+                return;
+            }
+            sMode = MODE_BAR;
+            sEdit = kind;
+            sPreview = kind == RK_LINE ? c.line : (kind == RK_DEPTH ? c.depth : c.size);
             sListMoves = 0;
             sRepX = {};
             Sfx(NA_SE_SY_DECIDE);
-            RequestLog("line-list-open");
-        } else if (sRow == ROW_LURES && !box->lures.empty()) {
-            sMode = MODE_LURE;
-            sPreview = c.lure;
+            RequestLog(std::string(kRowKindNames[kind]) + "-bar-open");
+        } else {
+            std::vector<std::pair<int32_t, std::string>> entries = ListEntries(*box, kind);
+            if (entries.empty()) {
+                return;
+            }
+            sMode = MODE_LIST;
+            sEdit = kind;
+            sPreview = kind == RK_ITEM ? c.lure : (kind == RK_FLOAT ? c.floatIdx : c.bait);
             sListMoves = 0;
             sRepY = {};
             sListTop = 0;
-            ScrollToPreview(*box);
+            ScrollToPreview(entries);
             Sfx(NA_SE_SY_DECIDE);
-            RequestLog("lure-list-open");
+            RequestLog(std::string(kRowKindNames[kind]) + "-list-open");
         }
     }
 }
@@ -747,7 +893,7 @@ extern "C" void RF3Pause_DrawTackleScreen(PlayState* play) {
     }
     if (!sOpen) {
         sOpen = true;
-        sRow = ROW_LURES;
+        sRow = DefaultRow(CurrentBox());
         sMode = MODE_ROWS;
         sRepX = {};
         sRepY = {};
@@ -781,7 +927,9 @@ extern "C" void RF3Pause_DrawTackleScreen(PlayState* play) {
     gDPSetTextureFilter(g++, G_TF_POINT); // strips must meet without filtering seams
     // menu_01 is the base screen, menu_02 the rows on top. Within a layout the last element is the
     // bottom layer (menu_01's last element is the full-screen background), so draw back to front.
-    for (const char* layout : { "menu_01", "menu_02" }) {
+    // Step 19c: the box's own layout on top of menu_01 (menu_02 lure/fly, menu_03/04/05 bait sets).
+    const std::string rowsLayout = LayoutOf(v.box);
+    for (const std::string& layout : { std::string("menu_01"), rowsLayout }) {
         auto it = Get().layouts.find(layout);
         if (it == Get().layouts.end()) {
             continue;
@@ -790,8 +938,8 @@ extern "C" void RF3Pause_DrawTackleScreen(PlayState* play) {
             DrawElement(g, layout, *e, v);
         }
     }
-    if (sMode == MODE_LURE && v.box != nullptr) {
-        DrawLureList(g, *v.box);
+    if (sMode == MODE_LIST && v.box != nullptr) {
+        DrawList(g, ListEntries(*v.box, sEdit));
     }
     gDPPipeSync(g++);
     OVERLAY_DISP = g;

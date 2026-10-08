@@ -62,6 +62,16 @@ HeartShield ReadHeartShield(const json& v) {
     return std::array<int32_t, 2>{ v[0].get<int32_t>(), v[1].get<int32_t>() };
 }
 
+std::vector<int32_t> ReadInts(const json& j, const char* key) {
+    std::vector<int32_t> out;
+    if (j.contains(key) && j.at(key).is_array()) {
+        for (const json& v : j.at(key)) {
+            out.push_back(v.get<int32_t>());
+        }
+    }
+    return out;
+}
+
 std::vector<Item> ReadItems(const json& arr) {
     std::vector<Item> out;
     for (const json& j : arr) {
@@ -71,6 +81,24 @@ std::vector<Item> ReadItems(const json& arr) {
         for (auto& [record, hs] : j.at("values").items()) {
             item.values[std::stoi(record)] = ReadHeartShield(hs);
         }
+        item.heart = ReadInts(j, "heart");
+        item.shield = ReadInts(j, "shield");
+        item.appeal = ReadInts(j, "appeal");
+        if (j.contains("move") && j.at("move").is_object()) {
+            // tools/rf3_menuassets.py writes these with the names from before step 20a-1:
+            // "reeled_action" is RLRE +0x0E (the resting action), "still_action" is +0x12 (the twitch
+            // response). Speed pairs: reel down, reel up, rest sink, rest float-up (RF3-MECHANICS 3.2).
+            const json& m = j.at("move");
+            item.move.restAction = static_cast<uint8_t>(m.at("reeled_action").get<int32_t>());
+            item.move.twitchResponse = static_cast<uint8_t>(m.at("still_action").get<int32_t>());
+            item.move.buoyancy = static_cast<uint8_t>(m.at("buoyancy").get<int32_t>());
+            for (int k = 0; k < 4; k++) {
+                item.move.speedBase[k] = m.at("speed_base").at(k).get<float>();
+                item.move.speedRate[k] = m.at("speed_rate").at(k).get<float>();
+            }
+            item.hasMove = true;
+        }
+        item.sunk = j.value("sunk", -1); // step 20c-3b, flies
         out.push_back(std::move(item));
     }
     return out;
@@ -80,6 +108,7 @@ void ReadTackle(const json& t) {
     for (const json& b : t.at("boxes")) {
         Box box;
         box.key = b.at("key").get<std::string>();
+        box.kind = b.value("kind", std::string("lure"));
         box.title = b.at("title").get<std::string>();
         box.rod = b.at("rod").get<int32_t>();
         box.rodName = b.at("rod_name").get<std::string>();
@@ -90,7 +119,33 @@ void ReadTackle(const json& t) {
         }
         box.lures = ReadItems(b.at("lures"));
         box.lines = ReadItems(b.at("lines"));
+        box.rodValue = b.value("rod_value", 0);
+        box.rodLengthMm = b.value("rod_length_mm", 0);
+        box.rodLimits = ReadInts(b, "rod_limits");
+        box.rodHeart = ReadInts(b, "rod_heart");
+        box.rodShield = ReadInts(b, "rod_shield");
+        box.layout = b.value("layout", std::string("menu_02"));
+        if (b.contains("floats")) {
+            box.floats = ReadItems(b.at("floats"));
+        }
+        if (b.contains("baits")) {
+            for (const json& bt : b.at("baits")) {
+                Bait bait;
+                bait.index = bt.at("index").get<int32_t>();
+                bait.name = bt.at("name").get<std::string>();
+                bait.hook = bt.at("hook").get<std::string>();
+                bait.sizes = ReadItems(bt.at("sizes"));
+                box.baits.push_back(std::move(bait));
+            }
+        }
+        box.hookDefault = b.value("hook_default", std::string());
         sAssets.boxes.push_back(std::move(box));
+    }
+    sAssets.fishRodMask = ReadInts(t, "fish_rod_mask");
+    if (t.contains("depth_names")) {
+        for (const json& d : t.at("depth_names")) {
+            sAssets.depthNames.push_back(d.get<std::string>());
+        }
     }
     for (auto& [key, text] : t.at("texts").items()) {
         sAssets.texts[key] = text.get<std::string>();
@@ -323,6 +378,32 @@ const Element* FindElement(const std::string& layout, const std::string& name) {
         }
     }
     return nullptr;
+}
+
+const Item* FindFloat(const Box& box, int32_t index) {
+    for (const Item& i : box.floats) {
+        if (i.index == index) {
+            return &i;
+        }
+    }
+    return nullptr;
+}
+
+const Bait* FindBait(const Box& box, int32_t index) {
+    for (const Bait& b : box.baits) {
+        if (b.index == index) {
+            return &b;
+        }
+    }
+    return nullptr;
+}
+
+const Item* BaitAtSize(const Box& box, int32_t bait, int32_t size) {
+    const Bait* b = FindBait(box, bait);
+    if (b == nullptr || size < 0 || size >= static_cast<int32_t>(b->sizes.size())) {
+        return nullptr;
+    }
+    return &b->sizes[size];
 }
 
 const Target* FindTarget(const Box& box, int32_t record) {

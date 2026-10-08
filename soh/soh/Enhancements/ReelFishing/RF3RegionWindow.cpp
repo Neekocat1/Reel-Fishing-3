@@ -157,6 +157,33 @@ void DrawRegion(PlayState* play, rf3::FishRegion& r, int index, const Vec3f& lin
     if (ImGui::DragFloat("Water surface Y", &r.surfaceY, 1.0f)) {
         rf3::RegionsDirty() = true;
     }
+
+    // Step 20c-3a: the water current (drifts a resting fly).
+    float yaw = r.CurrentYawDeg();
+    if (ImGui::DragFloat("Current toward (degrees)", &yaw, 1.0f, -180.0f, 180.0f, "%.0f")) {
+        r.currentYaw = yaw;
+        r.currentSet = true;
+        rf3::RegionsDirty() = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("= Link's facing")) {
+        r.currentYaw = GET_PLAYER(play)->actor.shape.rot.y * (360.0f / 65536.0f);
+        r.currentSet = true;
+        rf3::RegionsDirty() = true;
+    }
+    if (ImGui::DragFloat("Current speed (m/s)", &r.currentSpeed, 0.01f, 0.0f, 2.0f, "%.2f")) {
+        r.currentSet = true;
+        rf3::RegionsDirty() = true;
+    }
+    if (!r.currentSet) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(default: along the box)");
+    }
+    if (ImGui::DragFloat("Current reach outside (m)", &r.currentReachM, 0.1f, 0.0f, 50.0f, "%.1f")) { // step 20c-4
+        rf3::RegionsDirty() = true;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(falls to 0 this far outside the box)");
     ImGui::SameLine();
     if (ImGui::Button("Read under Link")) {
         float y;
@@ -378,7 +405,7 @@ static void DrawRegionsInWorld() {
     Player* player = GET_PLAYER(play);
     sDrawDl.clear();
     sDrawVtx.clear();
-    sDrawVtx.reserve((here * 5 + 5) * 4); // exact: the vertex pointers in the display list must stay valid
+    sDrawVtx.reserve((here * 7 + 5) * 4); // exact: the vertex pointers in the display list must stay valid
 
     uint32_t rm = Z_CMP | IM_RD | CVG_DST_FULL | FORCE_BL | ZMODE_XLU;
     uint32_t blc1 = GBL_c1(G_BL_CLR_IN, G_BL_A_IN, G_BL_CLR_MEM, G_BL_1MA);
@@ -419,6 +446,26 @@ static void DrawRegionsInWorld() {
         PushQuad(t1, t2, b2, b1);
         PushQuad(t2, t3, b3, b2);
         PushQuad(t3, t0, b0, b3);
+
+        // Step 20c-4: an arrow on the surface, at the box centre, in the current's direction.
+        float yaw = r.CurrentYawDeg() * 3.14159265f / 180.0f;
+        float dx = std::sin(yaw), dz = std::cos(yaw); // along the flow
+        float px = dz, pz = -dx;                      // across it
+        float half = std::fmin(std::fabs(r.maxX - r.minX), std::fabs(r.maxZ - r.minZ)) * 0.3f;
+        float len = std::fmax(40.0f, std::fmin(half, 200.0f));
+        float mx = r.CentreX(), mz = r.CentreZ(), y = top + 3.0f;
+        float w = 6.0f, hw = 20.0f;
+        float neckX = mx + dx * len * 0.25f, neckZ = mz + dz * len * 0.25f;
+        Vec3f s0 = { mx - dx * len * 0.5f + px * w, y, mz - dz * len * 0.5f + pz * w };
+        Vec3f s1 = { mx - dx * len * 0.5f - px * w, y, mz - dz * len * 0.5f - pz * w };
+        Vec3f s2 = { neckX - px * w, y, neckZ - pz * w };
+        Vec3f s3 = { neckX + px * w, y, neckZ + pz * w };
+        Vec3f h0 = { neckX + px * hw, y, neckZ + pz * hw };
+        Vec3f h1 = { neckX - px * hw, y, neckZ - pz * hw };
+        Vec3f h2 = { mx + dx * len * 0.5f, y, mz + dz * len * 0.5f };
+        sDrawDl.push_back(gsDPSetPrimColor(0, 0, 255, 255, 255, 255));
+        PushQuad(s0, s1, s2, s3);
+        PushQuad(h0, h1, h2, h2); // the head: a triangle
     }
     if (ev.active) {
         // Step 16h: the cursor (a post and a cross) and, after the first A, the box it would make.

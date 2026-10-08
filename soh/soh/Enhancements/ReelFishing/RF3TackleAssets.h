@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include "RF3Sim.h"
+
 namespace rf3tackle {
 
 // Heart and shield for one fish record; empty = the item can't be used for that fish (RF3's 99).
@@ -23,6 +25,25 @@ struct Item {
     int32_t index = -1; // RLRE / RLIN record
     std::string name;
     std::map<int32_t, HeartShield> values; // by fishdata record
+    // Step 18: raw per-fish-record bytes (index = fishdata record 0..47, 99 = none). Empty when the
+    // archive predates step 18a.
+    std::vector<int32_t> heart;
+    std::vector<int32_t> shield;
+    std::vector<int32_t> appeal; // lures only (RLRE +0x50)
+    // Step 20a-5: lures only, the movement fields (RF3-MECHANICS 3.2). False for flies, baits,
+    // lines, floats, and archives built before step 20.
+    bool hasMove = false;
+    rf3::LureMove move;
+    // Step 20c-3b: flies only, RFLY +0x0E: 0 dry, 1 sunken; -1 = not a fly or an archive before step 20c.
+    int32_t sunk = -1;
+};
+
+// Step 19c: a bait (RBIT group) and its 5 hook sizes, small to big (sizes[k] = RBIT record 5 * index + k).
+struct Bait {
+    int32_t index = -1;
+    std::string name;
+    std::string hook; // the bait's hook type
+    std::vector<Item> sizes;
 };
 
 struct Target {
@@ -32,7 +53,8 @@ struct Target {
 };
 
 struct Box {
-    std::string key;   // "bass", "trout"
+    std::string kind;  // step 19a: "lure", "fly" (the item row shows lures or flies)
+    std::string key;   // "bass", "trout", ...
     std::string title; // "Tackle Box Bass"
     int32_t rod = -1;
     std::string rodName;
@@ -40,6 +62,17 @@ struct Box {
     std::vector<Target> targets;
     std::vector<Item> lures;
     std::vector<Item> lines; // the 5 Line Dia cells, thin to thick
+    // Step 18: the rod's numbers (RF3-MECHANICS 1.3, 1.4, 1.7). Empty/0 before step 18a.
+    int32_t rodValue = 0;
+    int32_t rodLengthMm = 0;
+    std::vector<int32_t> rodLimits; // tension limit per line step 0..4
+    std::vector<int32_t> rodHeart;  // per fish record
+    std::vector<int32_t> rodShield;
+    // Step 19c, bait/pole sets (kind "bait"): their layout (menu_03/04/05), floats and baits.
+    std::string layout;      // "menu_02" for lure and fly boxes
+    std::vector<Item> floats;
+    std::vector<Bait> baits;
+    std::string hookDefault; // the hook RF3 shows with no bait chosen
 };
 
 struct Sprite {
@@ -93,6 +126,8 @@ struct Assets {
     std::map<std::string, Piece> pieces;
     std::vector<std::string> fontPaths;  // by RF3 text code; empty = no glyph (space)
     std::vector<std::string> digitPaths; // 0-9, minus, plus
+    std::vector<int32_t> fishRodMask;    // step 18: per fish record, bit n = rod n allowed
+    std::vector<std::string> depthNames; // step 19c: Ldr below Flt, left to right (Surface .. Deepest)
 };
 
 // Loads on the first call (later calls return the same result). Safe to call every frame.
@@ -104,6 +139,10 @@ std::string TexturePath(const std::string& name);
 const Item* FindLine(const Box& box, int32_t index);
 const Item* FindLure(const Box& box, int32_t index);
 const Target* FindTarget(const Box& box, int32_t record);
+const Item* FindFloat(const Box& box, int32_t index);
+const Bait* FindBait(const Box& box, int32_t index);
+// Step 19c: the bait at a hook size (0..4), or nullptr (no bait, or out of range).
+const Item* BaitAtSize(const Box& box, int32_t bait, int32_t size);
 const Piece* FindPiece(const std::string& name);
 // An element of a layout by name; nullptr if absent.
 const Element* FindElement(const std::string& layout, const std::string& name);

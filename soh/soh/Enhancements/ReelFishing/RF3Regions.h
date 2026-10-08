@@ -26,6 +26,14 @@ struct FishRegion {
     float surfaceY = 0.0f; // the water surface, read from the water box when placed
     int fishCount = 6;
     std::vector<int> records; // fishdata.fdt records that may spawn here
+    // Step 20c-3a: the water current, which drifts a resting fly (RF3-MECHANICS 2.9). Direction as an OoT
+    // yaw in degrees (0 = +Z, 90 = +X, Link's facing); speed in m/s. Not set: the box's long axis at
+    // kDefaultCurrentSpeed.
+    bool currentSet = false;
+    float currentYaw = 0.0f;
+    float currentSpeed = 0.2f;
+    // Step 20c-4: outside the box the current falls off linearly to 0 at this distance from its edge (m).
+    float currentReachM = 5.0f;
 
     float CentreX() const { return (minX + maxX) * 0.5f; }
     float CentreZ() const { return (minZ + maxZ) * 0.5f; }
@@ -51,6 +59,24 @@ struct FishRegion {
         float bx, bz;
         ToBox(x, z, &bx, &bz);
         return (bx >= minX) && (bx <= maxX) && (bz >= minZ) && (bz <= maxZ);
+    }
+    // Step 20c-4: distance from (x, z) to the box's edge, OoT units (0 inside).
+    float DistanceOutside(float x, float z) const {
+        float bx, bz;
+        ToBox(x, z, &bx, &bz);
+        float dx = std::fmax(std::fmax(minX - bx, bx - maxX), 0.0f);
+        float dz = std::fmax(std::fmax(minZ - bz, bz - maxZ), 0.0f);
+        return std::sqrt(dx * dx + dz * dz);
+    }
+    // Step 20c-3a: the current's direction (OoT yaw, degrees): the set one, or the box's long axis.
+    float CurrentYawDeg() const {
+        if (currentSet) {
+            return currentYaw;
+        }
+        float ax, az;
+        bool alongX = (maxX - minX) >= (maxZ - minZ);
+        Turn(Radians(), alongX ? 1.0f : 0.0f, alongX ? 0.0f : 1.0f, &ax, &az);
+        return std::atan2(ax, az) * 180.0f / 3.14159265f;
     }
     // Corners in the world: 0 = (minX, minZ), 1 = (maxX, minZ), 2 = (maxX, maxZ), 3 = (minX, maxZ).
     void Corner(int i, float* x, float* z) const {

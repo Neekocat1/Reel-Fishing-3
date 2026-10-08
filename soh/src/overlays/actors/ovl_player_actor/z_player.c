@@ -32,6 +32,7 @@
 #include "soh/frame_interpolation.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/savestate_serialize.h"
+#include "soh/Enhancements/ReelFishing/RF3Bridge.h" // Reel Fishing III mod (step 20c-3d): fly false casting
 
 #include <string.h>
 #include <stdlib.h>
@@ -15339,6 +15340,23 @@ void Player_Action_80850C68(Player* this, PlayState* play) {
                                                           : &gPlayerAnim_link_fishing_reel_down,
                                    5.0f, fabsf(this->unk_85C), (Vec3s*)D_80858AD8);
         LinkAnimation_InterpJointMorph(play, &this->skelAnime, 0.5f);
+    } else if ((this->av2.actionVar2 == 0) && RF3FlyCast_IsCharging()) {
+        // Reel Fishing III mod (step 20c-3d): false casting while a fly cast charges. The throw swings between its
+        // back and forward frames (tuned in the RF3 debug window); the fishing actor casts on release.
+        static f32 sRF3SwingDir = 1.0f;
+        f32 back = RF3FlyCast_Tuning(0);
+        f32 fwd = CLAMP_MAX(RF3FlyCast_Tuning(1), this->skelAnime.animLength - 1.0f);
+
+        RF3FlyCast_NoteAnim(this->skelAnime.animLength, this->skelAnime.curFrame);
+        this->skelAnime.curFrame += sRF3SwingDir * RF3FlyCast_Tuning(2) * R_UPDATE_RATE * 0.5f;
+        if (this->skelAnime.curFrame >= fwd) {
+            this->skelAnime.curFrame = fwd;
+            sRF3SwingDir = -1.0f;
+        } else if (this->skelAnime.curFrame <= back) {
+            this->skelAnime.curFrame = back;
+            sRF3SwingDir = 1.0f;
+        }
+        LinkAnimation_AnimateFrame(play, &this->skelAnime);
     } else if (LinkAnimation_Update(play, &this->skelAnime)) {
         this->unk_860 = 2;
         Player_AnimPlayLoop(play, this, &gPlayerAnim_link_fishing_wait);

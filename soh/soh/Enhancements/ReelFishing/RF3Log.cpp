@@ -51,7 +51,9 @@ static bool OpenLog() {
              "rf3Enabled,rf3Active,rf3Mode,rf3LastRun,rf3Hp,rf3Hook,rf3Tension,rf3Limit,rf3DistanceM,rf3Outcome,"
              "linkX,linkY,linkZ,fishFloorY,rf3Meter,rf3Chaser,rf3ChaserMemory,rf3ApproachMode,"
              "rf3CastPower,rf3CastFactor,rf3LengthMm,rf3WeightG,fishYaw,fishTailStep,fishTailMag,rf3FishIndex,rf3Species,rf3Record,"
-             "sceneNum,portable,lureInWater,lureFloorY\n";
+             "sceneNum,portable,lureInWater,lureFloorY,"
+             "lureSimActive,lureIndex,lureDepthM,lureT,lureMode,lureTwitch,lureBottom,lureStop,lureKind,"
+             "rf3RodKind,rf3ChaserRecord,rf3ChaserC,rf3ChaserWaits,rf3ChaserWaitLeft,rf3ChasePingAgo\n";
     sOpen = true;
     sRowsSinceFlush = 0;
     return true;
@@ -102,7 +104,17 @@ extern "C" void RF3Log_OwnerFrame(const RF3OwnerFrame* f) {
           << approach.chaserMode << ',' << castPower << ',' << castFactor << ',' << fight.lengthMm << ','
           << fight.weightG << ',' << f->fishYaw << ',' << f->fishTailStep << ',' << f->fishTailMag << ','
           << fight.fishIndex << ',' << fight.species << ',' << fight.record << ',' // step 14b
-          << f->sceneNum << ',' << f->portable << ',' << f->lureInWater << ',' << f->lureFloorY << '\n'; // step 15c
+          << f->sceneNum << ',' << f->portable << ',' << f->lureInWater << ',' << f->lureFloorY << ','; // step 15c
+
+    // Step 20a-5: RF3's lure depth (0s while inactive).
+    RF3LureStatus lure;
+    RF3Lure_GetStatus(&lure);
+    sFile << lure.active << ',' << lure.lure << ',' << lure.depthM << ',' << lure.t << ',' << lure.mode << ','
+          << lure.twitch << ',' << lure.bottom << ',' << lure.stopped << ',' << lure.kind << ',';
+
+    // Step 20b-6: the chaser, for bait fishing (rod kind, species record, c, WAITs, WAIT left, update gap).
+    sFile << approach.rodKind << ',' << approach.chaserRecord << ',' << approach.chaserC << ','
+          << approach.chaserWaits << ',' << approach.chaserWaitLeft << ',' << approach.chasePingAgo << '\n';
 
     if (++sRowsSinceFlush >= kFlushEveryRows) {
         sFile.flush();

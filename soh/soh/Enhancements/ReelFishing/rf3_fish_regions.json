@@ -10,20 +10,12 @@
       "name": "Scene 87 region 1",
       "records": [
         {
-          "name": "Florida Bass n",
-          "record": 17
-        },
-        {
-          "name": "Florida Bass b",
-          "record": 18
-        },
-        {
           "name": "Largemouth Bass n",
           "record": 15
         },
         {
-          "name": "Largemouth Bass b",
-          "record": 16
+          "name": "Bluegill n",
+          "record": 20
         }
       ],
       "scene": 87,

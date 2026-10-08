@@ -148,6 +148,9 @@ class LureMeter {
 };
 
 enum class ApproachMode : int32_t { Normal = 0, Chase = 1, Wait = 3 };
+
+// Step 20b-5: the rod kind (RROD +0x14) changes the approach (2.9). Step 20c-3b: flies too.
+enum class RodKind : int32_t { Lure = 0, Fly = 1, Bait = 2 };
 enum class ApproachEvent : int32_t { None = 0, Strike, Fail };
 
 struct NoticeInput {
@@ -171,8 +174,9 @@ class ApproachFish {
     ApproachFish() = default;
     explicit ApproachFish(const FishParams& fish) : mFish(&fish) {}
 
-    // Every frame: remembered level (2.2) and wary timer.
-    void Tick(float meter);
+    // Every frame: remembered level (2.2) and wary timer. kind: the current rod's kind (2.9).
+    // movedM: how far the lure moved in this RF3 step (a fly must drift, 2.9).
+    void Tick(float meter, RodKind kind = RodKind::Lure, float movedM = 0.0f);
     bool IsInterested() const;
     // NORMAL -> CHASE check (2.3). Starts the chase and returns true if it passes.
     bool TryNotice(const NoticeInput& in);
@@ -186,6 +190,7 @@ class ApproachFish {
     float GetHold() const { return mHold; }
     float GetWary() const { return mWary; }
     float GetWaitLeft() const { return mWaitLeft; }
+    int GetWaits() const { return mWaits; } // step 20b-5: WAITs in this chase (2.6, 2.9)
     const FishParams& GetFish() const { return *mFish; } // step 14b: the chaser's species values
 
   private:
@@ -195,12 +200,28 @@ class ApproachFish {
     float mHold = 0.0f;
     float mWary = 0.0f;
     float mWaitLeft = 0.0f;
+    // Step 20b-5 (2.9).
+    float mMeter = 0.0f;              // the meter seen by the last Tick
+    float mMoved = 0.0f;              // step 20c-3b: lure movement in the last Tick's step, m
+    RodKind mKind = RodKind::Lure;
+    float mLostInterest = 0.0f;       // s without interest in this chase (bait patience)
+    int mWaits = 0;
 };
+
+// Fly and bait rods: a chase fails after this long without interest (2.5, 2.9; 0x001A08D0).
+inline constexpr float kBaitPatience = 0.5f;
+// Fly rods: interested while the meter is below this and the fly drifts (0x0019E710).
+inline constexpr float kFlyMaxMeter = 0.1f;
+inline constexpr float kFlyMinDrift = 0.00016666666f; // m per RF3 step
+// Bait rods: a fish is interested while the meter is below this, i.e. the bait is still (0x0019E820).
+inline constexpr float kBaitStillMeter = 0.01f;
 
 // Activity level from the fish's tables and the game conditions (2.4).
 int ActivityLevel(const FishParams& fish, const Conditions& conditions);
 // Sight range in metres for the default lure (appeal 15/15) (2.4).
 float SightRange(const FishParams& fish, int activityLevel);
+// Step 18c: with the lure's appeal for this fish record (2.4: x appeal / 15). Appeal 0 = never seen.
+float SightRangeWithAppeal(const FishParams& fish, int activityLevel, int lureAppeal);
 
 // --- Cast (section 3.1) -----------------------------------------------------
 
@@ -210,6 +231,150 @@ float CastPower(float heldSeconds);
 // distance for this power. fullHoldPower is the power reached by holding through the
 // host's whole wind-up; minimum 0.15.
 float CastDistanceFactor(float power, float fullHoldPower);
+
+// --- Lure depth (section 3.2; DESIGN step 20a-4) ----------------------------
+
+// One lure's movement fields, from its RLRE record (tackle.json "move").
+// Speeds are m/s: base + rate x t, t in seconds (3.2).
+struct LureMove {
+    uint8_t restAction = 2;     // +0x0E: 0/3/5 sink, 1/2/4 float up, when Cross is not held
+    uint8_t twitchResponse = 2; // +0x12: 0 down, 1 up, 2 hold (twitch, or reeling with the rod held back)
+    uint8_t buoyancy = 2;       // +0x2C: landing depth class
+    float speedBase[4] = {};    // reel down, reel up, rest sink, rest float-up
+    float speedRate[4] = {};
+};
+
+// Lure +0x50 in RF3: 1 reeling, 2 resting.
+enum class LureMode : int32_t { Reel = 1, Rest = 2 };
+
+// One 60 Hz frame of input.
+struct LureStep {
+    bool reeling = false;        // Cross held (in OoT: the reel button)
+    bool rodBack = false;        // rod pulled far back (RF3: raw stick Y > 230)
+    float floorDepth = 1000.0f;  // m below the surface: the lure's resting depth on the bottom
+};
+
+// Depth below the surface (m, + = deeper) of a lure in the water. Vertical only: the host
+// keeps moving the lure horizontally. The surface is RF3's resting level for a floating lure.
+class LureSim {
+  public:
+    explicit LureSim(const LureMove& move) : mMove(move) {}
+
+    // The cast has landed: start resting at the landing depth (3.2 "Landing").
+    void Land();
+    // Replay tests: put the lure at this depth (keeps t, mode, twitch).
+    void SetDepth(float depth) { mDepth = depth; }
+    void Step(const LureStep& in);
+
+    float GetDepth() const { return mDepth; }
+    float GetT() const { return mT; }
+    float GetVelocity() const { return mVelocity; } // m/s this frame, + = down
+    LureMode GetMode() const { return mMode; }
+    bool IsTwitching() const { return mTwitchFrames > 0; }
+    bool IsOnBottom() const { return mOnBottom; }
+    bool IsDiveStopped() const { return mDiveStopped; }
+
+  private:
+    float Speed(int pair) const { return mMove.speedBase[pair] + mMove.speedRate[pair] * mT; }
+    float ByTwitchResponse() const;
+
+    LureMove mMove;
+    LureMode mMode = LureMode::Rest;
+    float mDepth = 0.0f;
+    float mT = 0.0f;
+    float mVelocity = 0.0f;
+    float mMomentum = 0.0f;  // m/s carried from reeling, fading x0.95 per frame at rest
+    bool mOnBottom = false;
+    bool mAtSurface = false;
+    bool mDiveStopped = false;
+    // Twitch detector (0x002027C0): only set up once Cross has been pressed after the cast.
+    bool mTwitchArmed = false;
+    int mTwitchState = 0;
+    int mTwitchFrames = 0; // frames left with the twitch flag set
+};
+
+// Landing depths below the resting level: the recorded landing y (0.057 topwater, 0.316
+// otherwise; 0.3 m cap + one frame) minus the resting level 0.035 (RF3-MECHANICS 3.2).
+inline constexpr float kLureLandingDepthTopwater = 0.022f;
+inline constexpr float kLureLandingDepth = 0.281f;
+// On the bottom while within this of the resting depth there (probe 0.02 m below, rest 0.01 m up).
+inline constexpr float kLureBottomBand = 0.01f;
+// A twitch lasts 30 frames (0.5 s), recorded.
+inline constexpr int kLureTwitchFrames = 30;
+// [assumed] The Floating Minnow stops diving at y 0.204 while reeled (0.169 m below the resting
+// level), for a reason not found yet (DESIGN "Polish later"). Applied to every buoyancy-1 lure.
+inline constexpr float kLureDiveStopBuoyancy1 = 0.169f;
+// [assumed] A reeled Popper gets no deeper than 0.048 m below the resting level (recorded, 4 reels;
+// RF3 then brings it back to the surface, not modelled). Applied to every buoyancy-0 (topwater) lure
+// (user's decision, 2026-10-07; DESIGN "Polish later").
+inline constexpr float kLureDiveStopBuoyancy0 = 0.048f;
+
+// --- Bait depth (step 20b-5; RF3-MECHANICS 2.9, DESIGN 20b-5) -----------------
+
+// Mod design (user, 2026-10-07): the float depth setting (Surface .. Deepest) sets the bait's depth in m.
+// RF3 itself rests every bait at 0.2 m whatever the setting; equal steps as RF3's tackle pane shows them.
+inline constexpr float kBaitDepthBySetting[5] = { 0.2f, 0.5f, 0.8f, 1.1f, 1.4f };
+// RF3: a bait rig lands with a 0.2 m target depth (0x00201F70).
+inline constexpr float kBaitLandingDepth = 0.2f;
+// [assumed] It then sinks to its depth at RF3's bait sink speed (0x002194B0: 0.1 m/s below 0.5 m).
+inline constexpr float kBaitSinkSpeed = 0.1f;
+
+// A bait under a float: sinks to its target depth and holds there; reeling keeps its depth (RF3); the
+// bottom stops it. targetDepth >= 1000 = no float (sinks to the bottom).
+class BaitSim {
+  public:
+    explicit BaitSim(float targetDepth) : mTarget(targetDepth) {}
+
+    void Land();
+    void Step(bool reeling, float floorDepth);
+
+    float GetDepth() const { return mDepth; }
+    float GetTarget() const { return mTarget; }
+    bool IsReeling() const { return mReeling; }
+    bool IsOnBottom() const { return mOnBottom; }
+
+  private:
+    float mTarget;
+    float mDepth = 0.0f;
+    bool mReeling = false;
+    bool mOnBottom = false;
+};
+
+// --- Fly depth (step 20c-3b; RF3-MECHANICS 2.9) -----------------------------------
+
+// RF3: a dry fly lands with a 0.05 m target and floats up at 0.1 m/s; a sunken fly lands at the 0.3 m cap and
+// stays (it only sinks deeper than 0.5 m). Depths below the surface ([assumed] relative to the resting level).
+inline constexpr float kFlyDryLandingDepth = 0.05f;
+inline constexpr float kFlySunkDepth = 0.3f;
+inline constexpr float kFlyRiseSpeed = 0.1f;
+
+class FlySim {
+  public:
+    explicit FlySim(bool sunk) : mSunk(sunk) {}
+
+    void Land() {
+        mDepth = mSunk ? kFlySunkDepth : kFlyDryLandingDepth;
+        mReeling = false;
+        mOnBottom = false;
+    }
+    void Step(bool reeling, float floorDepth);
+
+    float GetDepth() const { return mDepth; }
+    bool IsSunk() const { return mSunk; }
+    bool IsReeling() const { return mReeling; }
+    bool IsOnBottom() const { return mOnBottom; }
+
+  private:
+    bool mSunk;
+    float mDepth = 0.0f;
+    bool mReeling = false;
+    bool mOnBottom = false;
+};
+
+// Step 20c-3c: RF3's fly cast (3.1, recorded 2026-10-07). Holding the rod button raises the power and the line
+// length by 0.15/s (to 0.9 and 1.1); the cast's distance follows the hold time. Returns the share of a full fly
+// cast (11.9 m recorded) for heldSeconds, from the recorded table, extended linearly to 0 m at 0 s.
+float FlyCastDistanceFactor(float heldSeconds);
 
 // Tension limit for this fish and tackle (1.4).
 float TensionLimit(const FishParams& fish, const TackleParams& tackle);

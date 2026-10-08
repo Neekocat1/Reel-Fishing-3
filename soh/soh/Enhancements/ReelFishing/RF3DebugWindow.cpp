@@ -80,7 +80,10 @@ static void DrawApproach() {
             ImGui::Text("  inspecting for %.1f s more, then chases again", a.chaserWaitLeft);
         }
     }
-    ImGui::Text("Sight range %.1f m (activity %d)   wary fish: %d", a.sightRangeM, a.activityLevel, a.waryFish);
+    ImGui::Text("Sight range %.1f m (activity %d, tackle heart %+d, lure appeal %d/15)   wary fish: %d", a.sightRangeM,
+                a.activityLevel, a.sightBonus, a.lureAppeal, a.waryFish);
+    ImGui::Text("Fish ignoring this tackle this visit: %d can't take the rod, %d don't see the lure (appeal 0)",
+                a.blockedRod, a.blockedAppeal); // step 18c
     float power, factor;
     RF3Cast_GetLast(&power, &factor);
     ImGui::Text("Last cast: power %.2f -> %.0f%% of a full cast (hold B through the swing for full)", power,
@@ -121,7 +124,7 @@ static bool PickFrom(const char* label, const std::vector<T>& items, int32_t cur
 }
 
 static void DrawTackle() {
-    if (!ImGui::CollapsingHeader("Tackle choice (step 17, saved, not used by the fishing yet)")) {
+    if (!ImGui::CollapsingHeader("Tackle choice (saved; step 18b: the fight uses it, bites not yet)")) {
         return;
     }
     const rf3tackle::Assets& a = rf3tackle::Get();
@@ -130,10 +133,19 @@ static void DrawTackle() {
                 a.texturesMissing);
     RF3TackleChoice c;
     RF3Tackle_Get(&c);
-    static const char* kBoxNames[RF3_TACKLE_BOXES] = { "Bass (rod 0)", "Trout (rod 1)" };
-    int box = c.box;
-    if (ImGui::Combo("Box", &box, kBoxNames, RF3_TACKLE_BOXES)) {
-        RF3Tackle_SetBox(box, "debug-window");
+    // Step 19a: every box tackle.json has; without it, the two lure boxes by number.
+    std::vector<std::string> boxNames;
+    for (int32_t b = 0; b < RF3Tackle_BoxCount(); b++) {
+        boxNames.push_back(a.loaded && b < static_cast<int32_t>(a.boxes.size()) ? a.boxes[b].title
+                                                                                : "Box " + std::to_string(b));
+    }
+    if (ImGui::BeginCombo("Box", c.box < static_cast<int32_t>(boxNames.size()) ? boxNames[c.box].c_str() : "?")) {
+        for (int32_t b = 0; b < static_cast<int32_t>(boxNames.size()); b++) {
+            if (ImGui::Selectable(boxNames[b].c_str(), b == c.box)) {
+                RF3Tackle_SetBox(b, "debug-window");
+            }
+        }
+        ImGui::EndCombo();
     }
     if (!a.loaded || c.box >= static_cast<int32_t>(a.boxes.size())) {
         int line = c.line;
@@ -153,6 +165,13 @@ static void DrawTackle() {
         return;
     }
     const rf3tackle::Box& b = a.boxes[c.box];
+    if (b.kind == "bait") { // step 19c: set on the tackle box screen
+        const rf3tackle::Item* f = rf3tackle::FindFloat(b, c.floatIdx);
+        const rf3tackle::Bait* bt = rf3tackle::FindBait(b, c.bait);
+        ImGui::Text("Bait set: float %s, depth %d/4, bait %s, hook size %d/4 (%s)", f ? f->name.c_str() : "?", c.depth,
+                    bt ? bt->name.c_str() : "--- (nothing bites)", c.size,
+                    bt ? bt->hook.c_str() : b.hookDefault.c_str());
+    }
     auto itemName = [](const rf3tackle::Item& i) { return std::to_string(i.index) + " " + i.name; };
     auto itemKey = [](const rf3tackle::Item& i) { return i.index; };
     auto targetName = [](const rf3tackle::Target& t) { return std::to_string(t.record) + " " + t.name; };
@@ -191,6 +210,24 @@ static void DrawTackle() {
     }
 }
 
+// Step 20c-3d: the fly cast's false-casting animation (frames of Link's throw), saved as CVars.
+static void DrawFlyCast() {
+    if (!ImGui::CollapsingHeader("Fly cast animation (step 20c-3d)")) {
+        return;
+    }
+    ImGui::TextDisabled("While B is held with a fly box, Link swings the throw between Back and Forward;");
+    ImGui::TextDisabled("on release the fly is cast when the throw reaches Release. Lengths: see rf3_records.txt.");
+    const char* labels[4] = { "Back frame", "Forward frame", "Swing speed", "Release frame" };
+    const float steps[4] = { 0.5f, 0.5f, 0.05f, 0.5f };
+    for (int i = 0; i < 4; i++) {
+        float v = RF3FlyCast_Tuning(i);
+        if (ImGui::DragFloat(labels[i], &v, steps[i], 0.0f, 60.0f, "%.2f")) {
+            RF3FlyCast_SetTuning(i, v);
+        }
+    }
+    ImGui::Text("Charging now: %s", RF3FlyCast_IsCharging() ? "yes" : "no");
+}
+
 void RF3DebugWindow::DrawElement() {
     RF3FightStatus s;
     RF3Fight_GetStatus(&s);
@@ -198,6 +235,7 @@ void RF3DebugWindow::DrawElement() {
     ImGui::Text("Reel Fishing III mechanics: %s", RF3_IsEnabled() ? "ON" : "OFF");
     ImGui::Text("Fishing rod owned (this save file): %s", RF3Rod_IsOwned() ? "yes" : "no"); // step 15a
     DrawTackle();
+    DrawFlyCast();
     if (!s.active) {
         ImGui::Separator();
         DrawApproach();
@@ -219,6 +257,10 @@ void RF3DebugWindow::DrawElement() {
         ImGui::Text("Hook-set window %.2f - %.2f s, fish lets go at %.2f s", s.hookWindowStart, s.hookWindowEnd,
                     s.hookGiveUpTime);
         return; // the fight values below are not used until the hook is set
+    }
+    // Testing aid (user request, 2026-10-07): land the hooked fish now, through the normal catch path.
+    if (ImGui::Button("Catch the hooked fish now (debug)")) {
+        RF3Fight_ForceCatch();
     }
     ImGui::Text("Hook set: timing %.2f, strength %.2f  (start stamina = 100 - 25 x timing)", s.hookSetTiming,
                 s.hookSetStrength);
