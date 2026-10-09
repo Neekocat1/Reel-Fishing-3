@@ -2,20 +2,20 @@
   "regions": [
     {
       "angle": -16.60000228881836,
+      "currentReach": 5.0,
+      "currentSpeed": 0.20000000298023224,
+      "currentYaw": 58.0,
       "fishCount": 6,
       "maxX": 1052.007080078125,
       "maxZ": 4189.892578125,
       "minX": 664.1992797851563,
       "minZ": 3883.94873046875,
       "name": "Scene 87 region 1",
+      "randoArea": "RR_LH_FISHING_ISLAND",
       "records": [
         {
-          "name": "Largemouth Bass n",
-          "record": 15
-        },
-        {
-          "name": "Bluegill n",
-          "record": 20
+          "name": "Rainbow Trout s",
+          "record": 21
         }
       ],
       "scene": 87,
@@ -23,12 +23,16 @@
     },
     {
       "angle": -20.0,
+      "currentReach": 5.0,
+      "currentSpeed": 0.20000000298023224,
+      "currentYaw": -153.0,
       "fishCount": 6,
       "maxX": -110.82696533203125,
       "maxZ": 3457.982666015625,
       "minX": -454.19830322265625,
       "minZ": 3209.649658203125,
       "name": "Scene 87 region 2",
+      "randoArea": "RR_LAKE_HYLIA",
       "records": [
         {
           "name": "Rainbow Trout n",
@@ -49,6 +53,118 @@
         {
           "name": "Rainbow Trout s",
           "record": 21
+        },
+        {
+          "name": "Char s",
+          "record": 0
+        },
+        {
+          "name": "Char n",
+          "record": 1
+        },
+        {
+          "name": "Char b",
+          "record": 2
+        },
+        {
+          "name": "Yamame Trout n",
+          "record": 5
+        },
+        {
+          "name": "Yamame Trout s",
+          "record": 4
+        },
+        {
+          "name": "Splake s",
+          "record": 6
+        },
+        {
+          "name": "Splake n",
+          "record": 7
+        },
+        {
+          "name": "Bullhead n",
+          "record": 8
+        },
+        {
+          "name": "D.B.C. Carp n",
+          "record": 11
+        },
+        {
+          "name": "Dace n",
+          "record": 9
+        },
+        {
+          "name": "Pale Chub n",
+          "record": 12
+        },
+        {
+          "name": "Bitterling n",
+          "record": 13
+        },
+        {
+          "name": "Largemouth Bass n",
+          "record": 15
+        },
+        {
+          "name": "Largemouth Bass b",
+          "record": 16
+        },
+        {
+          "name": "Florida Bass b",
+          "record": 18
+        },
+        {
+          "name": "Florida Bass n",
+          "record": 17
+        },
+        {
+          "name": "Bluegill s",
+          "record": 19
+        },
+        {
+          "name": "Bluegill n",
+          "record": 20
+        },
+        {
+          "name": "Brown Trout b",
+          "record": 25
+        },
+        {
+          "name": "King Salmon b",
+          "record": 26
+        },
+        {
+          "name": "Brown Trout n",
+          "record": 24
+        },
+        {
+          "name": "Steelhead Trout n",
+          "record": 30
+        },
+        {
+          "name": "Cherry Salmon n",
+          "record": 33
+        },
+        {
+          "name": "B.C. Roach n",
+          "record": 35
+        },
+        {
+          "name": "Silver Carp n",
+          "record": 37
+        },
+        {
+          "name": "Bighead Carp n",
+          "record": 38
+        },
+        {
+          "name": "Carp b",
+          "record": 39
+        },
+        {
+          "name": "Grass Carp b",
+          "record": 40
         }
       ],
       "scene": 87,
@@ -56,6 +172,7 @@
     },
     {
       "angle": 0.0,
+      "currentReach": 5.0,
       "fishCount": 4,
       "maxX": 794.6702880859375,
       "maxZ": 193.88314819335938,

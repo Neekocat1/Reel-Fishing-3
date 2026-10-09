@@ -59,6 +59,7 @@ class StaticData {
     static void RegisterBeehiveLocations();
     static void RegisterCowLocations();
     static void RegisterFishLocations();
+    static void RegisterRF3Locations(); // Reel Fishing III mod (step 24b), RF3RandoChecks.cpp
     static void RegisterFairyLocations();
     static void RegisterPotLocations();
     static void RegisterFreestandingLocations();

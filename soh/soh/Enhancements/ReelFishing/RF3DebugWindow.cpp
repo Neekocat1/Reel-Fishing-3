@@ -1,10 +1,17 @@
 #include "RF3DebugWindow.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
 
+#include <libultraship/bridge/consolevariablebridge.h>
+
+#include "soh/cvar_prefixes.h"
 #include "RF3Bridge.h"
+#include "RF3Items.h"
+#include "RF3FishModel.h"
+#include "RF3LureModel.h"
 #include "RF3TackleAssets.h"
 
 namespace {
@@ -123,6 +130,59 @@ static bool PickFrom(const char* label, const std::vector<T>& items, int32_t cur
     return changed;
 }
 
+static void DrawStock() {
+    static const char* kKinds[RF3_STOCK_KINDS] = { "Rods", "Lures", "Flies", "Baits", "Floats" };
+    if (!ImGui::CollapsingHeader("Tackle stock (saved; step 21b: one item per catch)")) {
+        return;
+    }
+    int32_t lastKind = -1;
+    int32_t lastIndex = -1;
+    RF3Stock_LastUnlock(&lastKind, &lastIndex);
+    ImGui::Text("Fish caught (unlock count): %u   last unlock: %s %s", RF3Stock_CatchCount(),
+                RF3Stock_KindName(lastKind), lastKind >= 0 ? RF3Stock_Name(lastKind, lastIndex) : "-");
+    // Step 21c: progress toward the rod conditions (docs/DESIGN.md step 21).
+    RF3RodProgress p;
+    RF3Stock_GetRodProgress(&p);
+    ImGui::TextWrapped("Rod conditions: any fish %d/5 (bass rod), bass %d/3 (trout rod), trout %d/3 (salmon rod), "
+                       "salmon %d/3 (fly rod), "
+                       "with Fly Rod %d/5 (big game), Largemouth > 14 in %s (pole S), with Pole S %d/5 (pole L), "
+                       "Pale Chub %s (crucian), Bitterling > 3 in %s (all-purpose), Bitterling %s (bitterling rod)",
+                       p.total, p.bass, p.trout, p.salmon, p.withFlyRod, p.largemouthOver14in ? "yes" : "no", p.withPoleS,
+                       p.paleChub ? "yes" : "no", p.bitterlingOver3in ? "yes" : "no", p.bitterling ? "yes" : "no");
+    for (int32_t k = 0; k < RF3_STOCK_KINDS; k++) {
+        std::string list;
+        int32_t have = 0;
+        for (int32_t i = 0; i < RF3Stock_Size(k); i++) {
+            if (RF3Stock_Has(k, i)) {
+                have++;
+                list += (list.empty() ? "" : ", ") + std::to_string(i) + " " + RF3Stock_Name(k, i) + " x" +
+                        std::to_string(RF3Stock_Count(k, i));
+                if (RF3Stock_Lost(k, i) > 0) { // step 21e: back on the next scene change
+                    list += " (" + std::to_string(RF3Stock_Lost(k, i)) + " lost)";
+                }
+            }
+        }
+        ImGui::TextWrapped("%s %d/%d: %s", kKinds[k], have, RF3Stock_Size(k), list.empty() ? "-" : list.c_str());
+    }
+    // Step 22a: give one item through OoT's item-get (Link holds it up), to check the models and the give path.
+    static int giveKind = RF3_STOCK_LURE;
+    static int giveIndex = 0;
+    ImGui::Combo("Give kind", &giveKind, kKinds, RF3_STOCK_KINDS);
+    ImGui::InputInt("Give index", &giveIndex);
+    giveIndex = std::max(0, std::min(giveIndex, RF3Stock_Size(giveKind) - 1));
+    ImGui::SameLine();
+    ImGui::Text("%s", RF3Stock_Name(giveKind, giveIndex));
+    if (ImGui::Button("Give with item-get animation")) {
+        int32_t offset = RF3Items_Offset(giveKind, giveIndex);
+        int32_t ok = RF3Items_GiveWithAnimation(offset);
+        RF3Rod_LogEvent(ok ? "item-get-debug" : "item-get-debug-refused", offset);
+    }
+    float scale = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiLureScale"), 0.03f);
+    if (ImGui::SliderFloat("Lure model scale (item get)", &scale, 0.005f, 0.2f, "%.3f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiLureScale"), scale);
+    }
+}
+
 static void DrawTackle() {
     if (!ImGui::CollapsingHeader("Tackle choice (saved; step 18b: the fight uses it, bites not yet)")) {
         return;
@@ -228,14 +288,104 @@ static void DrawFlyCast() {
     ImGui::Text("Charging now: %s", RF3FlyCast_IsCharging() ? "yes" : "no");
 }
 
+// Steps 25c-2, 25d-2: RF3's lure, fly, bait and float models (mods/rf3_models.o2r). Every change is logged to
+// rf3_models.txt.
+static void DrawLureModel() {
+    if (!ImGui::CollapsingHeader("RF3 tackle models (steps 25c-2, 25d-2)")) {
+        return;
+    }
+    bool on = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModels"), 1) != 0;
+    if (ImGui::Checkbox("Draw RF3's models on the line", &on)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModels"), on ? 1 : 0);
+    }
+    // Size per kind, OoT units per RF3 metre; defaults as RF3LureModel.cpp (DESIGN 25c/25d, assumed).
+    struct SizeRow {
+        const char* label;
+        const char* cvar;
+        float def;
+        float max;
+    };
+    static const SizeRow kRows[] = {
+        { "Lure size (units/m; 270 = OoT's lure)", CVAR_ENHANCEMENT("ReelFishing3.LureModelScale"), 270.0f, 1000.0f },
+        { "Fly size (units/m)", CVAR_ENHANCEMENT("ReelFishing3.FlyModelScale"), 600.0f, 2000.0f },
+        { "Bait size (units/m)", CVAR_ENHANCEMENT("ReelFishing3.BaitModelScale"), 400.0f, 2000.0f },
+        { "Float size (units/m; 68 = the game's metre)", CVAR_ENHANCEMENT("ReelFishing3.FloatModelScale"), 68.0f,
+          500.0f },
+    };
+    for (const SizeRow& r : kRows) {
+        float v = CVarGetFloat(r.cvar, r.def);
+        if (ImGui::SliderFloat(r.label, &v, 20.0f, r.max, "%.0f")) {
+            CVarSetFloat(r.cvar, v);
+        }
+    }
+    bool flip = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModelFlip"), 0) != 0;
+    if (ImGui::Checkbox("Turn lures and flies around (front <-> back)", &flip)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModelFlip"), flip ? 1 : 0);
+    }
+    // Preview: show any model in place of the chosen one (only the look changes).
+    static const char* kKinds[] = { "Off (the chosen tackle)", "Lure", "Fly", "Bait", "Float" };
+    static const int kStockKind[] = { RF3_STOCK_LURE, RF3_STOCK_FLY, RF3_STOCK_BAIT, RF3_STOCK_FLOAT };
+    static const int kCounts[] = { 91, 40, 12, 6 };
+    int kind = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.ModelPreviewKind"), -1);
+    int combo = kind + 1;
+    if (ImGui::Combo("Show model", &combo, kKinds, IM_ARRAYSIZE(kKinds))) {
+        kind = combo - 1;
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.ModelPreviewKind"), kind);
+    }
+    if (kind >= 0 && kind < 4) {
+        int index = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.ModelPreviewIndex"), 0);
+        if (ImGui::InputInt("Model #", &index)) {
+            index = std::max(0, std::min(index, kCounts[kind] - 1));
+            CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.ModelPreviewIndex"), index);
+        }
+        ImGui::Text("  %s (only the look changes; the fishing uses the chosen tackle)",
+                    RF3Stock_Name(kStockKind[kind], index));
+    }
+    ImGui::TextWrapped("Now: %s", RF3LureModel_Status());
+    ImGui::TextWrapped("Float: %s", RF3LureModel_FloatStatus());
+}
+
+// Step 25e-3: RF3's fish models for region fish (mods/rf3_models.o2r). Changes are logged to rf3_models.txt.
+static void DrawFishModel() {
+    if (!ImGui::CollapsingHeader("RF3 fish models (step 25e)")) {
+        return;
+    }
+    bool on = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishModels"), 1) != 0;
+    if (ImGui::Checkbox("Draw region fish with RF3's models", &on)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishModels"), on ? 1 : 0);
+    }
+    float scale = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishModelScale"), RF3_UNITS_PER_METRE);
+    if (ImGui::SliderFloat("Fish size (units/m; 68 = the game's metre)", &scale, 20.0f, 400.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishModelScale"), scale);
+    }
+    float bend = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishModelBend"), 1.0f);
+    if (ImGui::SliderFloat("Swim bend (x OoT's; negative = other way)", &bend, -3.0f, 3.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishModelBend"), bend);
+    }
+    bool bind = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishModelBindPose"), 0) != 0;
+    if (ImGui::Checkbox("Freeze in the bind pose (no bending)", &bind)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishModelBindPose"), bind ? 1 : 0);
+    }
+    int preview = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishModelPreview"), -1);
+    if (ImGui::InputInt("Show fish record # on every region fish (-1 = its own)", &preview)) {
+        preview = std::max(-1, std::min(preview, 40));
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishModelPreview"), preview);
+    }
+    ImGui::TextDisabled("Only the look changes; records 0-40 have RF3 models (32 shows 33's).");
+    ImGui::TextWrapped("Now: %s", RF3FishModel_Status());
+}
+
 void RF3DebugWindow::DrawElement() {
     RF3FightStatus s;
     RF3Fight_GetStatus(&s);
 
     ImGui::Text("Reel Fishing III mechanics: %s", RF3_IsEnabled() ? "ON" : "OFF");
     ImGui::Text("Fishing rod owned (this save file): %s", RF3Rod_IsOwned() ? "yes" : "no"); // step 15a
+    DrawStock();
     DrawTackle();
     DrawFlyCast();
+    DrawLureModel();
+    DrawFishModel();
     if (!s.active) {
         ImGui::Separator();
         DrawApproach();

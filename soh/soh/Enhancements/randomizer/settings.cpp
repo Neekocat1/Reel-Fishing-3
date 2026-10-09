@@ -1103,6 +1103,9 @@ void Settings::CreateOptions() {
     });
     OPT_U8(RSK_FISHSANITY_POND_COUNT, {NumOpts(0,17,1)}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("FishsanityPondCount"), WIDGET_CVAR_SLIDER_INT, 0, true, nullptr, IMFLAG_NONE);
     OPT_BOOL(RSK_FISHSANITY_AGE_SPLIT, CVAR_RANDOMIZER_SETTING("FishsanityAgeSplit"));
+    // Reel Fishing III mod (step 24b): RF3 tackle checks (RF3RandoChecks.cpp).
+    OPT_BOOL(RSK_RF3_TACKLE_SHUFFLE, CVAR_RANDOMIZER_SETTING("RF3TackleShuffle"));
+    OPT_U8(RSK_RF3_CATCH_CHECKS, {NumOpts(0,147,1)}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("RF3CatchChecks"), WIDGET_CVAR_SLIDER_INT, 20, false, nullptr, IMFLAG_NONE);
     OPT_BOOL(RSK_SHUFFLE_FOUNTAIN_FAIRIES, CVAR_RANDOMIZER_SETTING("ShuffleFountainFairies"));
     OPT_BOOL(RSK_SHUFFLE_STONE_FAIRIES, CVAR_RANDOMIZER_SETTING("ShuffleStoneFairies"));
     OPT_BOOL(RSK_SHUFFLE_BEAN_FAIRIES, CVAR_RANDOMIZER_SETTING("ShuffleBeanFairies"));
@@ -2035,6 +2038,8 @@ void Settings::CreateOptions() {
                                   &mOptions[RSK_FISHSANITY],
                                   &mOptions[RSK_FISHSANITY_POND_COUNT],
                                   &mOptions[RSK_FISHSANITY_AGE_SPLIT],
+                                  &mOptions[RSK_RF3_TACKLE_SHUFFLE],
+                                  &mOptions[RSK_RF3_CATCH_CHECKS],
                                   &mOptions[RSK_SHUFFLE_FREESTANDING],
                                   &mOptions[RSK_SHUFFLE_WONDER_ITEMS],
                                   &mOptions[RSK_SHUFFLE_SILVER],
@@ -2260,6 +2265,8 @@ void Settings::CreateOptions() {
                                             &mOptions[RSK_FISHSANITY],
                                             &mOptions[RSK_FISHSANITY_POND_COUNT],
                                             &mOptions[RSK_FISHSANITY_AGE_SPLIT],
+                                            &mOptions[RSK_RF3_TACKLE_SHUFFLE],
+                                            &mOptions[RSK_RF3_CATCH_CHECKS],
                                             &mOptions[RSK_SHUFFLE_FISHING_POLE],
                                             &mOptions[RSK_SHUFFLE_TOKENS],
                                             &mOptions[RSK_SHUFFLE_SCRUBS],

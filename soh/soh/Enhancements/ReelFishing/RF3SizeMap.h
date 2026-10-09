@@ -35,11 +35,23 @@ inline const FishParams& AdultBassForMm(float mm) {
 // onto the species' adult range (lowest minimum to highest maximum of its pool records).
 inline constexpr int kSpeciesCount = 22; // the random pool: species 0..21 (DESIGN step 14)
 
+// Step 23a: OoT's own pond fish as mod species (records 50-52, RF3FishTable.h). Not in the random pool, but the
+// size helpers below use their records too. The loach has its own OoT range: base 43..45 plus 0..5
+// (z_fishing.c sFishInits / Fishing_Init), mapped onto the user's 500..900 mm.
+inline constexpr int kSpeciesHylianBass = 33;
+inline constexpr int kSpeciesHylianLoach = 34;
+inline constexpr float kOotLoachLengthMin = 43.0f;
+inline constexpr float kOotLoachLengthMax = 50.0f;
+
+inline bool SizeRecordFor(const FishRecord& r, int species) {
+    return r.species == species && (r.inRandomPool || species == kSpeciesHylianBass || species == kSpeciesHylianLoach);
+}
+
 inline void SpeciesAdultRangeMm(int species, float* minMm, float* maxMm) {
     *minMm = 1e9f;
     *maxMm = 0.0f;
     for (const FishRecord& r : kFishRecords) {
-        if (r.inRandomPool && r.species == species) {
+        if (SizeRecordFor(r, species)) {
             *minMm = std::min(*minMm, static_cast<float>(r.params.lengthMinMm));
             *maxMm = std::max(*maxMm, static_cast<float>(r.params.lengthMaxMm));
         }
@@ -49,7 +61,14 @@ inline void SpeciesAdultRangeMm(int species, float* minMm, float* maxMm) {
 inline float OotLengthToSpeciesMm(int species, float ootLength) {
     float minMm, maxMm;
     SpeciesAdultRangeMm(species, &minMm, &maxMm);
-    return minMm + (ootLength - kOotLengthMin) * (maxMm - minMm) / (kOotLengthMax - kOotLengthMin);
+    float ootMin = (species == kSpeciesHylianLoach) ? kOotLoachLengthMin : kOotLengthMin;
+    float ootMax = (species == kSpeciesHylianLoach) ? kOotLoachLengthMax : kOotLengthMax;
+    // Step 23b: the loach's range is narrow (400 mm over 7 OoT units), so a child's loach (OoT x0.73) would go
+    // below zero; under its minimum it scales in proportion instead (31.4 -> 365 mm).
+    if (species == kSpeciesHylianLoach && ootLength < ootMin) {
+        return minMm * ootLength / ootMin;
+    }
+    return minMm + (ootLength - ootMin) * (maxMm - minMm) / (ootMax - ootMin);
 }
 
 // The species' pool record for mm: the smallest class whose maximum is at least mm, else the
@@ -58,7 +77,7 @@ inline const FishRecord& SpeciesRecordForMm(int species, float mm) {
     const FishRecord* best = nullptr;    // smallest class with lengthMaxMm >= mm
     const FishRecord* largest = nullptr; // fallback above every class
     for (const FishRecord& r : kFishRecords) {
-        if (!r.inRandomPool || r.species != species) {
+        if (!SizeRecordFor(r, species)) {
             continue;
         }
         if (largest == nullptr || r.params.lengthMaxMm > largest->params.lengthMaxMm) {

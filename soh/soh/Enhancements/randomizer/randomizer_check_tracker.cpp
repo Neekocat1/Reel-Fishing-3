@@ -1,3 +1,4 @@
+#include "soh/Enhancements/ReelFishing/RF3RandoChecks.h" // Reel Fishing III mod (step 24b)
 #include <array>
 #include <string>
 #include <sstream>
@@ -1951,6 +1952,7 @@ bool IsCheckShuffled(RandomizerCheck rc) {
                (loc->GetRCType() != RCTYPE_ICICLE || showIcicles) &&
                (loc->GetRCType() != RCTYPE_RED_ICE || showRedIce) &&
                (loc->GetRCType() != RCTYPE_FISH || Rando::Fishsanity::GetFishLocationIncluded(loc)) &&
+               (loc->GetRCType() != RCTYPE_RF3 || RF3Rando_CheckIncludedBySeed(loc->GetRandomizerCheck())) &&
                (loc->GetRCType() != RCTYPE_FREESTANDING ||
                 (showOverworldFreestanding && RandomizerCheckObjects::AreaIsOverworld(loc->GetArea())) ||
                 (showDungeonFreestanding && RandomizerCheckObjects::AreaIsDungeon(loc->GetArea()))) &&

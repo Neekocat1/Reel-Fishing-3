@@ -1,3 +1,4 @@
+#include "soh/Enhancements/ReelFishing/RF3RandoChecks.h" // Reel Fishing III mod (step 24b)
 #include "location_access.h"
 
 #include "soh/Enhancements/randomizer/static_data.h"
@@ -918,6 +919,7 @@ void RegionTable_Init() {
     RegionTable_Init_IceCavern();
     RegionTable_Init_GerudoTrainingGround();
     RegionTable_Init_GanonsCastle();
+    RF3Rando_AddRegionLocations(); // Reel Fishing III mod (step 24b)
 
     // Set parent regions
     for (uint32_t i = RR_ROOT; i < RR_MAX; i++) {

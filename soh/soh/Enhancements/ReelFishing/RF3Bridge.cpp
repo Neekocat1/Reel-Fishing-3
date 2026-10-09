@@ -39,16 +39,14 @@ const rf3::FishRecord* sFightRecord = nullptr;
 constexpr int kMaxSpeciesFish = 32;
 int sSpecies[kMaxSpeciesFish];
 bool sSpeciesRolled[kMaxSpeciesFish] = {};
-uint32_t sSpeciesRng = 0;
 
-int RollSpecies() {
-    if (sSpeciesRng == 0) {
-        sSpeciesRng = static_cast<uint32_t>(std::time(nullptr)) | 1u;
-    }
-    sSpeciesRng ^= sSpeciesRng << 13;
-    sSpeciesRng ^= sSpeciesRng >> 17;
-    sSpeciesRng ^= sSpeciesRng << 5;
-    return static_cast<int>(sSpeciesRng % rf3::kSpeciesCount);
+// Step 23b (user, 2026-10-08): the pond spawns only OoT's own fish. Its loaches are fish 15 and 16
+// (z_fishing.c sFishInits isLoach, params 115/116); every other pond fish is a Hylian Bass. RF3's species
+// stay in the fish regions (step 16). Replaces step 14b's random species roll.
+constexpr int kFirstPondLoach = 15;
+
+int PondSpecies(int32_t fishIndex) {
+    return fishIndex >= kFirstPondLoach ? rf3::kSpeciesHylianLoach : rf3::kSpeciesHylianBass;
 }
 
 // Step 16d: a region fish (index 32 + slot) has a fixed record and RF3 length, set when it spawned.
@@ -79,7 +77,7 @@ int SpeciesOf(int32_t fishIndex) {
         return 8;
     }
     if (!sSpeciesRolled[fishIndex]) {
-        sSpecies[fishIndex] = RollSpecies();
+        sSpecies[fishIndex] = PondSpecies(fishIndex);
         sSpeciesRolled[fishIndex] = true;
     }
     return sSpecies[fishIndex];

@@ -12,7 +12,7 @@
 namespace rf3 {
 
 struct FishRecord {
-    int16_t record;          // fishdata.fdt record index
+    int16_t record;          // fishdata.fdt record index; 50+ = the mod's OoT fish (step 23a)
     int8_t species;          // RF3 species id
     char sizeClass;          // 's' juvenile, 'n' normal adult, 'b' big, 'l' legendary
     bool inRandomPool;       // step 14: picked for OoT fish
@@ -105,9 +105,30 @@ inline constexpr FishRecord kFishRecords[] = {
       { "Red Carp b (41)", 1.0f, 0.100000001f, 0.899999976f, 0.0f, 0, 9, 0, 0, 10.0f, 1.0f, 11.0f, 10.0f, 1.5f, 30, 13, 900, 1100, 8000.0f, 12000.0f, 3.5f, 255, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } } },
     { 42, 23, 'b', false, "Black Carp",
       { "Black Carp b (42)", 1.0f, 0.100000001f, 0.899999976f, 0.400000006f, 2, 3, 0, 0, 8.0f, 3.0f, 4.0f, 3.0f, 1.5f, 30, 13, 900, 1100, 8000.0f, 12000.0f, 3.5f, 255, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } } },
+    { 50, 33, 'n', false, "Hylian Bass",
+      { "Hylian Bass n (50)", 2.0f, 0.25999999f, 1.15999997f, 0.100000001f, 0, 5, 100, 230, 10.0f, 0.5f, 6.0f, 4.0f, 1.5f, 5, 7, 251, 400, 400.0f, 1199.0f, 3.5f, 255, { 2, 3, 1 }, { 3, 2, 3 }, { 2, 2, 0 } } },
+    { 51, 33, 'b', false, "Hylian Bass",
+      { "Hylian Bass b (51)", 2.0f, 0.25999999f, 1.15999997f, 0.0f, 0, 6, 100, 240, 10.0f, 0.5f, 6.0f, 5.0f, 1.5f, 2, 8, 401, 700, 1200.0f, 4000.0f, 3.5f, 255, { 2, 3, 1 }, { 3, 2, 3 }, { 2, 2, 0 } } },
+    { 52, 34, 'b', false, "Hylian Loach",
+      { "Hylian Loach b (52)", 2.29999995f, 0.129999995f, 1.25999999f, 0.400000006f, 3, 1, 20, 20, 10.0f, 3.0f, 1.0f, 3.0f, 1.5f, 2, 8, 500, 900, 2000.0f, 9000.0f, 3.5f, 255, { 2, 3, 2 }, { 1, -2, 1 }, { 2, 2, 2 } } },
 };
 
 inline constexpr int kFishRecordCount = sizeof(kFishRecords) / sizeof(kFishRecords[0]);
+
+// Step 23a: RF3's per-record tackle tables (heart, shield, appeal; tackle.json) have RF3's records only.
+// A mod record (OoT fish) reads them at the RF3 record it copies.
+inline constexpr int TackleTableRecord(int record) {
+    if (record == 50) {
+        return 15;
+    }
+    if (record == 51) {
+        return 16;
+    }
+    if (record == 52) {
+        return 16;
+    }
+    return record;
+}
 
 } // namespace rf3
 

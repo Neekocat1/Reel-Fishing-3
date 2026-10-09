@@ -199,6 +199,34 @@ void DrawRegion(PlayState* play, rf3::FishRegion& r, int index, const Vec3f& lin
         rf3::RegionsDirty() = true;
     }
 
+    // Step 24a: the randomizer area this water is in (logic requires reaching it, step 24c).
+    std::vector<rf3::RandoArea> areas = rf3::RandoAreasForScene(r.scene);
+    std::string shown = "(any area of this scene)";
+    for (const rf3::RandoArea& a : areas) {
+        if (a.enumName == r.randoArea) {
+            shown = a.name + " (" + a.enumName + ")";
+        }
+    }
+    if (!r.randoArea.empty() && shown == "(any area of this scene)") {
+        shown = r.randoArea + " (not in this scene!)";
+    }
+    if (ImGui::BeginCombo("Randomizer area", shown.c_str())) {
+        if (ImGui::Selectable("(any area of this scene)", r.randoArea.empty())) {
+            r.randoArea.clear();
+            rf3::RegionsDirty() = true;
+        }
+        for (const rf3::RandoArea& a : areas) {
+            std::string label = a.name + " (" + a.enumName + ")";
+            if (ImGui::Selectable(label.c_str(), a.enumName == r.randoArea)) {
+                r.randoArea = a.enumName;
+                rf3::RegionsDirty() = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(%d in scene)", static_cast<int>(areas.size()));
+
     if (ImGui::TreeNode("Species and size classes (s juvenile, n normal, b big)")) {
         DrawRecordChoices(r);
         ImGui::TreePop();

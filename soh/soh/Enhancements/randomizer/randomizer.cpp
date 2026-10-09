@@ -4,6 +4,7 @@
 #include <tuple>
 
 #include <nlohmann/json.hpp>
+#include "soh/Enhancements/ReelFishing/RF3Items.h" // Reel Fishing III mod (step 22a)
 #include <ship/window/FileDropMgr.h>
 #include <spdlog/spdlog.h>
 #include <ship/Context.h>
@@ -1154,6 +1155,16 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
 
     // Gameplay stats: Update the time the item was obtained
     Randomizer_GameplayStats_SetTimestamp(item);
+
+    // Reel Fishing III mod (step 24d): SoH's Fishing Pole is OoT's pole, RF3's rod 10 (then the usual flag below).
+    if (item == RG_FISHING_POLE) {
+        RF3Items_ReceiveSohFishingPole();
+    }
+    // Reel Fishing III mod (step 22a): RF3's tackle goes to the mod's stock.
+    if (item >= RG_RF3_ROD_0 && item <= RG_RF3_LURE_92) {
+        RF3Items_Receive(item - RG_RF3_ROD_0);
+        return Return_Item_Entry(giEntry, RG_NONE);
+    }
 
     // open chest: not progressive gives both flags at once, progressive gives large only as the second copy
     if (item == RG_OPEN_CHEST &&

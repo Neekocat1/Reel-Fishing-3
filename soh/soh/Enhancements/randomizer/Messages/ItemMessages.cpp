@@ -5,6 +5,7 @@
  * etc.
  */
 
+#include "soh/Enhancements/ReelFishing/RF3Items.h" // Reel Fishing III mod (step 24d)
 #include <cstdarg>
 #include <algorithm>
 
@@ -248,6 +249,10 @@ void BuildItemMessage(u16* textId, bool* loadFromMessageTable) {
         BuildTriforcePieceMessage(msg);
     } else if (player->getItemEntry.getItemId == RG_TRIFORCE) {
         BuildTriforceMessage(msg);
+    } else if (player->getItemEntry.getItemId >= RG_RF3_ROD_0 && player->getItemEntry.getItemId <= RG_RF3_LURE_92) {
+        // Reel Fishing III mod (step 24d): RF3 items name themselves (the item table has generic names).
+        msg = CustomMessage(RF3Items_ItemGetText(player->getItemEntry.getItemId - RG_RF3_ROD_0));
+        msg.AutoFormat();
     } else {
         BuildCustomItemMessage(player, msg);
     }

@@ -335,6 +335,106 @@ void FlySim::Step(bool reeling, float floorDepth) {
     mOnBottom = mDepth >= floorDepth - kLureBottomBand;
 }
 
+int UnlockCategory(const bool remaining[kUnlockCategories], uint32_t catchCount) {
+    int left[kUnlockCategories];
+    int k = 0;
+    for (int c = 0; c < kUnlockCategories; c++) {
+        if (remaining[c]) {
+            left[k++] = c;
+        }
+    }
+    return (k == 0) ? -1 : left[catchCount % static_cast<uint32_t>(k)];
+}
+
+int PickUnlockItem(const int* usable, int usableCount, const int* others, int othersCount, uint32_t roll) {
+    if (usableCount > 0) {
+        return usable[roll % static_cast<uint32_t>(usableCount)];
+    }
+    if (othersCount > 0) {
+        return others[roll % static_cast<uint32_t>(othersCount)];
+    }
+    return -1;
+}
+
+void RodProgressAddCatch(RodProgress& p, int species, float lengthMm, int rod) {
+    // RF3 species ids (fishdata.fdt +0x02): 0 Char, 1 Yamame, 2 Splake, 6 Pale Chub, 7 Bitterling,
+    // 8 Largemouth, 9 Florida, 11 Rainbow, 12 Brown, 13 King, 14 Pink, 15 Steelhead, 16 Cherry,
+    // 31 Monster Char, 32 Giant King Salmon.
+    auto bump = [](uint16_t& n) {
+        if (n < 0xFFFF) {
+            n++;
+        }
+    };
+    bump(p.total);
+    switch (species) {
+        case 8:
+        case 9:
+            bump(p.bass);
+            break;
+        case 0:
+        case 1:
+        case 2:
+        case 11:
+        case 12:
+        case 15:
+        case 31:
+            bump(p.trout);
+            break;
+        case 13:
+        case 14:
+        case 16:
+        case 32:
+            bump(p.salmon);
+            break;
+        default:
+            break;
+    }
+    if (rod == 3) {
+        bump(p.withFlyRod);
+    } else if (rod == 5) {
+        bump(p.withPoleS);
+    }
+    if ((species == 8) && (lengthMm > 355.6f)) { // 1'2"
+        p.largemouthOver14in = true;
+    }
+    if (species == 6) {
+        p.paleChub = true;
+    }
+    if (species == 7) {
+        p.bitterling = true;
+        if (lengthMm > 76.2f) { // 3"
+            p.bitterlingOver3in = true;
+        }
+    }
+}
+
+bool RodConditionMet(const RodProgress& p, int rod) {
+    switch (rod) {
+        case 0: // Lure Rod/Bass: catch any 5 fish (user, 2026-10-08)
+            return p.total >= 5;
+        case 1: // Lure Rod/Trout: catch 3 bass
+            return p.bass >= 3;
+        case 2: // Lure Rod/Salmon: catch any 3 trout
+            return p.trout >= 3;
+        case 3: // Fly Rod: catch any 3 salmon
+            return p.salmon >= 3;
+        case 4: // Big Game Fly Rod: catch 5 fish with the Fly Rod
+            return p.withFlyRod >= 5;
+        case 5: // Stream Pole S: a Largemouth Bass over 1'2"
+            return p.largemouthOver14in;
+        case 6: // Stream Pole L: catch 5 fish with Stream Pole S
+            return p.withPoleS >= 5;
+        case 7: // Crucian Carp Rod: catch a Pale Chub
+            return p.paleChub;
+        case 8: // All-Purpose Rod L: a Bitterling over 3"
+            return p.bitterlingOver3in;
+        case 9: // Bitterling Rod: catch a Bitterling
+            return p.bitterling;
+        default:
+            return false;
+    }
+}
+
 float FlyCastDistanceFactor(float heldSeconds) {
     // Recorded hold (s) -> distance (m), RF3-MECHANICS 2.9 "Fly recording"; (0, 0) added (user, 2026-10-07).
     static constexpr float kTable[][2] = { { 0.0f, 0.0f },   { 2.72f, 3.18f },  { 3.73f, 4.37f },

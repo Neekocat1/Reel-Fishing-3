@@ -580,21 +580,27 @@ struct ListGeometry {
 constexpr float kListCursorW = 14;
 
 // The pane list's entries (RF3 index, name) for the row being chosen: lures/flies, floats, or baits
-// with "---" (no bait) first.
+// with "---" (no bait) first. Step 21d: only what Link owns (RF3Tackle_ItemOwned).
 std::vector<std::pair<int32_t, std::string>> ListEntries(const Box& box, RowKind kind) {
     std::vector<std::pair<int32_t, std::string>> out;
     if (kind == RK_ITEM) {
         for (const Item& i : box.lures) {
-            out.push_back({ i.index, i.name });
+            if (RF3Tackle_ItemOwned(box.rod, RF3_TACKLE_ROW_ITEM, i.index)) {
+                out.push_back({ i.index, i.name });
+            }
         }
     } else if (kind == RK_FLOAT) {
         for (const Item& i : box.floats) {
-            out.push_back({ i.index, i.name });
+            if (RF3Tackle_ItemOwned(box.rod, RF3_TACKLE_ROW_FLOAT, i.index)) {
+                out.push_back({ i.index, i.name });
+            }
         }
     } else if (kind == RK_BAIT) {
         out.push_back({ -1, "---" });
         for (const Bait& b : box.baits) {
-            out.push_back({ b.index, b.name });
+            if (RF3Tackle_ItemOwned(box.rod, RF3_TACKLE_ROW_BAIT, b.index)) {
+                out.push_back({ b.index, b.name });
+            }
         }
     }
     return out;
@@ -816,7 +822,11 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
         RF3Tackle_Get(&c);
         int count = std::max(1, static_cast<int>(RF3Tackle_BoxCount()));
         int next = (c.box + x + count) % count;
-        if (RF3Tackle_SetBox(next, "screen-box")) {
+        // Step 21d: skip the boxes of rods Link doesn't own (back to the same box if he owns only one).
+        for (int tries = 1; tries < count && !RF3Tackle_BoxOwned(next); tries++) {
+            next = (next + x + count) % count;
+        }
+        if (next != c.box && RF3Tackle_SetBox(next, "screen-box")) {
             sRow = DefaultRow(CurrentBox()); // the new box may have another layout and other rows
             Sfx(NA_SE_SY_DECIDE);
             RequestLog("box");

@@ -1,3 +1,4 @@
+#include "soh/Enhancements/ReelFishing/RF3RandoChecks.h" // Reel Fishing III mod (step 24b)
 #include "randomizer_check_objects.h"
 #include <libultraship/bridge/consolevariablebridge.h>
 #include "static_data.h"
@@ -212,6 +213,7 @@ void RandomizerCheckObjects::UpdateImGuiVisibility() {
              CVarGetInteger(CVAR_RANDOMIZER_SETTING("ShuffleRedIce"), RO_GENERIC_NO)) &&
             (location.GetRCType() != RCTYPE_FISH ||
              Rando::Fishsanity::GetFishLocationIncluded(&location, FSO_SOURCE_CVARS)) &&
+            (location.GetRCType() != RCTYPE_RF3 || RF3Rando_CheckIncludedByCVars(location.GetRandomizerCheck())) &&
             (location.GetRCType() != RCTYPE_ADULT_TRADE ||
              CVarGetInteger(CVAR_RANDOMIZER_SETTING("ShuffleAdultTrade"), RO_GENERIC_NO)) &&
             (location.GetRandomizerCheck() != RC_KF_KOKIRI_SWORD_CHEST ||

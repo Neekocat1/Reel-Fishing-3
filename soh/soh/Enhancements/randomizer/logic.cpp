@@ -1,3 +1,4 @@
+#include "soh/Enhancements/ReelFishing/RF3RandoChecks.h" // Reel Fishing III mod (step 24c)
 #include <spdlog/spdlog.h>
 
 #include "logic.h"
@@ -22,6 +23,9 @@ extern "C" PlayState* gPlayState;
 namespace Rando {
 
 bool Logic::HasItem(RandomizerGet itemName) {
+    if (RF3Rando_IsItem(itemName)) { // Reel Fishing III mod (step 24c)
+        return CheckRandoInf(RF3Rando_OwnedFlag(itemName));
+    }
     switch (itemName) {
         case RG_FAIRY_OCARINA:
             return CheckInventory(ITEM_OCARINA_FAIRY, false);
@@ -2204,6 +2208,10 @@ std::set<RandomizerGet> StaticData::allowBottleMaskTrade = { RG_KEATON_MASK,
 
 void Logic::ApplyItemEffect(Item& item, bool state) {
     auto randoGet = item.GetRandomizerGet();
+    if (RF3Rando_IsItem(randoGet)) { // Reel Fishing III mod (step 24c)
+        SetRandoInf(RF3Rando_OwnedFlag(randoGet), state);
+        return;
+    }
     if (item.GetGIEntry()->objectId == OBJECT_GI_STICK) {
         SetInventory(ITEM_STICK, (!state ? ITEM_NONE : ITEM_STICK));
     }

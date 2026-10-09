@@ -97,6 +97,7 @@ bool LoadFishRegions(std::string* error) {
                 r.currentSpeed = std::clamp(j.value("currentSpeed", 0.2f), 0.0f, 2.0f);
             }
             r.currentReachM = std::clamp(j.value("currentReach", 5.0f), 0.0f, 50.0f); // step 20c-4
+            r.randoArea = j.value("randoArea", std::string()); // step 24a; absent = any area of the scene
             for (const nlohmann::json& rec : j.value("records", nlohmann::json::array())) {
                 int index = rec.is_object() ? rec.at("record").get<int>() : rec.get<int>();
                 if (IsRegionRecord(index) && (std::find(r.records.begin(), r.records.end(), index) == r.records.end())) {
@@ -135,6 +136,9 @@ bool SaveFishRegions(std::string* error) {
             j["currentSpeed"] = r.currentSpeed;
         }
         j["currentReach"] = r.currentReachM; // step 20c-4
+        if (!r.randoArea.empty()) {
+            j["randoArea"] = r.randoArea; // step 24a
+        }
         j["records"] = nlohmann::json::array();
         for (int record : r.records) {
             j["records"].push_back({ { "record", record }, { "name", RecordLabel(record) } });

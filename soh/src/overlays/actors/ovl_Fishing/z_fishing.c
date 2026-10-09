@@ -14,6 +14,11 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/ReelFishing/RF3Log.h"
 #include "soh/Enhancements/ReelFishing/RF3Bridge.h"
+#include "soh/Enhancements/ReelFishing/RF3LureModel.h"
+#include "soh/Enhancements/ReelFishing/RF3FishModel.h"
+// Reel Fishing III mod (step 25c-2): this frame's lure is RF3's own model, so OoT's lure and hook models are not
+// drawn (the hook points and the owner's hat still work).
+static u8 sRF3LureModelShown = false;
 
 // Reel Fishing III mod: RF3 steps are 1/60 s; OoT's game logic runs R_UPDATE_RATE of them per
 // game frame (3 = 20 Hz in normal play).
@@ -60,7 +65,8 @@ static Vec3f sRF3RegionLastGood[RF3_REGION_SLOTS]; // step 16f: last spot over w
 
 // Step 20a-5: OoT's sinking lure sinks only with RF3 off; with RF3 on, a lure box's lure follows RF3's
 // lure depth and flies and bait sets stay at the surface (user's decisions, 2026-10-07).
-#define FISHING_LURE_SINKS() ((sLureEquipped == FS_LURE_SINKING) && !RF3_IsEnabled())
+// Step 23c: with RF3 on, only OoT's pole (box 10) with its sinking lure sinks the OoT way.
+#define FISHING_LURE_SINKS() ((sLureEquipped == FS_LURE_SINKING) && (!RF3_IsEnabled() || (RF3Tackle_PoleLure() == 1)))
 // Step 20c-3c: while a fly cast charges, OoT's cast timer is held here (the launch is at 18).
 #define RF3_FLY_HOLD_TIMER 30
 // Step 20a-6: with the lure sim active, a lure this close to the rod tip horizontally (OoT units) is reeled in.
@@ -1079,7 +1085,7 @@ void Fishing_Init(Actor* thisx, PlayState* play2) {
                         sFishInits[i].pos.z, 0, Rand_ZeroFloat(0x10000), 0, 100 + i);
         }
         if (RF3_IsEnabled()) {
-            RF3Species_RollAll(fishCount); // Reel Fishing III mod (step 14b): a random RF3 species per fish
+            RF3Species_RollAll(fishCount); // Reel Fishing III mod (steps 14b/23b): each pond fish's species
         }
     } else {
         if (!GameInteractor_Should(VB_FISHING_FISH_IS_LOACH, thisx->params >= (EN_FISH_PARAM + 15)) ||
@@ -1747,13 +1753,17 @@ void Fishing_DrawLureHook(PlayState* play, Vec3f* pos, Vec3f* refPos, u8 hookInd
     Matrix_Scale(0.0039999997f, 0.0039999997f, 0.005f, MTXMODE_APPLY);
     Matrix_RotateY(M_PI, MTXMODE_APPLY);
 
-    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, gFishingLureHookDL);
+    if (!sRF3LureModelShown) { // Reel Fishing III mod (step 25c-2): RF3's lure brings its own hook
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, gFishingLureHookDL);
+    }
 
     Matrix_RotateZ(M_PI / 2, MTXMODE_APPLY);
 
-    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, gFishingLureHookDL);
+    if (!sRF3LureModelShown) {
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, gFishingLureHookDL);
+    }
 
     if ((hookIndex == 1) && (sIsOwnersHatHooked)) {
         Matrix_Scale(2.0f, 2.0f, 2.0f, MTXMODE_APPLY);
@@ -1955,10 +1965,14 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
         }
     }
 
+    sRF3LureModelShown = false;
     if (sLureEquipped != FS_LURE_SINKING) {
         Matrix_Translate(sLurePos.x, sLurePos.y, sLurePos.z, MTXMODE_NEW);
         Matrix_RotateY(sLureRot.y + sLure1Rotate, MTXMODE_APPLY);
         Matrix_RotateX(sLureRot.x, MTXMODE_APPLY);
+        // Reel Fishing III mod (steps 25c-2, 25d-2): RF3's own model of the chosen lure, fly or bait.
+        sRF3LureModelShown =
+            RF3LureModel_Draw(play, &sLurePos.x, sLureRot.y + sLure1Rotate, sLureRot.x, sLurePosZOffset);
         Matrix_Scale(0.0039999997f, 0.0039999997f, 0.0039999997f, MTXMODE_APPLY);
         Matrix_Translate(0.0f, 0.0f, sLurePosZOffset, MTXMODE_APPLY);
         Matrix_RotateZ(M_PI / 2, MTXMODE_APPLY);
@@ -1966,8 +1980,10 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
 
         Gfx_SetupDL_25Opa(play->state.gfxCtx);
 
-        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_OPA_DISP++, gFishingLureFloatDL);
+        if (!sRF3LureModelShown) {
+            gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gSPDisplayList(POLY_OPA_DISP++, gFishingLureFloatDL);
+        }
 
         posSrc.x = -850.0f;
         posSrc.y = 0.0f;
@@ -1983,6 +1999,9 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
         posSrc.z = -50.0f;
         Matrix_MultVec3f(&posSrc, &hookPos[1]);
         Fishing_DrawLureHook(play, &hookPos[1], &sLureHookRefPos[1], 1);
+
+        // Reel Fishing III mod (step 25d-2): a bait set's float, on the surface above the bait or on the line.
+        RF3LureModel_DrawFloat(play, &sLurePos.x, &sRodTipPos.x, WATER_SURFACE_Y(play), sLureRot.y + sLure1Rotate);
     }
 
     POLY_XLU_DISP = Gfx_SetupDL(POLY_XLU_DISP, 0x14);
@@ -2389,6 +2408,12 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
         case 0:
             sSinkingLureSegmentIndex = 0;
 
+            // Reel Fishing III mod (step 23c): the lure on the line follows the tackle choice: OoT's sinking lure
+            // only when the pole's sinking lure is chosen, else the normal lure (RF3's rods use RF3's lure model).
+            if (RF3_IsEnabled()) {
+                sLureEquipped = (RF3Tackle_PoleLure() == 1) ? FS_LURE_SINKING : FS_LURE_STOCK;
+            }
+
             if (KREG(14) != 0) {
                 KREG(14) = 0;
                 sLureEquipped = FS_LURE_SINKING - sLureEquipped;
@@ -2405,7 +2430,20 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
             }
 
             if (sRodCastTimer == 0) {
-                if ((D_80B7E0B0 == 0) && (player->unk_860 == 1)) {
+                const char* rf3NotReady = NULL;
+                if ((D_80B7E0B0 == 0) && (player->unk_860 == 1) && RF3_IsEnabled() &&
+                    !RF3Tackle_Ready(&rf3NotReady)) {
+                    // Reel Fishing III mod (step 21d): no owned lure/fly/bait in the chosen box: no cast; RF3's
+                    // reason in a text box (it borrows the "got away" text, see RF3Messages.cpp).
+                    player->unk_860 = 0;
+                    if (Message_GetState(&play->msgCtx) == TEXT_STATE_NONE) {
+                        RF3Tackle_ShowNotReady(rf3NotReady);
+                        Message_StartTextbox(play, 0x4082, NULL);
+                        Audio_PlaySfxGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                    }
+                    RF3Rod_LogEvent("cast-refused", play->sceneNum); // the reason: RF3Tackle_Ready, the tackle-* lines
+                } else if ((D_80B7E0B0 == 0) && (player->unk_860 == 1)) {
                     sRodCastTimer = 37;
                     Message_CloseTextbox(play);
                     sRF3CastHeldFrames = 0; // step 11: B was just pressed; charging starts
@@ -4429,6 +4467,8 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                         // Step 8e: the line snaps. OoT's rod-snap bend plus a twang.
                         sRodHitTimer = 10;
                         Sfx_PlaySfxCentered(NA_SE_IT_BOW_FLICK);
+                        RF3Stock_LoseCurrent(); // step 21e: the fish takes the lure, until the next scene
+                                                // change
                     }
                 }
                 sFishingCaughtTextDelay = 20;
@@ -4537,7 +4577,8 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                     }
                 } else {
                     sFishLengthToWeigh = 2.0f * this->fishLength;
-                    RF3Size_SetLengthToWeigh(sFishLengthToWeigh, RF3_WEIGH_CAUGHT, sLinkAge == LINK_AGE_CHILD); // steps 12b/14d: weigh-in shows RF3 length
+                    // Step 23b: the RF3 size code keys the fish by its own OoT length; OoT weighs a loach at double.
+                    RF3Size_SetLengthToWeigh(this->fishLength, RF3_WEIGH_CAUGHT, sLinkAge == LINK_AGE_CHILD);
                     sFishingCaughtTextId = 0x4099;
                 }
 
@@ -4955,6 +4996,15 @@ static void Fishing_DrawFishImpl(Actor* thisx, PlayState* play) {
     Matrix_RotateY(((this->unk_162 + this->actor.shape.rot.y) / 32768.0f) * M_PI, MTXMODE_APPLY);
     Matrix_RotateX(((this->unk_160 + this->actor.shape.rot.x) / 32768.0f) * M_PI, MTXMODE_APPLY);
     Matrix_RotateZ(((this->unk_164 + this->actor.shape.rot.z) / 32768.0f) * M_PI, MTXMODE_APPLY);
+
+    // Reel Fishing III mod (step 25e-2): a region fish with an RF3 model draws that instead of OoT's skeleton; OoT's
+    // swim angles bend its spine and it sets fishMouthPos from RF3's snout.
+    if (RF3_IS_REGION_FISH(this) &&
+        RF3FishModel_DrawRegion(play, this->actor.params - EN_FISH_REGION, this->fishLimb23RotYDelta,
+                                this->fishLimb4RotYDelta, &this->fishMouthPos.x)) {
+        return;
+    }
+
     Matrix_Scale(this->actor.scale.x, this->actor.scale.y, this->actor.scale.z, MTXMODE_APPLY);
 
     if (this->isLoach == 0) {
@@ -6676,6 +6726,10 @@ static void Fishing_RF3RodOnB(PlayState* play) {
     if (gSaveContext.equips.buttonItems[0] != ITEM_FISHING_POLE) {
         sRF3StashedBItem = gSaveContext.equips.buttonItems[0];
         sRF3BSwapped = true;
+        // Step 22c fix: also where the pond keeps B's item (z_parameter.c). Closing the pause menu
+        // (func_80084BF4) puts B back from buttonStatus[0] when B holds the rod; without this it held
+        // BTN_ENABLED (0) and B became item 0 (Deku Stick).
+        gSaveContext.buttonStatus[0] = sRF3StashedBItem;
         gSaveContext.equips.buttonItems[0] = ITEM_FISHING_POLE;
         Interface_LoadItemIcon1(play, 0);
     }
@@ -6687,6 +6741,9 @@ static void Fishing_RF3RestoreB(PlayState* play) {
         if (sRF3StashedBItem != ITEM_NONE) {
             Interface_LoadItemIcon1(play, 0);
         }
+    }
+    if (sRF3BSwapped) {
+        gSaveContext.buttonStatus[0] = BTN_ENABLED; // step 22c fix: B's status again, not a parked item
     }
     sRF3BSwapped = false;
 }
@@ -6720,6 +6777,14 @@ static void Fishing_RF3UpdatePortable(Actor* thisx, PlayState* play) {
     if ((player->heldItemAction != PLAYER_IA_FISHING_POLE) && (sRodCastState == 0)) {
         Actor_Kill(thisx);
         return;
+    }
+
+    // Step 22c fix (user, 2026-10-08): something (after a menu) put B's own item back while Link still holds the
+    // rod, so B swung that item. While the rod is out, B holds the rod; the item on B now waits in the stash.
+    if ((player->heldItemAction == PLAYER_IA_FISHING_POLE) &&
+        (gSaveContext.equips.buttonItems[0] != ITEM_FISHING_POLE)) {
+        RF3Rod_LogEvent("portable-b-reapplied", gSaveContext.equips.buttonItems[0]);
+        Fishing_RF3RodOnB(play);
     }
 
     sRF3RodBtn = Fishing_RF3RodButton();

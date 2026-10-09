@@ -1,3 +1,4 @@
+#include "soh/Enhancements/ReelFishing/RF3RandoChecks.h" // Reel Fishing III mod (step 24b)
 #include "SeedContext.h"
 #include "static_data.h"
 #include "soh/OTRGlobals.h"
@@ -189,6 +190,7 @@ void Context::GenerateLocationPool() {
             (location.GetRandomizerCheck() == RC_LH_HYRULE_LOACH &&
              mOptions[RSK_FISHSANITY].IsNot(RO_FISHSANITY_HYRULE_LOACH)) ||
             (location.GetRCType() == RCTYPE_FISH && !Fishsanity::GetFishLocationIncluded(&location)) ||
+            (location.GetRCType() == RCTYPE_RF3 && !RF3Rando_CheckIncludedBySeed(location.GetRandomizerCheck())) ||
             (location.GetRCType() == RCTYPE_POT && mOptions[RSK_SHUFFLE_POTS].Is(RO_SHUFFLE_POTS_OFF)) ||
             (location.GetRCType() == RCTYPE_GRASS && mOptions[RSK_SHUFFLE_GRASS].Is(RO_SHUFFLE_GRASS_OFF)) ||
             (location.GetRCType() == RCTYPE_CRATE && mOptions[RSK_SHUFFLE_CRATES].Is(RO_SHUFFLE_CRATES_OFF)) ||
@@ -403,6 +405,7 @@ GetItemEntry Context::GetFinalGIEntry(const RandomizerCheck rc, const bool check
 }
 
 void Context::ParseSpoiler(const char* spoilerFileName) {
+    RF3Rando_ApplyItemNames(); // Reel Fishing III mod (step 24e): RF3 item names before items are read by name
     std::ifstream spoilerFileStream(SohUtils::Sanitize(spoilerFileName));
     if (!spoilerFileStream) {
         return;

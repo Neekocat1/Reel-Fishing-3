@@ -84,6 +84,10 @@ extern "C" int32_t RF3Lure_Begin(void) {
         return 0;
     }
     const rf3tackle::Box& box = a.boxes[c.box];
+    if (box.key == "pole") { // step 23c (user): OoT's pole keeps OoT's own lure movement
+        LogLine(("lure-move box=" + std::to_string(c.box) + " kind=oot lure=" + std::to_string(c.lure) + "\n").c_str());
+        return 0;
+    }
     if (box.kind == "bait") {
         float target = BaitTarget(box, c.depth);
         const rf3tackle::Bait* bait = rf3tackle::FindBait(box, c.bait);

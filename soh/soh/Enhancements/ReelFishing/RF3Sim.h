@@ -376,6 +376,36 @@ class FlySim {
 // cast (11.9 m recorded) for heldSeconds, from the recorded table, extended linearly to 0 m at 0 s.
 float FlyCastDistanceFactor(float heldSeconds);
 
+// Step 21b: the per-catch unlock (docs/DESIGN.md step 21, the user's rule, not RF3's). The categories are
+// lure, fly, bait, float, in that order; remaining[c] says category c still has items to give. Returns the
+// category for a catch, catchCount = catches counted before this one: the (catchCount mod k)-th of the k
+// remaining categories. -1 if none remain.
+constexpr int kUnlockCategories = 4;
+int UnlockCategory(const bool remaining[kUnlockCategories], uint32_t catchCount);
+// Usable first: entry (roll mod count) of usable if it has any, else of others. -1 if both are empty.
+int PickUnlockItem(const int* usable, int usableCount, const int* others, int othersCount, uint32_t roll);
+
+// Step 21c: the user's rod conditions (docs/DESIGN.md step 21, docs/UNLOCK-CHOICES.md), counted from the
+// catches. Species are RF3's (fishdata.fdt +0x02); rods are RROD numbers.
+struct RodProgress {
+    uint16_t total = 0;        // step 23d: any fish caught (Lure Rod/Bass: 5)
+    uint16_t bass = 0;         // Largemouth or Florida Bass caught
+    uint16_t trout = 0;        // Yamame, Splake, Rainbow, Brown, Steelhead Trout, Char, Monster Char
+    uint16_t salmon = 0;       // King, Pink, Cherry Salmon, Giant King Salmon
+    uint16_t withFlyRod = 0;   // any fish caught with rod 3 (Fly Rod)
+    uint16_t withPoleS = 0;    // any fish caught with rod 5 (Stream Pole S)
+    bool largemouthOver14in = false; // a Largemouth Bass longer than 355.6 mm
+    bool paleChub = false;
+    bool bitterlingOver3in = false;  // a Bitterling longer than 76.2 mm
+    bool bitterling = false;
+};
+constexpr int kRodCount = 10;
+// Counts one catch: its species, length and the rod it was caught with.
+void RodProgressAddCatch(RodProgress& p, int species, float lengthMm, int rod);
+// Has rod (0-9) met its condition? Step 23d: rod 0 (Lure Rod/Bass) is earned by any 5 fish; OoT's pole (10) is
+// bought: false.
+bool RodConditionMet(const RodProgress& p, int rod);
+
 // Tension limit for this fish and tackle (1.4).
 float TensionLimit(const FishParams& fish, const TackleParams& tackle);
 

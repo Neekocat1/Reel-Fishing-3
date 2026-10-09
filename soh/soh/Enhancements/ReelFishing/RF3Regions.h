@@ -11,6 +11,14 @@
 
 namespace rf3 {
 
+// Step 24a (RF3RandoAreas.cpp): the randomizer's areas of a scene, as (enum name, display name).
+struct RandoArea {
+    std::string enumName;
+    std::string name;
+};
+std::vector<RandoArea> RandoAreasForScene(int scene);
+int RandoAreaFromName(const std::string& name); // RR_* value, -1 if empty or unknown
+
 // A box on the water. minX..maxX / minZ..maxZ are the box in its own frame, turned by `angle` (degrees,
 // seen from above) about its centre (step 16i). With angle 0 it is a plain world box.
 //   world     = centre + R(angle)  * (box point - centre)
@@ -34,6 +42,9 @@ struct FishRegion {
     float currentSpeed = 0.2f;
     // Step 20c-4: outside the box the current falls off linearly to 0 at this distance from its edge (m).
     float currentReachM = 5.0f;
+    // Step 24a: the randomizer area (logic region) the water is in, by its enum name ("RR_ZORAS_RIVER"); empty =
+    // any area of the scene. Randomizer logic (step 24c) requires reaching it to catch this region's fish.
+    std::string randoArea;
 
     float CentreX() const { return (minX + maxX) * 0.5f; }
     float CentreZ() const { return (minZ + maxZ) * 0.5f; }

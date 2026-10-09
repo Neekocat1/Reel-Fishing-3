@@ -24,8 +24,8 @@ namespace {
 // Range limits. Which items belong to which box comes from tackle.json (made from the user's disc by
 // tools/rf3_menuassets.py, loaded by RF3TackleAssets.cpp, step 17d); without it only ranges are checked.
 constexpr int32_t kLineCount = 28;   // rigdata.fdt RLIN records
-constexpr int32_t kLureCount = 91;   // rigdata.fdt RLRE records
-constexpr int32_t kFishRecords = 50; // fishdata.fdt records
+constexpr int32_t kLureCount = 93;   // rigdata.fdt RLRE records + OoT's lures 91/92 (step 23c)
+constexpr int32_t kFishRecords = 53; // fishdata.fdt records + the mod's OoT fish 50-52 (step 23a)
 
 // Today's tackle (RF3Params.h kDefaultTackle): Lure Rod/Bass, 10 lb line (RLIN 9), Suspended
 // Vibration G (RLRE 48). The trout box starts on the same 10 lb line and Trout Spinner Basic (RLRE 0).
@@ -34,9 +34,12 @@ constexpr int32_t kFishRecords = 50; // fishdata.fdt records
 // Target: Largemouth Bass (Juv), fishdata record 14, which both boxes list.
 constexpr int32_t kUnset = -1;
 constexpr int32_t kDefaultBox = RF3_TACKLE_BOX_BASS;
-constexpr int32_t kDefaultLine[RF3_TACKLE_BOXES] = { 9, 9, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset };
-constexpr int32_t kDefaultLure[RF3_TACKLE_BOXES] = { 48, 0, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset };
+constexpr int32_t kDefaultLine[RF3_TACKLE_BOXES] = { 9, 9, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset,
+                                                      kUnset };
+constexpr int32_t kDefaultLure[RF3_TACKLE_BOXES] = { 48, 0, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset, kUnset,
+                                                      kUnset };
 constexpr int32_t kDefaultTarget = 14;
+constexpr int32_t kPoleSinkingLure = 92; // step 23c: OoT's sinking lure (tools/rf3_menuassets.py POLE_LURES)
 
 // Step 19c, bait/pole sets: float (first of the set until chosen), float depth and hook size (the
 // middle cell), bait (none, as RF3's sets start: "---" in the user's screenshots).
@@ -91,8 +94,14 @@ const rf3tackle::Box* AssetBox(int32_t box) {
     return (a.loaded && InRange(box, static_cast<int32_t>(a.boxes.size()))) ? &a.boxes[box] : nullptr;
 }
 
+// Step 21d: set once the file's stock is known (RF3Tackle_StockChanged); see ValidateStock below.
+bool sStockKnown = false;
+bool ValidateStock(const char* why);
+
 // Puts every stored choice back into its box's lists: the default if the box has it, else the box's
 // middle line / first lure / first target. Logs "tackle-fix" if anything changed. No-op without assets.
+// Step 21d: once the stock is known, an unset lure/fly or float stays unset here (the box's first item may
+// not be owned); ValidateStock, run at the end, picks the first owned one.
 bool Validate(const char* why) {
     bool fixed = false;
     if (AssetBox(sBox) == nullptr) {
@@ -108,12 +117,14 @@ bool Validate(const char* why) {
                                                                    : box->lines[box->lines.size() / 2].index;
             fixed = true;
         }
-        if (rf3tackle::FindLure(*box, sLure[b]) == nullptr && !box->lures.empty()) {
+        if (rf3tackle::FindLure(*box, sLure[b]) == nullptr && !box->lures.empty() &&
+            !(sStockKnown && sLure[b] == kUnset)) {
             sLure[b] = rf3tackle::FindLure(*box, kDefaultLure[b]) ? kDefaultLure[b] : box->lures.front().index;
             fixed = true;
         }
         // Step 19c: a bait set's float, depth, bait and hook size.
-        if (rf3tackle::FindFloat(*box, sFloat[b]) == nullptr && !box->floats.empty()) {
+        if (rf3tackle::FindFloat(*box, sFloat[b]) == nullptr && !box->floats.empty() &&
+            !(sStockKnown && sFloat[b] == kUnset)) {
             sFloat[b] = box->floats.front().index;
             fixed = true;
         }
@@ -126,6 +137,73 @@ bool Validate(const char* why) {
     if (rf3tackle::FindTarget(*box, sTarget) == nullptr && !box->targets.empty()) {
         sTarget = rf3tackle::FindTarget(*box, kDefaultTarget) ? kDefaultTarget : box->targets.front().record;
         fixed = true;
+    }
+    if (fixed) {
+        LogChoice("tackle-fix", why);
+    }
+    return ValidateStock(why) || fixed;
+}
+
+// --- Step 21d: only owned tackle ----------------------------------------------------------------
+// Box n uses rod n. An item can be chosen if it is collected with a count above 0. Until the file's
+// stock is known (it loads after or before this section, in no fixed order), choices aren't judged by it.
+
+int32_t ItemKind(const rf3tackle::Box& box) {
+    return box.kind == "fly" ? RF3_STOCK_FLY : RF3_STOCK_LURE;
+}
+
+bool Have(int32_t kind, int32_t index) {
+    return RF3Stock_Has(kind, index) && RF3Stock_Count(kind, index) > 0;
+}
+
+bool BoxOwned(int32_t box) {
+    return RF3Stock_Has(RF3_STOCK_ROD, box) != 0;
+}
+
+// The current choice if owned, else the first owned item of the list, else kUnset.
+template <typename T> int32_t FirstOwned(const std::vector<T>& list, int32_t kind, int32_t current) {
+    if (current != kUnset && Have(kind, current)) {
+        return current;
+    }
+    for (const T& it : list) {
+        if (Have(kind, it.index)) {
+            return it.index;
+        }
+    }
+    return kUnset;
+}
+
+// Puts every box's lure/fly, float and bait back onto owned tackle (or unset), and the open box onto an
+// owned rod. Logs "tackle-fix" with why if anything changed.
+bool ValidateStock(const char* why) {
+    if (!sStockKnown || !rf3tackle::Get().loaded) {
+        return false;
+    }
+    bool fixed = false;
+    for (int32_t b = 0; b < RF3_TACKLE_BOXES; b++) {
+        const rf3tackle::Box* box = AssetBox(b);
+        if (box == nullptr) {
+            continue;
+        }
+        int32_t lure = FirstOwned(box->lures, ItemKind(*box), sLure[b]);
+        int32_t flt = FirstOwned(box->floats, RF3_STOCK_FLOAT, sFloat[b]);
+        int32_t bait = (sBait[b] != kNoBait && !Have(RF3_STOCK_BAIT, sBait[b])) ? kNoBait : sBait[b];
+        if (lure != sLure[b] || flt != sFloat[b] || bait != sBait[b]) {
+            sLure[b] = lure;
+            sFloat[b] = flt;
+            sBait[b] = bait;
+            fixed = true;
+        }
+    }
+    if (!BoxOwned(sBox)) {
+        for (int32_t b = 0; b < BoxCount(); b++) {
+            if (BoxOwned(b)) {
+                sBox = b;
+                fixed = true;
+                Validate("target-not-in-new-box");
+                break;
+            }
+        }
     }
     if (fixed) {
         LogChoice("tackle-fix", why);
@@ -226,6 +304,7 @@ void LoadSection() {
 // New file, or before a file's sections load (an old save has no tackle section: defaults stay).
 void InitFile(bool isDebug) {
     ResetChoice();
+    sStockKnown = false; // step 21d: until the stock says (RF3Tackle_StockChanged)
 }
 
 void RegisterRF3Tackle() {
@@ -251,6 +330,59 @@ extern "C" void RF3Tackle_Get(RF3TackleChoice* out) {
     out->size = sSize[sBox];
 }
 
+// Step 21d: the stock loaded or changed (RF3Stock.cpp): judge the choices by it from now on.
+extern "C" void RF3Tackle_StockChanged(const char* why) {
+    sStockKnown = true;
+    ValidateStock(why);
+}
+
+extern "C" int32_t RF3Tackle_PoleLure(void) {
+    const rf3tackle::Box* b = AssetBox(sBox);
+    if (b == nullptr || b->key != "pole") {
+        return -1;
+    }
+    return sLure[sBox] == kPoleSinkingLure ? 1 : 0;
+}
+
+extern "C" int32_t RF3Tackle_BoxOwned(int32_t box) {
+    return BoxOwned(box) ? 1 : 0;
+}
+
+extern "C" int32_t RF3Tackle_ItemOwned(int32_t box, int32_t rowKind, int32_t index) {
+    const rf3tackle::Box* b = AssetBox(box);
+    if (b == nullptr) {
+        return 1; // without tackle.json nothing is judged
+    }
+    switch (rowKind) {
+        case RF3_TACKLE_ROW_ITEM: return Have(ItemKind(*b), index) ? 1 : 0;
+        case RF3_TACKLE_ROW_FLOAT: return Have(RF3_STOCK_FLOAT, index) ? 1 : 0;
+        case RF3_TACKLE_ROW_BAIT: return (index == kNoBait || Have(RF3_STOCK_BAIT, index)) ? 1 : 0;
+        default: return 1;
+    }
+}
+
+// Step 21d: can Link cast? The rod must be owned, and the box needs an owned lure/fly, or a bait (and a
+// float if the set has floats). RF3 says so with its own texts (system.trf 0x15E, 0x21E-0x220).
+extern "C" int32_t RF3Tackle_Ready(const char** reason) {
+    const rf3tackle::Box* b = AssetBox(sBox);
+    const char* why = nullptr;
+    if (!BoxOwned(sBox)) {
+        why = "Tackle is not ready.";
+    } else if (b != nullptr && b->kind == "bait") {
+        if (sBait[sBox] == kNoBait || !Have(RF3_STOCK_BAIT, sBait[sBox])) {
+            why = "Bait not selected.";
+        } else if (!b->floats.empty() && (sFloat[sBox] == kUnset || !Have(RF3_STOCK_FLOAT, sFloat[sBox]))) {
+            why = "Tackle is not ready.";
+        }
+    } else if (b != nullptr && (sLure[sBox] == kUnset || !Have(ItemKind(*b), sLure[sBox]))) {
+        why = b->kind == "fly" ? "Fly not selected." : "Lure not selected.";
+    }
+    if (reason != nullptr) {
+        *reason = why;
+    }
+    return why == nullptr ? 1 : 0;
+}
+
 extern "C" int32_t RF3Tackle_GetBoxLine(int32_t box) {
     return InRange(box, RF3_TACKLE_BOXES) ? sLine[box] : -1;
 }
@@ -266,6 +398,9 @@ extern "C" int32_t RF3Tackle_BoxCount(void) {
 extern "C" int32_t RF3Tackle_SetBox(int32_t box, const char* why) {
     if (!InRange(box, BoxCount())) {
         return 0;
+    }
+    if (sStockKnown && !BoxOwned(box)) {
+        return 0; // step 21d: a rod Link doesn't own
     }
     if (box != sBox) {
         sBox = box;
@@ -295,6 +430,9 @@ extern "C" int32_t RF3Tackle_SetLure(int32_t box, int32_t lure, const char* why)
     }
     if (const rf3tackle::Box* b = AssetBox(box); b != nullptr && rf3tackle::FindLure(*b, lure) == nullptr) {
         return 0;
+    }
+    if (const rf3tackle::Box* b = AssetBox(box); sStockKnown && b != nullptr && !Have(ItemKind(*b), lure)) {
+        return 0; // step 21d: not owned, or none left
     }
     if (lure != sLure[box]) {
         sLure[box] = lure;
@@ -340,6 +478,9 @@ extern "C" int32_t RF3Tackle_SetFloat(int32_t box, int32_t floatIdx, const char*
     if (b == nullptr || rf3tackle::FindFloat(*b, floatIdx) == nullptr) {
         return 0;
     }
+    if (sStockKnown && !Have(RF3_STOCK_FLOAT, floatIdx)) {
+        return 0; // step 21d
+    }
     return SetIfChanged(&sFloat[box], floatIdx, why);
 }
 
@@ -354,6 +495,9 @@ extern "C" int32_t RF3Tackle_SetBait(int32_t box, int32_t bait, const char* why)
     const rf3tackle::Box* b = BaitBox(box);
     if (b == nullptr || (bait != kNoBait && rf3tackle::FindBait(*b, bait) == nullptr)) {
         return 0;
+    }
+    if (sStockKnown && bait != kNoBait && !Have(RF3_STOCK_BAIT, bait)) {
+        return 0; // step 21d
     }
     return SetIfChanged(&sBait[box], bait, why);
 }

@@ -1480,6 +1480,17 @@
                     "Item placement logic will respect this option, so it might be required to use this to progress."
                 ]
             },
+            "rf3_tackle_shuffle": {
+                "name": "Shuffle RF3 Tackle",
+                "description": [
+                    "Reel Fishing III mod: Reel Fishing III's rods, lures, flies, baits and floats join the item pool. ",
+                    "The rod conditions, the first Hylian Loach, the fishing pond shop and the first catches become checks."
+                ]
+            },
+            "rf3_catch_checks": {
+                "name": "RF3 Catch Checks",
+                "description": "Reel Fishing III mod: how many catches (the 1st, 2nd, ...) are checks when RF3 tackle is shuffled."
+            },
             "rocs_feather": {
                 "name": "Roc's Feather",
                 "description": [

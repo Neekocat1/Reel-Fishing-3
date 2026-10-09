@@ -186,6 +186,54 @@ int32_t RF3Rod_IsOwned(void);
 // Step 15c: one line in logs/rf3_records.txt (e.g. "portable-start", scene number).
 void RF3Rod_LogEvent(const char* what, int32_t value);
 
+// --- The tackle stock (step 21a, RF3Stock.cpp) --------------------------------
+// What Link owns, by RF3 index: collected (0/1) and a count (0-9), as RF3's tackle manager keeps it
+// (docs/RF3-MECHANICS.md 5.1). Saved per file. Step 21a only records it; nothing reads it yet.
+
+#define RF3_STOCK_ROD 0   // RROD 0-9, 10 = OoT's pole (step 23c)
+#define RF3_STOCK_LURE 1  // RLRE 0-90, 91/92 = OoT's lures (step 23c)
+#define RF3_STOCK_FLY 2   // RFLY 0-39
+#define RF3_STOCK_BAIT 3  // bait type 0-11 (all 5 hook sizes)
+#define RF3_STOCK_FLOAT 4 // RFLT 0-5
+#define RF3_STOCK_KINDS 5
+
+int32_t RF3Stock_Size(int32_t kind);
+// Step 24d: does Link have any rod (RF3's or OoT's pole)? The rod item counts as owned then.
+int32_t RF3Stock_AnyRod(void);
+int32_t RF3Stock_Has(int32_t kind, int32_t index);
+int32_t RF3Stock_Count(int32_t kind, int32_t index);
+// Collects an item: rods and floats count 1, baits 9, lures and flies +1 up to 9. Logged. Returns 0
+// for a bad kind/index.
+int32_t RF3Stock_Give(int32_t kind, int32_t index, const char* why);
+// The bass rod's kit (Lure Rod/Bass + Suspended Vibration G), given when the rod is bought, and to an
+// older save that owns the rod but has no stock yet.
+void RF3Stock_GiveStarter(const char* why);
+// Step 21b: a fish was caught (once per catch, from RF3Records_SubmitCatch): unlock one item, the category
+// by catch count mod the categories left, usable first. Returns 1 if an item was given.
+// Step 21c: first the catch counts toward the user's rod conditions (with the rod in use), and any rod
+// earned is given.
+int32_t RF3Stock_UnlockForCatch(int32_t species, float lengthMm);
+// The rods the latest catch earned (up to max); returns how many.
+int32_t RF3Stock_LastRods(int32_t* rods, int32_t max);
+typedef struct {
+    int32_t total; // step 23d: any fish (Lure Rod/Bass at 5)
+    int32_t bass, trout, salmon, withFlyRod, withPoleS;
+    int32_t largemouthOver14in, paleChub, bitterlingOver3in, bitterling;
+} RF3RodProgress;
+void RF3Stock_GetRodProgress(RF3RodProgress* out);
+// Step 21e: the line broke: the chosen box's lure/fly (or a bait set's bait) loses 1 until the next scene
+// change (then it comes back; baits are refilled to 9). Returns 1 if something was taken.
+int32_t RF3Stock_LoseCurrent(void);
+int32_t RF3Stock_LastLost(int32_t* kind, int32_t* index); // what the latest line break took; 0 if nothing
+int32_t RF3Stock_Lost(int32_t kind, int32_t index);       // how many are waiting to come back
+// What the latest catch unlocked; returns 0 (kind/index -1) if nothing.
+int32_t RF3Stock_LastUnlock(int32_t* kind, int32_t* index);
+uint32_t RF3Stock_CatchCount(void);
+// An item's name from tackle.json, or "#index". Valid until the next call.
+const char* RF3Stock_Name(int32_t kind, int32_t index);
+const char* RF3Stock_KindName(int32_t kind); // "rod", "lure", "fly", "bait", "float"
+const char* RF3Stock_BoxTitle(int32_t kind, int32_t index); // step 22b: first box listing it, "" if none
+
 // --- The mod's own records (step 16a, RF3Records.cpp) -------------------------
 
 // A catch, once per fish (the catch message calls it; repeats of the same catch give the same answer).
@@ -200,7 +248,7 @@ int32_t RF3Records_GetBest(int32_t record, float* mm, int32_t* weightG);
 // RF3's tackle boxes in this mod. The box decides the rod (box n = RROD n) and the reel.
 #define RF3_TACKLE_BOX_BASS 0
 #define RF3_TACKLE_BOX_TROUT 1
-#define RF3_TACKLE_BOXES 10 // RF3's 10 boxes (step 19); box n uses rod n
+#define RF3_TACKLE_BOXES 11 // RF3's 10 boxes (step 19) + OoT's pole (box 10, step 23c); box n uses rod n
 // How many boxes the loaded tackle.json has (step 19a: the 5 lure and fly boxes), 2 without it.
 int32_t RF3Tackle_BoxCount(void);
 
@@ -233,6 +281,23 @@ int32_t RF3Tackle_SetFloat(int32_t box, int32_t floatIdx, const char* why);
 int32_t RF3Tackle_SetDepth(int32_t box, int32_t depth, const char* why);
 int32_t RF3Tackle_SetBait(int32_t box, int32_t bait, const char* why);
 int32_t RF3Tackle_SetSize(int32_t box, int32_t size, const char* why);
+
+// Step 21d: only owned tackle (RF3Tackle.cpp). The stock loaded or changed: from now on the choices are
+// judged by it (a box needs its rod; a lure, fly, float or bait must be owned with a count above 0), and
+// any choice that isn't owned moves to the first owned one or unset ("tackle-fix" in the log).
+void RF3Tackle_StockChanged(const char* why);
+int32_t RF3Tackle_BoxOwned(int32_t box);
+#define RF3_TACKLE_ROW_ITEM 1  // a lure or fly
+#define RF3_TACKLE_ROW_FLOAT 2
+#define RF3_TACKLE_ROW_BAIT 4  // -1 ("---") is always allowed
+int32_t RF3Tackle_ItemOwned(int32_t box, int32_t rowKind, int32_t index);
+// Can Link cast with the current choice? If not, reason = RF3's text ("Lure not selected." etc.).
+int32_t RF3Tackle_Ready(const char** reason);
+// Step 23c: OoT's pole (box 10) uses OoT's own lure movement. -1 if another box is chosen, else 1 for the
+// sinking lure (92) and 0 for the normal lure (91).
+int32_t RF3Tackle_PoleLure(void);
+// Step 21d: z_fishing.c refused a cast; the next "fish got away" text (0x4082) shows this reason instead.
+void RF3Tackle_ShowNotReady(const char* reason);
 
 // --- Cast (step 11) ---------------------------------------------------------
 

@@ -1,3 +1,4 @@
+#include "soh/Enhancements/ReelFishing/RF3RandoChecks.h" // Reel Fishing III mod (step 24c)
 #include <algorithm>
 
 #include "item_pool.hpp"
@@ -432,6 +433,14 @@ void GenerateItemPool() {
 
     if (ctx->GetOption(RSK_ROCS_FEATHER)) {
         AddItemToPool(RG_ROCS_FEATHER, 2, 1, 1, 1);
+    }
+
+    // Reel Fishing III mod (step 24c): the main pool gets every rod and one starter tackle per rod (the rest of the
+    // tackle fills space before junk, below; user, 2026-10-08).
+    if (ctx->GetOption(RSK_RF3_TACKLE_SHUFFLE)) {
+        for (RandomizerGet rg : RF3Rando_MainPoolItems()) {
+            AddItemToPool(rg, 1, 1, 1, 1);
+        }
     }
 
     int bronzeScale = ctx->GetOption(RSK_SHUFFLE_SWIM) ? 1 : 0;
@@ -1111,6 +1120,15 @@ void GenerateItemPool() {
     } else {
         while (itemPool.size() < locCount) {
             itemPool.insert(itemPool.end(), RandomElement(plentifulPool, true));
+        }
+    }
+
+    // Reel Fishing III mod (step 24c): the rest of RF3's tackle takes free spots before junk, in random order. What
+    // doesn't fit isn't in the seed; in game, catches after the catch checks unlock it (step 24d).
+    if (ctx->GetOption(RSK_RF3_TACKLE_SHUFFLE)) {
+        std::vector<RandomizerGet> rf3Extra = RF3Rando_ExtraPoolItems();
+        while (!rf3Extra.empty() && itemPool.size() < locCount) {
+            itemPool.push_back(RandomElement(rf3Extra, true));
         }
     }
 

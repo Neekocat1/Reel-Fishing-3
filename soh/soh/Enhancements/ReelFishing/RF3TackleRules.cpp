@@ -10,6 +10,7 @@
 #include <ship/Context.h>
 
 #include "RF3Bridge.h"
+#include "RF3FishTable.h" // step 23a: TackleTableRecord
 #include "RF3TackleAssets.h"
 
 namespace rf3tackle {
@@ -18,6 +19,7 @@ namespace {
 constexpr int32_t kNone = 99; // "no value" in RF3's per-fish tables; counts as 0 (RF3-MECHANICS 1.4)
 
 int32_t PerRecord(const std::vector<int32_t>& table, int32_t record) {
+    record = rf3::TackleTableRecord(record); // step 23a: an OoT fish reads the RF3 record it copies
     if (record < 0 || record >= static_cast<int32_t>(table.size())) {
         return 0;
     }
@@ -122,8 +124,9 @@ ApproachTackle ForApproach(int32_t record, int32_t defaultSightBonus) {
     // The appeal comes from the lure, fly or bait (at its hook size). A bait set with no bait has
     // nothing on the hook, so no fish notices it (step 19c, as in RF3).
     const Item* lure = items.item;
-    at.appeal = (lure != nullptr && record >= 0 && record < static_cast<int32_t>(lure->appeal.size()))
-                    ? lure->appeal[record]
+    int32_t table = rf3::TackleTableRecord(record); // step 23a
+    at.appeal = (lure != nullptr && table >= 0 && table < static_cast<int32_t>(lure->appeal.size()))
+                    ? lure->appeal[table]
                     : 0;
     // User's decision (2026-10-07): full RF3 rules. A record whose rod mask lacks the rod's bit never
     // notices the lure (RF3-MECHANICS 2.3).

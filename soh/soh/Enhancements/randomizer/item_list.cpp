@@ -6,8 +6,21 @@
 #include "z64object.h"
 #include "soh/Enhancements/custom-message/CustomMessageTypes.h"
 #include "draw.h"
+#include "soh/Enhancements/ReelFishing/RF3Items.h"
+#include "soh/Enhancements/ReelFishing/RF3RandoChecks.h"
 
 using namespace Rando;
+
+// Reel Fishing III mod (steps 22a/24e): an RF3 item, built like the Fishing Pole. Rods show the Fishing Pole model,
+// the rest the pond lure; progression (24c), major (24d fix: the randomizer shows its get-item animation).
+void RF3Rando_BuildItem(RandomizerGet get, const std::string& name) {
+    auto& itemTable = Rando::StaticData::GetItemTable();
+    itemTable[get] = Item(get, Text{ name, name, name }, ITEMTYPE_ITEM, get, true, LOGIC_NONE, RHT_NONE, get,
+                          OBJECT_GI_FISH, GID_FISHING_POLE, TEXT_RANDOMIZER_CUSTOM_ITEM, 0x80, CHEST_ANIM_SHORT,
+                          ITEM_CATEGORY_MAJOR, MOD_RANDOMIZER, { "a ", "un ", "ein " });
+    bool rod = RF3Items_Kind(get - RG_RF3_ROD_0) == 0; // RF3_STOCK_ROD; OoT's pole (step 23c) is a rod too
+    itemTable[get].SetCustomDrawFunc(rod ? Randomizer_DrawFishingPoleGI : RF3Items_DrawTackleGI);
+}
 
 std::array<Item, RG_MAX> Rando::StaticData::itemTable;
 std::unordered_map<std::string, RandomizerGet> Rando::StaticData::itemNameToEnum;
@@ -512,6 +525,14 @@ void Rando::StaticData::InitItemTable() {
     itemTable[RG_ROCS_FEATHER].SetCustomDrawFunc(Randomizer_DrawRocsFeather);
 
     // clang-format on
+
+    // Reel Fishing III mod (step 22a, docs/DESIGN.md step 22): RF3's tackle as items, built like the Fishing Pole.
+    // Generic names here ("RF3 Lure 48"); the real ones come once tackle.json can be read (RF3Rando_ApplyItemNames).
+    for (int rg = RG_RF3_ROD_0; rg <= RG_RF3_LURE_92; rg++) {
+        std::string name = std::string("RF3 ") + RF3Items_KindName(rg - RG_RF3_ROD_0) + " " +
+                           std::to_string(RF3Items_Index(rg - RG_RF3_ROD_0));
+        RF3Rando_BuildItem(static_cast<RandomizerGet>(rg), name);
+    }
 
     // Init itemNameToEnum
     for (auto& item : itemTable) {

@@ -37,7 +37,7 @@ bool sHasRod = false; // step 15a: Link has bought the rod at the pond (saved pe
 
 // Step 16a: the mod's own records, one per fishdata.fdt record (so juvenile, normal and lunker of a
 // species are separate). The longest fish wins. Saved per file; the pond's OoT record is separate.
-constexpr int kRecordSlots = 50; // fishdata.fdt holds 50 records
+constexpr int kRecordSlots = 53; // fishdata.fdt holds 50 records; 50-52 are the mod's OoT fish (step 23a)
 struct BestCatch {
     bool valid = false;
     int32_t species = -1;
@@ -228,14 +228,19 @@ extern "C" void RF3Rod_SetOwned(void) {
     if (!RF3_IsEnabled()) {
         return;
     }
-    if (!sHasRod) {
+    bool first = !sHasRod;
+    if (first) {
         LogIdentity("rod-bought", FishIdentity{}, 0.0f);
     }
     sHasRod = true;
+    if (first) {
+        RF3Stock_GiveStarter("bought"); // step 23d: OoT's pole and its normal lure (was: bass rod + lure 48)
+    }
 }
 
 extern "C" int32_t RF3Rod_IsOwned(void) {
-    return sHasRod ? 1 : 0;
+    // Step 24d: any rod in the stock counts too (a randomizer seed hands rods out without the pole).
+    return (sHasRod || RF3Stock_AnyRod()) ? 1 : 0;
 }
 
 extern "C" void RF3Rod_LogEvent(const char* what, int32_t value) {
@@ -281,6 +286,8 @@ extern "C" int32_t RF3Records_SubmitCatch(int32_t record, int32_t species, float
     std::snprintf(line, sizeof(line), "%s catch record=%d species=%d mm=%.1f g=%d previousMm=%.1f newRecord=%d\n",
                   stamp, record, species, mm, weightG, previous, newRecord ? 1 : 0);
     out << line;
+    out.close(); // the unlock below appends to the same file
+    RF3Stock_UnlockForCatch(species, mm); // steps 21b/21c: rod conditions, then one item per fish caught
     return newRecord ? 1 : 0;
 }
 
