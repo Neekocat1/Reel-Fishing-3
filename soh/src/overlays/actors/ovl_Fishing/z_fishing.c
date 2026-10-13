@@ -16,6 +16,8 @@
 #include "soh/Enhancements/ReelFishing/RF3Bridge.h"
 #include "soh/Enhancements/ReelFishing/RF3LureModel.h"
 #include "soh/Enhancements/ReelFishing/RF3FishModel.h"
+#include "soh/Enhancements/ReelFishing/RF3RodModel.h"
+#include "soh/Enhancements/ReelFishing/RF3FishMove.h"
 // Reel Fishing III mod (step 25c-2): this frame's lure is RF3's own model, so OoT's lure and hook models are not
 // drawn (the hook points and the owner's hat still work).
 static u8 sRF3LureModelShown = false;
@@ -30,6 +32,7 @@ static u8 sRF3LureModelShown = false;
 static s16 sRF3CastHeldFrames = 0;
 static u8 sRF3CastCharging = false;
 #include <libultraship/bridge/consolevariablebridge.h>
+#include <stdio.h> // step 26e-8: snprintf
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
 // Reel Fishing III mod (step 15c): the rod used outside the pond. A portable instance of this actor
@@ -58,6 +61,15 @@ static RF3RegionBox sRF3RegionBoxes[RF3_REGION_SLOTS];
 static RF3RegionBox* sRF3CurRegion = NULL;
 static Vec3f sRF3RegionLastGood[RF3_REGION_SLOTS]; // step 16f: last spot over water deep enough
 #define RF3_REGION_MIN_DEPTH 15.0f                 // step 16f: shallower than this counts as shore
+// Step 26e-8: a hooked region fish's own wall test (Fishing_RF3WallTest).
+static Vec3f sRF3WallPrev[RF3_REGION_SLOTS];    // the fish's position at the end of its last update
+static u32 sRF3WallPrevFrame[RF3_REGION_SLOTS]; // play->gameplayFrames of that update
+static s32 sRF3WallContact[RF3_REGION_SLOTS];   // frames in a row with a hit (0 = clear)
+#define RF3_WALL_MARGIN 10.0f                   // [assumed] how far off a wall's plane the fish is kept
+// Step 26e-9: the shore probe (Fishing_RF3FloorAt) starts this far above the water [assumed: above the Lake Hylia
+// island's +43; a lower bridge deck would count as land]
+#define RF3_SHORE_PROBE_HEIGHT 60.0f
+static s32 sRF3ShoreBack[RF3_REGION_SLOTS]; // step 26e-9: frames in a row the shore rule sent the fish back
 
 #define WATER_SURFACE_Y(play)                         \
     ((sRF3CurRegion != NULL) ? sRF3CurRegion->surfaceY \
@@ -94,12 +106,21 @@ static void Fishing_RF3DestroyPortable(PlayState* play);
 static void Fishing_UpdateCinematics(Fishing* this, PlayState* play);
 static s32 Fishing_RF3LureInBiteArea(void);
 static void Fishing_RF3KeepInWater(Fishing* this, PlayState* play);
+static void Fishing_RF3WallTest(Fishing* this, PlayState* play);
 static f32 Fishing_RF3ShoreDistance(Fishing* this, PlayState* play);
 static s32 Fishing_RF3OutOfArea(f32 x, f32 z);
 static s32 Fishing_RF3FishIndex(Fishing* this);
 static f32 Fishing_RF3Perception(Fishing* this);
 static void Fishing_RF3RegionTarget(Fishing* this);
 static void Fishing_RF3ClampFightTarget(Vec3f* target);
+static s32 Fishing_RF3PointInWater(f32 x, f32 z);
+static s32 Fishing_RF3Probe(const f32 from[3], const f32 to[3], f32 normal[3]);
+static f32 Fishing_RF3FloorAt(PlayState* play, f32 x, f32 z);
+static PlayState* sRF3MovePlay = NULL; // step 26e-4: the play state for Fishing_RF3PointInWater's water probe
+static Fishing* sRF3MoveFish = NULL;   // step 26f-2: the fish RF3FishMove is probing for (Fishing_RF3Probe)
+#define RF3_OOT_WALL_HEIGHT 30.0f       // step 26f-2: OoT's fish wall check (Actor_UpdateBgCheckInfo in Fishing_UpdateFishImpl)
+#define RF3_OOT_WALL_RADIUS 30.0f
+#define RF3_PROBE_LAND_STEP 10.0f // step 26f-3: spacing of the probe's land tests [assumed]
 static void Fishing_RF3InitRegionFish(Fishing* this, PlayState* play);
 
 typedef struct {
@@ -1971,8 +1992,15 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
         Matrix_RotateY(sLureRot.y + sLure1Rotate, MTXMODE_APPLY);
         Matrix_RotateX(sLureRot.x, MTXMODE_APPLY);
         // Reel Fishing III mod (steps 25c-2, 25d-2): RF3's own model of the chosen lure, fly or bait.
-        sRF3LureModelShown =
-            RF3LureModel_Draw(play, &sLurePos.x, sLureRot.y + sLure1Rotate, sLureRot.x, sLurePosZOffset);
+        // Step 27b/27c: the cast state picks RF3's lure motion; hooked, the region fish's slot lets the lure hang
+        // from its mouth.
+        sRF3LureModelShown = RF3LureModel_Draw(
+            play, &sLurePos.x, sLureRot.y + sLure1Rotate, sLureRot.x, sLurePosZOffset, sRodCastState,
+            (((sRodCastState == 4) || (sRodCastState == 5)) && (sFishingHookedFish != NULL) &&
+             RF3_IS_REGION_FISH(sFishingHookedFish))
+                ? (sFishingHookedFish->actor.params - EN_FISH_REGION)
+                : -1,
+            play->gameplayFrames);
         Matrix_Scale(0.0039999997f, 0.0039999997f, 0.0039999997f, MTXMODE_APPLY);
         Matrix_Translate(0.0f, 0.0f, sLurePosZOffset, MTXMODE_APPLY);
         Matrix_RotateZ(M_PI / 2, MTXMODE_APPLY);
@@ -2016,10 +2044,16 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
         f32 dx;
         f32 dy;
         f32 dz;
+        Vec3f lineEnd = sLurePos;
 
-        dx = sLurePos.x - sRodTipPos.x;
-        dy = sLurePos.y - sRodTipPos.y;
-        dz = sLurePos.z - sRodTipPos.z;
+        // Step 27c fix: an RF3 lure hanging from the fish's mouth: the line is drawn to the lure's tie (drawing only;
+        // sLurePos/fishMouthPos stay the snout for the game logic).
+        if (sRF3LureModelShown) {
+            RF3LureModel_LineTie(&lineEnd.x);
+        }
+        dx = lineEnd.x - sRodTipPos.x;
+        dy = lineEnd.y - sRodTipPos.y;
+        dz = lineEnd.z - sRodTipPos.z;
 
         ry = Math_FAtan2F(dx, dz);
         dist = sqrtf(SQ(dx) + SQ(dz));
@@ -2200,9 +2234,15 @@ void Fishing_DrawRod(PlayState* play) {
 
     spC0 = (D_80B7A6BC * (((player->unk_85C - 1.0f) * -0.25f) + 0.5f)) + (D_80B7A6AC + D_80B7A6B8);
 
+    // Reel Fishing III mod (step 25f-2): the chosen box's RF3 rod, bent by OoT's bend; it sets sRodTipPos (where
+    // the line starts) from its own tip. OoT's pole (box 10) and anything without a model keep OoT's 22 segments
+    // (the loop below runs 0 times when the RF3 rod was drawn; CLOSE_DISPS must stay at the end).
+    s32 rf3RodDrawn =
+        RF3RodModel_Draw(play, sRodBendRotY, spC0, sRodBendRatios, ARRAY_COUNT(sRodBendRatios), &sRodTipPos.x);
+
     Matrix_Translate(0.0f, 0.0f, -1300.0f, MTXMODE_APPLY);
 
-    for (i = 0; i < 22; i++) {
+    for (i = 0; i < (rf3RodDrawn ? 0 : 22); i++) {
         Matrix_RotateY(sRodBendRatios[i] * sRodBendRotY * 0.5f, MTXMODE_APPLY);
         Matrix_RotateX(sRodBendRatios[i] * spC0 * 0.5f, MTXMODE_APPLY);
 
@@ -3208,6 +3248,7 @@ static u8 sRF3WindowRumbled = false; // step 9b: the hook-set window rumble has 
 static u8 sRF3SweepTimer = 0;   // step 8h: game frames until STRUGGLE's sweep changes side
 static u8 sRF3SweepSide = 0;    // step 8h: STRUGGLE's current side of the line (0/1)
 static s16 sRF3TurnScale = 0;   // step 8h: turn scale for Fishing_UpdateFish this frame, 0 = OoT's own
+static s32 sRF3LastStruggleLogMode = 0; // step 25g-4: logs "rf3-struggle-sweep" once per entry into STRUGGLE
 
 // Reset the steering and feedback state for a new strike or fight.
 static void Fishing_RF3ResetVisuals(Fishing* this) {
@@ -3286,6 +3327,13 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
 
     gap = fabsf(rf3Out.targetDistUnits - dist);
 
+    // Step 25g-4: a region fish drawn with RF3's motions struggles as RF3 does (see the STRUGGLE target below).
+    s32 rf3Motions = RF3_IS_REGION_FISH(this) && RF3FishModel_PlaysMotions(this->actor.params - EN_FISH_REGION);
+    if ((rf3Out.mode == 9) && (sRF3LastStruggleLogMode != 9)) {
+        RF3Rod_LogEvent("rf3-struggle-sweep", rf3Motions ? 0 : 1);
+    }
+    sRF3LastStruggleLogMode = rf3Out.mode;
+
     if (dist > 1.0f) {
         if (gap < 20.0f) {
             // Close enough: swim sideways around Link instead of back and forth.
@@ -3315,6 +3363,10 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
             radial = dist + 40.0f;
         } else if (rf3Out.mode == 11) {
             radial = MAX(dist - 40.0f, 0.0f);
+        } else if (rf3Motions) {
+            // Step 25g-4: a fish playing RF3's motions thrashes as RF3's scripts do (move_speed 0, course
+            // straight): on the line at the fight distance, no sweep; RF3FishModel rolls it (bank).
+            radial = (gap > 20.0f) ? rf3Out.targetDistUnits : dist;
         } else {
             // Step 8h: a wide sweep across the line, changing side every 0.5 s, so it reads
             // as a fight. 8g's �40 units every 0.25 s was too small and too fast to see.
@@ -3379,7 +3431,7 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
         f32 behind = (rf3Out.mode == 10) ? (rf3Out.targetDistUnits - dist) : (dist - rf3Out.targetDistUnits);
 
         Math_ApproachF(&sRF3FishSpeed, CLAMP(radialSpeed + (MAX(behind, 0.0f) * 0.02f), 0.3f, 2.5f), 1.0f, 0.2f);
-    } else if (rf3Out.mode == 9) {
+    } else if ((rf3Out.mode == 9) && !rf3Motions) {
         Math_ApproachF(&sRF3FishSpeed, 6.0f, 1.0f, 1.0f); // STRUGGLE: fast sweep (step 8h)
     } else {
         Math_ApproachF(&sRF3FishSpeed, CLAMP(radialSpeed + (gap * 0.03f) + drift, 0.3f, 4.0f), 1.0f, 0.1f);
@@ -3388,7 +3440,7 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
 
     // Step 8h: tail beat by state (OoT's procedural swim: unk_190 = beat speed, unk_194 =
     // amplitude), set after OoT's own state-5 values. STRUGGLE also turns fast so the sweep shows.
-    if (rf3Out.mode == 9) {
+    if ((rf3Out.mode == 9) && !rf3Motions) {
         this->unk_190 = 1.6f;
         this->unk_194 = 6000.0f;
         this->rotationStep = 16384.0f;
@@ -3396,6 +3448,48 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
     } else if ((rf3Out.mode == 10) || (rf3Out.mode == 11)) {
         this->unk_190 = 0.6f;
         this->unk_194 = 1500.0f;
+    }
+
+    // Step 26e-3: a region fish on RF3's model and motions swims RF3's way (RF3FishMove: the fight target on the circle
+    // around Link, RF3's turning and speed). It replaces the target, speed and turn set above; OoT's mover then turns
+    // the fish straight to the point ahead and moves it. Pond fish keep the paths above.
+    if (rf3Motions) {
+        RF3FishMoveInput mi;
+        RF3FishMoveOutput mo;
+        RF3RegionFishInfo regionInfo;
+        s32 slot = this->actor.params - EN_FISH_REGION;
+
+        if (RF3RegionFish_Get(slot, &regionInfo)) {
+            mi.slot = slot;
+            mi.record = regionInfo.record;
+            mi.mm = regionInfo.mm;
+            mi.fishPos[0] = this->actor.world.pos.x;
+            mi.fishPos[1] = this->actor.world.pos.y;
+            mi.fishPos[2] = this->actor.world.pos.z;
+            mi.yaw = this->actor.world.rot.y;
+            mi.anglerPos[0] = player->actor.world.pos.x;
+            mi.anglerPos[1] = player->actor.world.pos.y;
+            mi.anglerPos[2] = player->actor.world.pos.z;
+            mi.waterY = WATER_SURFACE_Y(play);
+            mi.floorY = this->actor.floorHeight;
+            mi.mode = rf3Out.mode;
+            mi.distUnits = rf3Out.targetDistUnits;
+            mi.substeps = RF3_SUBSTEPS;
+            mi.frame = play->gameplayFrames;
+            mi.inWater = Fishing_RF3PointInWater;
+            mi.probe = Fishing_RF3Probe; // step 26f-1
+            sRF3MovePlay = play;
+            sRF3MoveFish = this; // step 26f-2
+            if (RF3FishMove_Step(&mi, &mo)) {
+                this->fishTargetPos.x = mo.target[0];
+                this->fishTargetPos.y = mo.target[1];
+                this->fishTargetPos.z = mo.target[2];
+                sRF3FishSpeed = mo.speed;
+                this->actor.speedXZ = mo.speed;
+                this->rotationStep = 16384.0f; // RF3 sets the heading; OoT's turn just follows it
+                sRF3TurnScale = 1;
+            }
+        }
     }
 
     // Tension feedback, Reel Fishing III style (step 8d; our tuning, not RF3 data).
@@ -3570,7 +3664,12 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
     rotXTarget = Math_Atan2S(distToTarget, distY);
     distToTarget = sqrtf(SQ(distX) + SQ(distZ) + SQ(distY));
 
-    if ((this->bumpTimer != 0) && (this->fishState != 2) && (this->fishState != 3) && (this->fishState != 4)) {
+    // Step 26e-10 (user, 2026-10-09: "it should slide along the wall"): a hooked region fish on RF3's movement skips
+    // OoT's +-90 deg wall-bump turn, so it keeps heading for RF3's target and OoT's wall push slides it along the wall.
+    // With the turn, it sat still sideways for the 20 bump frames, then jumped (rf3_fishing_20261009_203143.csv).
+    if ((this->bumpTimer != 0) && (this->fishState != 2) && (this->fishState != 3) && (this->fishState != 4) &&
+        !((this->fishState == 5) && RF3_IS_REGION_FISH(this) &&
+          RF3FishModel_PlaysMotions(this->actor.params - EN_FISH_REGION))) {
         if ((this->stateAndTimer & 0x40) != 0) {
             rotYTarget += 0x4000;
         } else {
@@ -4930,7 +5029,12 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play) {
 
     sRF3CurRegion = RF3_IS_REGION_FISH(this) ? &sRF3RegionBoxes[this->actor.params - EN_FISH_REGION] : NULL;
     Fishing_UpdateFishImpl(thisx, play);
+    Fishing_RF3WallTest(this, play);    // step 26e-8
     Fishing_RF3KeepInWater(this, play); // step 16f
+    if (sRF3CurRegion != NULL) {
+        sRF3WallPrev[this->actor.params - EN_FISH_REGION] = this->actor.world.pos; // step 26e-8: where the next test starts
+        sRF3WallPrevFrame[this->actor.params - EN_FISH_REGION] = play->gameplayFrames;
+    }
     sRF3CurRegion = NULL;
 }
 
@@ -4997,12 +5101,21 @@ static void Fishing_DrawFishImpl(Actor* thisx, PlayState* play) {
     Matrix_RotateX(((this->unk_160 + this->actor.shape.rot.x) / 32768.0f) * M_PI, MTXMODE_APPLY);
     Matrix_RotateZ(((this->unk_164 + this->actor.shape.rot.z) / 32768.0f) * M_PI, MTXMODE_APPLY);
 
-    // Reel Fishing III mod (step 25e-2): a region fish with an RF3 model draws that instead of OoT's skeleton; OoT's
-    // swim angles bend its spine and it sets fishMouthPos from RF3's snout.
-    if (RF3_IS_REGION_FISH(this) &&
-        RF3FishModel_DrawRegion(play, this->actor.params - EN_FISH_REGION, this->fishLimb23RotYDelta,
-                                this->fishLimb4RotYDelta, &this->fishMouthPos.x)) {
-        return;
+    // Reel Fishing III mod (steps 25e-2, 25g-2): a region fish with an RF3 model draws that instead of OoT's skeleton,
+    // animated with RF3's own motions (chosen from its speed, turning, and the fight when hooked), and sets
+    // fishMouthPos from RF3's snout.
+    if (RF3_IS_REGION_FISH(this)) {
+        RF3FishDrawInput in;
+        in.slot = this->actor.params - EN_FISH_REGION;
+        in.bendA = this->fishLimb23RotYDelta;
+        in.bendB = this->fishLimb4RotYDelta;
+        in.speedXZ = this->actor.speedXZ;
+        in.yaw = this->actor.shape.rot.y;
+        in.hooked = (sFishingHookedFish == this) && ((sRodCastState == 4) || (sRodCastState == 5));
+        in.frame = play->gameplayFrames;
+        if (RF3FishModel_DrawRegion(play, &in, &this->fishMouthPos.x)) {
+            return;
+        }
     }
 
     Matrix_Scale(this->actor.scale.x, this->actor.scale.y, this->actor.scale.z, MTXMODE_APPLY);
@@ -5942,6 +6055,19 @@ static void Fishing_RF3LogFrame(PlayState* play, Input* input, Player* player) {
             logFrame.fishYaw = sFishingHookedFish->actor.world.rot.y;
             logFrame.fishTailStep = sFishingHookedFish->fishLimbRotPhaseStep;
             logFrame.fishTailMag = sFishingHookedFish->fishLimbRotPhaseMag;
+            logFrame.fishBgFlags = sFishingHookedFish->actor.bgCheckFlags; // step 26e-6
+            logFrame.fishBumpTimer = sFishingHookedFish->bumpTimer;
+            // Fishing_RF3PointInWater needs the play state and the fish's region, which is only set during the fish's
+            // own update (step 26e-6b: without it every row read 0, the pond's radius test)
+            sRF3MovePlay = play;
+            sRF3CurRegion = RF3_IS_REGION_FISH(sFishingHookedFish)
+                                ? &sRF3RegionBoxes[sFishingHookedFish->actor.params - EN_FISH_REGION]
+                                : NULL;
+            logFrame.fishInWater =
+                Fishing_RF3PointInWater(sFishingHookedFish->actor.world.pos.x, sFishingHookedFish->actor.world.pos.z);
+            sRF3CurRegion = NULL;
+        } else {
+            logFrame.fishInWater = -1;
         }
         logFrame.sceneNum = play->sceneNum; // step 15c
         logFrame.portable = sRF3Portable;
@@ -7015,6 +7141,107 @@ static void Fishing_RF3RegionTarget(Fishing* this) {
 
 // The hooked fish's steering target stays in the fishing area: the pond's 750 radius (unchanged), or the
 // region's box.
+// Steps 26e-3/26e-4: is (x, z) open water for a hooked RF3 fish's target? In a region: any water, inside the box
+// or not (user, 2026-10-08: "I want fish to be able to swim out of the region when hooked"): a water surface there,
+// near the region's, over ground at least RF3_REGION_MIN_DEPTH deep (Fishing_RF3KeepInWater's shore rule). In the
+// pond: its 750 radius.
+static s32 Fishing_RF3PointInWater(f32 x, f32 z) {
+    if (sRF3CurRegion != NULL) {
+        f32 surface;
+        WaterBox* waterBox;
+
+        if (sRF3MovePlay == NULL) {
+            return false;
+        }
+        if (!WaterBox_GetSurface1(sRF3MovePlay, &sRF3MovePlay->colCtx, x, z, &surface, &waterBox) ||
+            (fabsf(surface - sRF3CurRegion->surfaceY) > 20.0f)) {
+            return false;
+        }
+        return Fishing_RF3FloorAt(sRF3MovePlay, x, z) < (sRF3CurRegion->surfaceY - RF3_REGION_MIN_DEPTH);
+    }
+    return (SQ(x) + SQ(z)) <= SQ(750.0f);
+}
+
+// Step 26f-1: RF3's obstacle probe for RF3FishMove (RF3-MECHANICS 6.4, adapted). OoT's line test along the probe
+// (walls, floors, ceilings, front faces) stands in for RF3's swept box: 1 with the hit polygon's normal. A clear line
+// whose tip isn't open water (the shore probe from +60, which sees the Lake Hylia shelf with no collision under its
+// lip) is 2, blocked with no normal. 0 = clear.
+static s32 Fishing_RF3Probe(const f32 from[3], const f32 to[3], f32 normal[3]) {
+    Vec3f a;
+    Vec3f b;
+    Vec3f hit;
+    CollisionPoly* poly;
+    s32 bgId;
+
+    if (sRF3MovePlay == NULL) {
+        return 0;
+    }
+    a.x = from[0];
+    a.y = from[1];
+    a.z = from[2];
+    b.x = to[0];
+    b.y = to[1];
+    b.z = to[2];
+    if (BgCheck_EntityLineTest1(&sRF3MovePlay->colCtx, &a, &b, &hit, &poly, true, true, true, true, &bgId)) {
+        normal[0] = COLPOLY_GET_NORMAL(poly->normal.x);
+        normal[1] = COLPOLY_GET_NORMAL(poly->normal.y);
+        normal[2] = COLPOLY_GET_NORMAL(poly->normal.z);
+        return 1;
+    }
+    // Step 26f-2: also where OoT's own wall check will push the fish: at its check height (the fish lowered by
+    // fishLength * 0.1, plus 30), from the fish out past the check's 30 radius. A bank lip there stopped a STRUGGLE fish
+    // for 3.5 s while the centre line was clear (rf3_fishing_20261010_032439.csv, frames 4527-4596).
+    if (sRF3MoveFish != NULL) {
+        f32 dx = b.x - a.x;
+        f32 dy = b.y - a.y;
+        f32 dz = b.z - a.z;
+        f32 len = sqrtf(SQ(dx) + SQ(dy) + SQ(dz));
+        f32 ahead;
+        Vec3f c;
+        Vec3f e;
+
+        if (len > 0.01f) {
+            dx /= len;
+            dy /= len;
+            dz /= len;
+            c = sRF3MoveFish->actor.world.pos;
+            c.y += RF3_OOT_WALL_HEIGHT - (sRF3MoveFish->fishLength * 0.1f);
+            // as far ahead as the RF3 line's tip, but at least past OoT's radius
+            ahead = ((b.x - c.x) * dx) + ((b.z - c.z) * dz);
+            ahead = MAX(ahead, RF3_OOT_WALL_RADIUS + 5.0f);
+            e.x = c.x + (dx * ahead);
+            e.y = c.y + (dy * ahead);
+            e.z = c.z + (dz * ahead);
+            if (BgCheck_EntityLineTest1(&sRF3MovePlay->colCtx, &c, &e, &hit, &poly, true, true, true, true, &bgId)) {
+                normal[0] = COLPOLY_GET_NORMAL(poly->normal.x);
+                normal[1] = COLPOLY_GET_NORMAL(poly->normal.y);
+                normal[2] = COLPOLY_GET_NORMAL(poly->normal.z);
+                return 1;
+            }
+        }
+    }
+    // Step 26f-3: the land test every RF3_PROBE_LAND_STEP from the fish to the tip, not just at the tip: a thin shelf
+    // lip slipped between the centre line (open under it), the OoT-height line (over its top) and the tip (beyond it)
+    // (rf3_fishing_20261010_034256.csv, frames 9840-9863; only the shore rule caught it).
+    {
+        Vec3f start = (sRF3MoveFish != NULL) ? sRF3MoveFish->actor.world.pos : a;
+        f32 sx = b.x - start.x;
+        f32 sz = b.z - start.z;
+        f32 span = sqrtf(SQ(sx) + SQ(sz));
+        s32 steps = (s32)(span / RF3_PROBE_LAND_STEP) + 1;
+        s32 i;
+
+        for (i = 1; i <= steps; i++) {
+            f32 t = (f32)i / steps;
+
+            if (!Fishing_RF3PointInWater(start.x + (sx * t), start.z + (sz * t))) {
+                return 2;
+            }
+        }
+    }
+    return 0;
+}
+
 static void Fishing_RF3ClampFightTarget(Vec3f* target) {
     f32 targetSq;
     f32 scale;
@@ -7091,9 +7318,84 @@ static f32 Fishing_RF3FloorAt(PlayState* play, f32 x, f32 z) {
     Vec3f probe;
 
     probe.x = x;
-    probe.y = sRF3CurRegion->surfaceY + 10.0f;
+    // Step 26e-9: from RF3_SHORE_PROBE_HEIGHT above the water (was 10). The Lake Hylia island's shelf top is 15-43
+    // above the water and has no collision under its lip, so a probe from +10 started inside it, found the lake bed
+    // and called it deep water: hooked fish swam under the island (2026-10-09 CSVs).
+    probe.y = sRF3CurRegion->surfaceY + RF3_SHORE_PROBE_HEIGHT;
     probe.z = z;
     return BgCheck_EntityRaycastFloor1(&play->colCtx, &poly, &probe);
+}
+
+// Step 26e-8: a hooked region fish's wall test at its own centre height. OoT's fish wall check runs about 24 units above
+// the fish (Actor_UpdateBgCheckInfo with wall height 30, after lowering it by fishLength * 0.1), so it misses a shelf
+// whose top is just above the water (2026-10-09, the Lake Hylia island: the fish swam through one and under the island).
+// A line from the last position to the new one at the fish's centre; on a hit the move keeps only its part along the
+// wall (the fish slides along it), RF3_WALL_MARGIN off the wall's plane. If the slid move hits too (a corner), the fish
+// stays put. Front faces only, so a fish already inside can still get out. Logs contact start and end to rf3_models.txt.
+static void Fishing_RF3WallTest(Fishing* this, PlayState* play) {
+    s32 slot;
+    Vec3f prev;
+    Vec3f next;
+    Vec3f hit;
+    Vec3f slid;
+    Vec3f hit2;
+    CollisionPoly* poly;
+    CollisionPoly* poly2;
+    s32 bgId;
+    f32 nx;
+    f32 ny;
+    f32 nz;
+    f32 into;
+    f32 planeDist;
+    s32 stopped = false;
+    char line[320];
+
+    if ((sRF3CurRegion == NULL) || (this->actor.update == NULL)) {
+        return;
+    }
+    slot = this->actor.params - EN_FISH_REGION;
+    next = this->actor.world.pos;
+    if ((this->fishState != 5) || ((u32)(sRF3WallPrevFrame[slot] + 1) != play->gameplayFrames) ||
+        !BgCheck_EntityLineTest1(&play->colCtx, &sRF3WallPrev[slot], &next, &hit, &poly, true, true, true, true,
+                                 &bgId)) {
+        // not hooked, no update last frame (nothing to test from), or a clear move
+        if (sRF3WallContact[slot] != 0) {
+            snprintf(line, sizeof(line), "slot=%d rf3-wall-clear after=%d frames fish=(%.0f,%.0f,%.0f)", slot,
+                     sRF3WallContact[slot], next.x, next.y, next.z);
+            RF3FishMove_Log(line);
+            sRF3WallContact[slot] = 0;
+        }
+        return;
+    }
+    prev = sRF3WallPrev[slot];
+    nx = COLPOLY_GET_NORMAL(poly->normal.x);
+    ny = COLPOLY_GET_NORMAL(poly->normal.y);
+    nz = COLPOLY_GET_NORMAL(poly->normal.z);
+    into = ((next.x - prev.x) * nx) + ((next.y - prev.y) * ny) + ((next.z - prev.z) * nz);
+    slid.x = next.x - (nx * into);
+    slid.y = next.y - (ny * into);
+    slid.z = next.z - (nz * into);
+    planeDist = (nx * prev.x) + (ny * prev.y) + (nz * prev.z) + poly->dist; // prev's distance in front of the wall
+    if (planeDist < RF3_WALL_MARGIN) {
+        slid.x += nx * (RF3_WALL_MARGIN - planeDist);
+        slid.y += ny * (RF3_WALL_MARGIN - planeDist);
+        slid.z += nz * (RF3_WALL_MARGIN - planeDist);
+    }
+    if (BgCheck_EntityLineTest1(&play->colCtx, &prev, &slid, &hit2, &poly2, true, true, true, true, &bgId)) {
+        slid = prev; // a corner: stay put
+        stopped = true;
+    }
+    if (sRF3WallContact[slot] == 0) {
+        snprintf(line, sizeof(line),
+                 "slot=%d rf3-wall-cross from=(%.0f,%.0f,%.0f) to=(%.0f,%.0f,%.0f) hit=(%.0f,%.0f,%.0f) "
+                 "normal=(%.2f,%.2f,%.2f) ootWall=%d result=%s at=(%.0f,%.0f,%.0f)",
+                 slot, prev.x, prev.y, prev.z, next.x, next.y, next.z, hit.x, hit.y, hit.z, nx, ny, nz,
+                 (this->actor.bgCheckFlags & BGCHECKFLAG_WALL) ? 1 : 0, stopped ? "stop" : "slide", slid.x, slid.y,
+                 slid.z);
+        RF3FishMove_Log(line);
+    }
+    sRF3WallContact[slot]++;
+    this->actor.world.pos = slid;
 }
 
 // A region box can take in the shore. Over ground shallower than RF3_REGION_MIN_DEPTH the fish goes
@@ -7109,9 +7411,19 @@ static void Fishing_RF3KeepInWater(Fishing* this, PlayState* play) {
     slot = this->actor.params - EN_FISH_REGION;
     floorY = Fishing_RF3FloorAt(play, this->actor.world.pos.x, this->actor.world.pos.z);
     if (floorY > (sRF3CurRegion->surfaceY - RF3_REGION_MIN_DEPTH)) {
+        if ((sRF3ShoreBack[slot] == 0) && (this->fishState == 5)) { // step 26e-9: log a hooked fish's first frame back
+            char line[200];
+
+            snprintf(line, sizeof(line), "slot=%d rf3-shore-back fish=(%.0f,%.0f,%.0f) floor=%.0f surface=%.0f to=(%.0f,%.0f)",
+                     slot, this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z, floorY,
+                     sRF3CurRegion->surfaceY, sRF3RegionLastGood[slot].x, sRF3RegionLastGood[slot].z);
+            RF3FishMove_Log(line);
+        }
+        sRF3ShoreBack[slot]++;
         this->actor.world.pos.x = sRF3RegionLastGood[slot].x;
         this->actor.world.pos.z = sRF3RegionLastGood[slot].z;
     } else {
+        sRF3ShoreBack[slot] = 0;
         sRF3RegionLastGood[slot] = this->actor.world.pos;
     }
     if (this->actor.world.pos.y > (sRF3CurRegion->surfaceY - 3.0f)) {

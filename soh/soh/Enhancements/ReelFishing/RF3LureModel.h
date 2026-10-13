@@ -18,11 +18,24 @@ struct PlayState;
 // Returns 1 if an RF3 model was drawn; z_fishing.c then skips OoT's lure and hook models.
 // Returns 0 (draw OoT's lure) when RF3 is off, the option is off, nothing is chosen, the item has no model (OoT's
 // pole lures 91/92), or rf3_models.o2r is missing.
-int32_t RF3LureModel_Draw(struct PlayState* play, const float* pos, float rotY, float rotX, float zOffset);
+// Step 27b: a lure with a skinned copy (rf3models/lure_skin) is drawn with its bones, playing RF3's motions (at the rod
+// 17; at rest 4/6/3 by its rest action; otherwise the last one keeps playing). castState: z_fishing.c's sRodCastState.
+// Step 27c: hooked (castState 4/5) with hookedSlot >= 0 (the hooked region fish), the lure hangs by its hook (role 0)
+// from one of the fish's 3 mouth points (picked at random when the hook is set, as RF3) and turns with the fish; its
+// tie point is passed to the fish so the line ends there. frame: play->gameplayFrames.
+int32_t RF3LureModel_Draw(struct PlayState* play, const float* pos, float rotY, float rotX, float zOffset,
+                          int32_t castState, int32_t hookedSlot, uint32_t frame);
 // Step 25d-2: a bait set's float. baitPos: the hooked bait (sLurePos); rodTip: sRodTipPos; waterY: the surface.
 // With the bait under water the float sits on the surface above it; otherwise on the line toward the rod tip, the
 // set's float depth away. Draws nothing for sets without a float.
 void RF3LureModel_DrawFloat(struct PlayState* play, const float* baitPos, const float* rodTip, float waterY, float rotY);
+// Step 27c fix: if this frame's lure draw hung the lure from the fish's mouth, its line tie (world) in out; returns 1.
+// z_fishing.c draws the hooked line to it; the game logic keeps the fish's snout (fishMouthPos).
+int32_t RF3LureModel_LineTie(float* out);
+// Step 28a: the item-get model of a tackle item: kind RF3_STOCK_LURE/FLY/BAIT/FLOAT (RF3Bridge.h) and its index,
+// drawn at the current matrix (the get-item frame), centred, its longest side `size` frame units, side-on.
+// Returns 0 (draw OoT's) if the item has no RF3 model.
+int32_t RF3LureModel_DrawGI(struct PlayState* play, int32_t stockKind, int32_t index, float size);
 // The last draw decisions, as logged, for the debug window.
 const char* RF3LureModel_Status(void);
 const char* RF3LureModel_FloatStatus(void);

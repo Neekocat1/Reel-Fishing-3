@@ -273,6 +273,8 @@ class LureSim {
     bool IsTwitching() const { return mTwitchFrames > 0; }
     bool IsOnBottom() const { return mOnBottom; }
     bool IsDiveStopped() const { return mDiveStopped; }
+    uint8_t GetRestAction() const { return mMove.restAction; } // step 27b: RF3 picks the lure's rest motion by it
+    bool IsAtSurface() const { return mAtSurface; }
 
   private:
     float Speed(int pair) const { return mMove.speedBase[pair] + mMove.speedRate[pair] * mT; }

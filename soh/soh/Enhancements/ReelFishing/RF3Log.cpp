@@ -53,7 +53,8 @@ static bool OpenLog() {
              "rf3CastPower,rf3CastFactor,rf3LengthMm,rf3WeightG,fishYaw,fishTailStep,fishTailMag,rf3FishIndex,rf3Species,rf3Record,"
              "sceneNum,portable,lureInWater,lureFloorY,"
              "lureSimActive,lureIndex,lureDepthM,lureT,lureMode,lureTwitch,lureBottom,lureStop,lureKind,"
-             "rf3RodKind,rf3ChaserRecord,rf3ChaserC,rf3ChaserWaits,rf3ChaserWaitLeft,rf3ChasePingAgo\n";
+             "rf3RodKind,rf3ChaserRecord,rf3ChaserC,rf3ChaserWaits,rf3ChaserWaitLeft,rf3ChasePingAgo,"
+             "fishBgFlags,fishBumpTimer,fishInWater\n";
     sOpen = true;
     sRowsSinceFlush = 0;
     return true;
@@ -114,7 +115,10 @@ extern "C" void RF3Log_OwnerFrame(const RF3OwnerFrame* f) {
 
     // Step 20b-6: the chaser, for bait fishing (rod kind, species record, c, WAITs, WAIT left, update gap).
     sFile << approach.rodKind << ',' << approach.chaserRecord << ',' << approach.chaserC << ','
-          << approach.chaserWaits << ',' << approach.chaserWaitLeft << ',' << approach.chasePingAgo << '\n';
+          << approach.chaserWaits << ',' << approach.chaserWaitLeft << ',' << approach.chasePingAgo << ',';
+
+    // Step 26e-6: walls under the hooked fish.
+    sFile << f->fishBgFlags << ',' << f->fishBumpTimer << ',' << f->fishInWater << '\n';
 
     if (++sRowsSinceFlush >= kFlushEveryRows) {
         sFile.flush();

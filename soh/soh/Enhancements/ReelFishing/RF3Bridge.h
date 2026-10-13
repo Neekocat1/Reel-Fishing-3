@@ -380,6 +380,8 @@ typedef struct RF3LureStatus {
     int32_t twitch;  // 1 during a twitch
     int32_t bottom;  // 1 on the bottom
     int32_t stopped; // 1 held by the [assumed] dive stop
+    int32_t restAction; // step 27b: the lure's RLRE +0x0E (0/3/5 sink, 1/2/4 float up); -1 = not a lure
+    int32_t atSurface;  // step 27b: 1 at the surface (RF3's lure +0x70 "may go up" is 0 there)
 } RF3LureStatus;
 void RF3Lure_GetStatus(RF3LureStatus* status);
 

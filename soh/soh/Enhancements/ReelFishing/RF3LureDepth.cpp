@@ -188,6 +188,7 @@ extern "C" void RF3Lure_End(void) {
 extern "C" void RF3Lure_GetStatus(RF3LureStatus* status) {
     *status = {};
     status->lure = sLureIndex;
+    status->restAction = -1;
     if (sFly) {
         status->active = 1;
         status->kind = 1;
@@ -214,4 +215,6 @@ extern "C" void RF3Lure_GetStatus(RF3LureStatus* status) {
     status->twitch = sLure->IsTwitching() ? 1 : 0;
     status->bottom = sLure->IsOnBottom() ? 1 : 0;
     status->stopped = sLure->IsDiveStopped() ? 1 : 0;
+    status->restAction = sLure->GetRestAction();
+    status->atSurface = sLure->IsAtSurface() ? 1 : 0;
 }

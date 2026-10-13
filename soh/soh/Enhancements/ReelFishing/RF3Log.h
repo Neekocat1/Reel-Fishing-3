@@ -41,6 +41,9 @@ typedef struct RF3OwnerFrame {
     int32_t portable;    // step 15c: 1 = the rod used outside the pond
     int32_t lureInWater; // step 15c: the lure is over water (pond: inside its 920-unit radius)
     float lureFloorY;    // step 15c: ground under the lure (portable only)
+    int32_t fishBgFlags;   // step 26e-6: the hooked fish's actor.bgCheckFlags (0x08 = touching a wall)
+    int32_t fishBumpTimer; // step 26e-6: OoT's wall-bump timer (turns the fish's heading +-90 deg while > 0)
+    int32_t fishInWater;   // step 26e-6: Fishing_RF3PointInWater at the fish (-1 = no fish)
 } RF3OwnerFrame;
 
 // True when CSV logging is switched on in the Enhancements menu.

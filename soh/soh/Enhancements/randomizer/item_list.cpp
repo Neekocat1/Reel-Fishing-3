@@ -19,7 +19,7 @@ void RF3Rando_BuildItem(RandomizerGet get, const std::string& name) {
                           OBJECT_GI_FISH, GID_FISHING_POLE, TEXT_RANDOMIZER_CUSTOM_ITEM, 0x80, CHEST_ANIM_SHORT,
                           ITEM_CATEGORY_MAJOR, MOD_RANDOMIZER, { "a ", "un ", "ein " });
     bool rod = RF3Items_Kind(get - RG_RF3_ROD_0) == 0; // RF3_STOCK_ROD; OoT's pole (step 23c) is a rod too
-    itemTable[get].SetCustomDrawFunc(rod ? Randomizer_DrawFishingPoleGI : RF3Items_DrawTackleGI);
+    itemTable[get].SetCustomDrawFunc(rod ? RF3Items_DrawRodGI : RF3Items_DrawTackleGI); // step 28: RF3's models
 }
 
 std::array<Item, RG_MAX> Rando::StaticData::itemTable;

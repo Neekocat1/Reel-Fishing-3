@@ -22,6 +22,8 @@ int32_t RF3Items_Offset(int32_t kind, int32_t index); // the reverse; -1 if out 
 
 // The get-item model of lures, flies, baits and floats: OoT's pond lure (object_fish), scaled up.
 void RF3Items_DrawTackleGI(struct PlayState* play, struct GetItemEntry* getItemEntry);
+// Step 28b: a rod's get-item model (its RF3 rod; OoT's pole keeps OoT's GI pole).
+void RF3Items_DrawRodGI(struct PlayState* play, struct GetItemEntry* getItemEntry);
 
 // Randomizer_Item_Give for an RG_RF3_* item (offset as above): puts it in the stock (RF3Stock.cpp), unless it is
 // the queued item being shown (step 22c), which is in the stock already.

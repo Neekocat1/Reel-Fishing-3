@@ -11,6 +11,7 @@
 #include "RF3Bridge.h"
 #include "RF3Items.h"
 #include "RF3FishModel.h"
+#include "RF3RodModel.h"
 #include "RF3LureModel.h"
 #include "RF3TackleAssets.h"
 
@@ -180,6 +181,19 @@ static void DrawStock() {
     float scale = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiLureScale"), 0.03f);
     if (ImGui::SliderFloat("Lure model scale (item get)", &scale, 0.005f, 0.2f, "%.3f")) {
         CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiLureScale"), scale);
+    }
+    // Step 28: the RF3 models in the item get
+    float tackle = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiTackleSize"), 60.0f);
+    if (ImGui::SliderFloat("RF3 tackle size (item get)", &tackle, 10.0f, 400.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiTackleSize"), tackle);
+    }
+    float rodLength = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiRodLength"), 35.0f);
+    if (ImGui::SliderFloat("RF3 rod length (item get, world units)", &rodLength, 10.0f, 200.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiRodLength"), rodLength);
+    }
+    float rodOffset = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiRodOffsetY"), -5.0f);
+    if (ImGui::SliderFloat("RF3 rod offset (item get, world units, + = up)", &rodOffset, -60.0f, 60.0f, "%.1f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiRodOffsetY"), rodOffset);
     }
 }
 
@@ -372,7 +386,72 @@ static void DrawFishModel() {
         CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishModelPreview"), preview);
     }
     ImGui::TextDisabled("Only the look changes; records 0-40 have RF3 models (32 shows 33's).");
+    // Step 25g-3: RF3's own motions.
+    bool motions = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishMotions"), 1) != 0;
+    if (ImGui::Checkbox("Play RF3's own motions (off = OoT's bend, step 25e)", &motions)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishMotions"), motions ? 1 : 0);
+    }
+    int force = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishMotionForce"), -1);
+    if (ImGui::InputInt("Force RF3 request code (-1 = chosen by state)", &force)) {
+        force = std::max(-1, std::min(force, 66));
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishMotionForce"), force);
+    }
+    // Step 26e-2: RF3's request codes (RF3-MECHANICS 6.2); other numbers play that raw animation.
+    ImGui::TextDisabled("Patterns: 60 towed, 2/3/4 swim S/M/L, 15/16 thrash/big, 28 Kuh!, 61/62 keep box, 63-66 turns");
+    float rate = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMotionRate"), 1.0f);
+    if (ImGui::SliderFloat("Motion speed (x)", &rate, 0.1f, 3.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMotionRate"), rate);
+    }
+    float slow = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMotionSlow"), 1.0f);
+    if (ImGui::SliderFloat("Swim S below speed", &slow, 0.0f, 10.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMotionSlow"), slow);
+    }
+    float fast = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMotionFast"), 3.0f);
+    if (ImGui::SliderFloat("Swim L from speed", &fast, 0.0f, 20.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMotionFast"), fast);
+    }
+    // Step 26e-4: the hooked fish's RF3 movement speed (RF3 = 1.0; user found it too fast).
+    float moveSpeed = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMoveSpeed"), 0.5f);
+    if (ImGui::SliderFloat("Hooked fish speed (x RF3's)", &moveSpeed, 0.1f, 1.5f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMoveSpeed"), moveSpeed);
+    }
+    int turnRate = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishMotionTurnRate"), 0x300);
+    if (ImGui::SliderInt("Turn motion above yaw/frame", &turnRate, 0, 0x2000)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishMotionTurnRate"), turnRate);
+    }
     ImGui::TextWrapped("Now: %s", RF3FishModel_Status());
+}
+
+// Step 25f-3: RF3's rod models in Link's hands (mods/rf3_models.o2r). Changes are logged to rf3_models.txt.
+static void DrawRodModel() {
+    if (!ImGui::CollapsingHeader("RF3 rod models (step 25f)")) {
+        return;
+    }
+    bool on = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.RodModels"), 1) != 0;
+    if (ImGui::Checkbox("Draw RF3's rod in Link's hands", &on)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.RodModels"), on ? 1 : 0);
+    }
+    float scale = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodModelScale"), RF3_UNITS_PER_METRE);
+    if (ImGui::SliderFloat("Rod size (units/m; 68 = the game's metre)", &scale, 20.0f, 200.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodModelScale"), scale);
+    }
+    float bend = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodModelBend"), 1.0f);
+    if (ImGui::SliderFloat("Rod bend (x OoT's; negative = other way)", &bend, -3.0f, 3.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodModelBend"), bend);
+    }
+    float grip = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodModelGrip"), 0.0f);
+    if (ImGui::SliderFloat("Grip (m along the rod; + = hand further up)", &grip, -0.5f, 0.5f, "%.3f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodModelGrip"), grip);
+    }
+    int preview = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.RodModelPreview"), -1);
+    if (ImGui::InputInt("Show rod # (-1 = the chosen box's)", &preview)) {
+        preview = std::max(-1, std::min(preview, 9));
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.RodModelPreview"), preview);
+    }
+    if (preview >= 0) {
+        ImGui::Text("  %s (only the look changes)", RF3Stock_Name(RF3_STOCK_ROD, preview));
+    }
+    ImGui::TextWrapped("Now: %s", RF3RodModel_Status());
 }
 
 void RF3DebugWindow::DrawElement() {
@@ -386,6 +465,7 @@ void RF3DebugWindow::DrawElement() {
     DrawFlyCast();
     DrawLureModel();
     DrawFishModel();
+    DrawRodModel();
     if (!s.active) {
         ImGui::Separator();
         DrawApproach();

@@ -16,6 +16,9 @@
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "RF3Bridge.h"
+#include "RF3LureModel.h" // step 28
+#include "RF3RodModel.h"
+#include "soh/Enhancements/randomizer/draw.h" // Randomizer_DrawFishingPoleGI (OoT's pole, step 28b)
 
 extern "C" {
 #include <z64.h>
@@ -43,6 +46,11 @@ constexpr int32_t kExtraIndex[] = { 10, 91, 92 };
 // The pond draws its lure at 0.004 (z_fishing.c); a get-item model is much larger. Tunable from the debug
 // window until it looks right (the user checks it).
 constexpr float kDefaultLureScale = 0.03f;
+// Step 28: RF3 tackle's longest side in get-item frame units, and a rod's length in world units. Sliders in the debug
+// window; defaults set by the user in game (2026-10-12: "35 rod length and -5.0 rod height look correct. 60 tackle
+// size looks correct"). The rod's height offset default is in RF3RodModel.cpp.
+constexpr float kDefaultGiTackleSize = 60.0f;
+constexpr float kDefaultGiRodLength = 35.0f;
 
 // Step 22c: items already in the stock, waiting for Link to hold them up (front first). Not saved: a quit
 // before the animation only skips the animation. sAsked: the front was handed to GiveItemEntryWithoutActor.
@@ -221,7 +229,20 @@ extern "C" int32_t RF3Items_Offset(int32_t kind, int32_t index) {
     return -1;
 }
 
+// Step 28: the item's offset in the RF3 item block (RandomizerGet - RG_RF3_ROD_0), from the get-item entry.
+static int32_t GiOffset(const GetItemEntry* e) {
+    int32_t offset = (e != nullptr) ? static_cast<int32_t>(e->getItemId) - RG_RF3_ROD_0 : -1;
+    return (offset >= 0 && offset < RF3_ITEM_COUNT) ? offset : -1;
+}
+
 extern "C" void RF3Items_DrawTackleGI(PlayState* play, GetItemEntry* getItemEntry) {
+    // Step 28a: the item's own RF3 model when it has one (OoT's pole lures 91/92 keep the pond lure).
+    int32_t offset = GiOffset(getItemEntry);
+    float size = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiTackleSize"), kDefaultGiTackleSize);
+    if (offset >= 0 && RF3_IsEnabled() &&
+        RF3LureModel_DrawGI(play, RF3Items_Kind(offset), RF3Items_Index(offset), size)) {
+        return;
+    }
     float scale = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiLureScale"), kDefaultLureScale);
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
@@ -234,6 +255,17 @@ extern "C" void RF3Items_DrawTackleGI(PlayState* play, GetItemEntry* getItemEntr
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gFishingLureFloatDL);
     Matrix_Pop();
     CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Step 28b: a rod's get-item model: its RF3 rod (OoT's pole, rod 10, keeps OoT's GI pole).
+extern "C" void RF3Items_DrawRodGI(PlayState* play, GetItemEntry* getItemEntry) {
+    int32_t offset = GiOffset(getItemEntry);
+    float length = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiRodLength"), kDefaultGiRodLength);
+    if (offset >= 0 && RF3_IsEnabled() && RF3Items_Kind(offset) == RF3_STOCK_ROD &&
+        RF3RodModel_DrawGI(play, RF3Items_Index(offset), length)) {
+        return;
+    }
+    Randomizer_DrawFishingPoleGI(play, getItemEntry);
 }
 
 extern "C" void RF3Items_Receive(int32_t offset) {
