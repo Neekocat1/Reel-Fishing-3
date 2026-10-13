@@ -79,7 +79,16 @@ constexpr float kFloatMaxShare = 0.9f; // out of the water: at most this share o
 constexpr int32_t kLureMotionRod = 17;      // the ready pose at the rod (0x0017FCF0, 0x00180800), blend 0
 constexpr int32_t kLureMotionSink = 4;      // at rest, sinking actions 0/3/5 (0x002018E0), and float-up action 4
 constexpr int32_t kLureMotionBottom = 6;    // at rest on the bottom, sinking actions
-constexpr int32_t kLureMotionRise = 3;      // at rest, float-up actions 1/2, below the surface
+constexpr int32_t kLureMotionRise = 3;      // at rest, float-up actions 1/2, below the surface; [recorded] "moving"
+// Step 27d (RF3 recording rf3live_20261013_154219, lure 48 Suspended Vibration G, rest action 2): reeling plays 1, a
+// lure at rest plays 3 while it moves and 5 when still, a twitch changes nothing, the fight keeps the last motion.
+constexpr int32_t kLureMotionReel = 1;
+constexpr int32_t kLureMotionIdle = 5;
+constexpr float kLureMoveRiseMps = 0.006f;  // [recorded] rising faster than 0.0001 m per RF3 frame -> 3
+constexpr float kLureMoveHorizMps = 0.06f;  // [recorded] drifting faster than 0.001 m per RF3 frame -> 3
+// Step 27d-2 (recording rf3live_20261013_160939, lures 27/36/39/42/63): in the fight RF3's lure keeps its own states:
+// reel held -> 1; released -> the moving motion for 0.45-0.9 s, then still. [assumed] 0.5 s.
+constexpr float kLureFightSettleSeconds = 0.5f;
 constexpr float kLureRestBlend = 0.3f;      // 0x002018E0's blend (+0xEC)
 constexpr float kFrameSeconds = 1.0f / 20.0f;
 
@@ -121,6 +130,16 @@ struct LureAnim {
     // step 27c: the hook set
     int32_t hookedSlot = -1;
     int32_t hookPoint = -1;
+    // step 27d: the lure's movement since the last game frame (RF3's rest motion: 3 moving, 5 still)
+    bool haveMove = false;
+    float prevDepth = 0.0f;
+    float prevPos[3] = { 0, 0, 0 };
+    float riseMps = 0.0f;
+    float horizMps = 0.0f;
+    // step 27d-2: for the fight (the lure sim is off then)
+    int32_t lastRestAction = -1;
+    float settleLeft = 0.0f;
+    float dt = 0.0f;
 };
 
 struct LureModel {
@@ -490,43 +509,78 @@ void LureSample(const LureMotions& s, int32_t motion, float t, int32_t b, std::a
     outR = Slerp(s.R[s.ridx[f0]], s.R[s.ridx[f0 + 1]], u);
 }
 
-// RF3's motion choice (RF3-MECHANICS 6.6). Returns the motion to request, or -1 to keep the current one; blend set.
-int32_t ChooseLureMotion(int32_t castState, float& blend, std::string& why) {
+// The rest motion while the lure moves, by its RLRE +0x0E rest action [code 0x002018E0, recorded for 0, 1, 2, 4]:
+// sinking actions 0/3/5 and the topwater action 4 play 4, float-up actions 1/2 play 3.
+int32_t MovingMotion(int32_t restAction) {
+    return (restAction == 1 || restAction == 2) ? kLureMotionRise : kLureMotionSink;
+}
+
+bool Sinks(int32_t restAction) {
+    return restAction == 0 || restAction == 3 || restAction == 5;
+}
+
+// RF3's motion choice (RF3-MECHANICS 6.6; 27d recordings). Returns the motion to request, or -1 to keep the current
+// one (in flight and while landing RF3 changes nothing); blend set.
+int32_t ChooseLureMotion(int32_t castState, bool reelHeld, LureAnim& a, float& blend, std::string& why) {
     if (castState == 0) {
         blend = 0.0f;
         why = "rod";
         return kLureMotionRod;
     }
+    blend = kLureRestBlend;
+    if (castState == 4) {
+        // hooked [recorded]: the lure's own states go on; the mod's lure sim is off, so the reel button drives it
+        if (a.lastRestAction < 0) {
+            return -1;
+        }
+        if (reelHeld) {
+            a.settleLeft = kLureFightSettleSeconds;
+            why = "fight-reel";
+            return kLureMotionReel;
+        }
+        if (a.settleLeft > 0.0f) {
+            a.settleLeft -= a.dt;
+            why = "fight-settle";
+            return MovingMotion(a.lastRestAction);
+        }
+        if (Sinks(a.lastRestAction)) {
+            return -1; // [recorded] the jig kept its rest motion through the fight
+        }
+        why = "fight-still";
+        return kLureMotionIdle;
+    }
+    if (castState != 3) {
+        return -1; // flight, landing: the last motion plays on [recorded]
+    }
     RF3LureStatus st;
     RF3Lure_GetStatus(&st);
-    if (st.active && st.kind == 0 && st.mode == 2 && st.restAction >= 0) {
-        blend = kLureRestBlend;
-        switch (st.restAction) {
-            case 0:
-            case 3:
-            case 5:
-                why = st.bottom ? "rest-bottom" : "rest-sink";
-                return st.bottom ? kLureMotionBottom : kLureMotionSink;
-            case 1:
-            case 2:
-                if (!st.atSurface) {
-                    why = "rest-rise";
-                    return kLureMotionRise;
-                }
-                break;
-            case 4:
-                if (!st.atSurface) {
-                    why = "rest-rise4";
-                    return kLureMotionSink;
-                }
-                break;
-        }
+    if (!st.active || st.kind != 0) {
+        return -1;
     }
-    return -1; // RF3 sets no other lure motion (reeling, twitching, the fight: not found, 27d): the last one plays on
+    if (st.restAction >= 0) {
+        a.lastRestAction = st.restAction;
+    }
+    a.settleLeft = 0.0f;
+    if (st.mode == 1) {
+        why = "reel"; // [recorded]; a twitch keeps it [recorded]
+        return kLureMotionReel;
+    }
+    if (st.mode != 2 || st.restAction < 0) {
+        return -1;
+    }
+    if (Sinks(st.restAction)) { // [recorded, jig action 0] 4 while sinking, 6 on the bottom
+        why = st.bottom ? "rest-bottom" : "rest-sink";
+        return st.bottom ? kLureMotionBottom : kLureMotionSink;
+    }
+    // float-up actions 1/2/4: [recorded] the moving motion (3, or 4 for action 4) while it moves, 5 when still
+    bool moving = a.riseMps > kLureMoveRiseMps || a.horizMps > kLureMoveHorizMps;
+    why = moving ? "rest-moving" : "rest-still";
+    return moving ? MovingMotion(st.restAction) : kLureMotionIdle;
 }
 
 // Advances the lure's motion player one game frame and fills the bones' world rotations and positions (metres).
-bool LurePose(const rf3model::SkinnedModel& m, int32_t index, int32_t castState, uint32_t frame,
+bool LurePose(const rf3model::SkinnedModel& m, int32_t index, int32_t castState, bool reelHeld, uint32_t frame,
+              const float* lurePos,
               std::vector<rf3model::Mat3>& rot, std::vector<std::array<float, 3>>& pos) {
     LureMotions* s = GetLureMotions(m);
     if (s == nullptr || !s->ok) {
@@ -543,9 +597,30 @@ bool LurePose(const rf3model::SkinnedModel& m, int32_t index, int32_t castState,
     }
     a.lastFrame = frame;
     a.haveFrame = true;
+    {
+        // step 27d: rise speed (depth getting smaller) and horizontal speed, m/s, over this game frame
+        RF3LureStatus st;
+        RF3Lure_GetStatus(&st);
+        if (st.active && a.haveMove && dt > 0.0f) {
+            a.riseMps = (a.prevDepth - st.depthM) / dt;
+            float dx = lurePos[0] - a.prevPos[0];
+            float dz = lurePos[2] - a.prevPos[2];
+            a.horizMps = std::sqrt(dx * dx + dz * dz) / RF3_UNITS_PER_METRE / dt;
+        } else if (!st.active) {
+            a.riseMps = a.horizMps = 0.0f;
+        }
+        if (dt > 0.0f || !a.haveMove) {
+            a.haveMove = st.active != 0;
+            a.prevDepth = st.depthM;
+            for (int32_t i = 0; i < 3; i++) {
+                a.prevPos[i] = lurePos[i];
+            }
+        }
+    }
     float blend = 0.0f;
     std::string why;
-    int32_t want = ChooseLureMotion(castState, blend, why);
+    a.dt = dt;
+    int32_t want = ChooseLureMotion(castState, reelHeld, a, blend, why);
     if (want >= 0 && want != a.motion && LurePlayable(*s, want)) {
         a.prevMotion = a.motion;
         a.prevTime = a.time;
@@ -702,7 +777,9 @@ extern "C" int32_t RF3LureModel_Draw(PlayState* play, const float* pos, float ro
                                                                                           : nullptr;
     std::vector<rf3model::Mat3> brot;
     std::vector<std::array<float, 3>> bpos;
-    if (skin != nullptr && !LurePose(*skin, index, castState, frame, brot, bpos)) {
+    // step 27d-2: the reel (A, as z_fishing.c's RF3 fight reads it) drives the hooked lure's motion
+    const bool reelHeld = CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_A);
+    if (skin != nullptr && !LurePose(*skin, index, castState, reelHeld, frame, pos, brot, bpos)) {
         skin = nullptr;
     }
     if (skin == nullptr && !(castState == 4 || castState == 5)) {
