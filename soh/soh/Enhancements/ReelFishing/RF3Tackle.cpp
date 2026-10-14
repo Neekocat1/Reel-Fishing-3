@@ -57,6 +57,9 @@ int32_t sDepth[RF3_TACKLE_BOXES] = {};
 int32_t sBait[RF3_TACKLE_BOXES] = {};
 int32_t sSize[RF3_TACKLE_BOXES] = {};
 int32_t sTarget = kDefaultTarget;
+// Step 32a: the lure/fly a box's line lost when it snapped, or kUnset. The box stays empty (no auto-pick) until the
+// menu picks one or the lost one comes back (scene change), then it goes back on.
+int32_t sEmptied[RF3_TACKLE_BOXES] = {};
 
 bool InRange(int32_t v, int32_t count) {
     return (v >= 0) && (v < count);
@@ -118,7 +121,7 @@ bool Validate(const char* why) {
             fixed = true;
         }
         if (rf3tackle::FindLure(*box, sLure[b]) == nullptr && !box->lures.empty() &&
-            !(sStockKnown && sLure[b] == kUnset)) {
+            !(sStockKnown && sLure[b] == kUnset) && sEmptied[b] == kUnset) { // step 32a: an emptied box stays empty
             sLure[b] = rf3tackle::FindLure(*box, kDefaultLure[b]) ? kDefaultLure[b] : box->lures.front().index;
             fixed = true;
         }
@@ -185,7 +188,29 @@ bool ValidateStock(const char* why) {
         if (box == nullptr) {
             continue;
         }
-        int32_t lure = FirstOwned(box->lures, ItemKind(*box), sLure[b]);
+        int32_t lure;
+        const int32_t kind = ItemKind(*box);
+        char detail[96];
+        if (box->kind == "bait") {
+            lure = FirstOwned(box->lures, kind, sLure[b]);
+        } else if (sEmptied[b] != kUnset) {
+            // Step 32a: emptied by a line break: stays empty until the lost one is owned again (the scene restore)
+            lure = kUnset;
+            if (Have(kind, sEmptied[b])) {
+                lure = sEmptied[b];
+                sEmptied[b] = kUnset;
+                std::snprintf(detail, sizeof(detail), "box=%d lure=%d why=%s", b, lure, why ? why : "-");
+                LogChoice("tackle-reequip", detail);
+            }
+        } else if (sLure[b] != kUnset && !Have(kind, sLure[b]) && RF3Stock_Lost(kind, sLure[b]) > 0) {
+            // Step 32a: the line snapped with this lure/fly: the box goes empty instead of taking another one
+            sEmptied[b] = sLure[b];
+            lure = kUnset;
+            std::snprintf(detail, sizeof(detail), "box=%d lost=%d why=%s", b, sEmptied[b], why ? why : "-");
+            LogChoice("tackle-emptied", detail);
+        } else {
+            lure = FirstOwned(box->lures, kind, sLure[b]);
+        }
         int32_t flt = FirstOwned(box->floats, RF3_STOCK_FLOAT, sFloat[b]);
         int32_t bait = (sBait[b] != kNoBait && !Have(RF3_STOCK_BAIT, sBait[b])) ? kNoBait : sBait[b];
         if (lure != sLure[b] || flt != sFloat[b] || bait != sBait[b]) {
@@ -220,6 +245,7 @@ void ResetChoice() {
         sDepth[b] = kDefaultDepth;
         sBait[b] = kNoBait;
         sSize[b] = kDefaultSize;
+        sEmptied[b] = kUnset;
     }
     sTarget = kDefaultTarget;
 }
@@ -242,6 +268,9 @@ void SaveSection(const SaveContext& saveContext, int sectionID, bool fullSave) {
                                      [](size_t i) { SaveManager::Instance->SaveData("", sBait[i]); });
     SaveManager::Instance->SaveArray("size", RF3_TACKLE_BOXES,
                                      [](size_t i) { SaveManager::Instance->SaveData("", sSize[i]); });
+    // Step 32a (older saves load kUnset).
+    SaveManager::Instance->SaveArray("emptied", RF3_TACKLE_BOXES,
+                                     [](size_t i) { SaveManager::Instance->SaveData("", sEmptied[i]); });
 }
 
 void LoadSection() {
@@ -261,6 +290,8 @@ void LoadSection() {
                                      [](size_t i) { SaveManager::Instance->LoadData("", sBait[i], kNoBait); });
     SaveManager::Instance->LoadArray("size", RF3_TACKLE_BOXES,
                                      [](size_t i) { SaveManager::Instance->LoadData("", sSize[i], kDefaultSize); });
+    SaveManager::Instance->LoadArray("emptied", RF3_TACKLE_BOXES,
+                                     [](size_t i) { SaveManager::Instance->LoadData("", sEmptied[i], kUnset); });
     // A damaged or hand-edited save must not leave an index out of range. kUnset is allowed.
     bool fixed = false;
     if (!InRange(sBox, BoxCount())) {
@@ -274,6 +305,10 @@ void LoadSection() {
         }
         if (sLure[b] != kUnset && !InRange(sLure[b], kLureCount)) {
             sLure[b] = kDefaultLure[b];
+            fixed = true;
+        }
+        if (sEmptied[b] != kUnset && !InRange(sEmptied[b], kLureCount)) {
+            sEmptied[b] = kUnset;
             fixed = true;
         }
         if (sFloat[b] != kUnset && !InRange(sFloat[b], kFloatCount)) {
@@ -383,6 +418,16 @@ extern "C" int32_t RF3Tackle_Ready(const char** reason) {
     return why == nullptr ? 1 : 0;
 }
 
+// Step 32a: the open box is a lure/fly box with no owned lure/fly on the line (e.g. after a line break): nothing is
+// drawn at the line's end.
+extern "C" int32_t RF3Tackle_LureMissing(void) {
+    const rf3tackle::Box* b = AssetBox(sBox);
+    if (b == nullptr || b->kind == "bait" || !sStockKnown) {
+        return 0;
+    }
+    return (sLure[sBox] == kUnset || !Have(ItemKind(*b), sLure[sBox])) ? 1 : 0;
+}
+
 extern "C" int32_t RF3Tackle_GetBoxLine(int32_t box) {
     return InRange(box, RF3_TACKLE_BOXES) ? sLine[box] : -1;
 }
@@ -434,6 +479,7 @@ extern "C" int32_t RF3Tackle_SetLure(int32_t box, int32_t lure, const char* why)
     if (const rf3tackle::Box* b = AssetBox(box); sStockKnown && b != nullptr && !Have(ItemKind(*b), lure)) {
         return 0; // step 21d: not owned, or none left
     }
+    sEmptied[box] = kUnset; // step 32a: the player picked one; the lost one won't go back on by itself
     if (lure != sLure[box]) {
         sLure[box] = lure;
         LogChoice("tackle-select", why);

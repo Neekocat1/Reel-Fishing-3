@@ -86,6 +86,8 @@ constexpr float kDefaultFloatDipDown = 0.1f;
 constexpr float kDefaultFloatDipUp = 0.4f;
 // Step 29g: going under at the bite [assumed, sliders]
 constexpr float kDefaultFloatUnderTime = 0.2f; // seconds to get there
+// Step 31b: back to the surface (or the line) when the fight ends [assumed, slider]
+constexpr float kDefaultFloatReturnTime = 0.3f;
 // Step 27b: RF3's lure motions (RF3-MECHANICS 6.6).
 constexpr int32_t kLureMotionRod = 17;      // the ready pose at the rod (0x0017FCF0, 0x00180800), blend 0
 constexpr int32_t kLureMotionSink = 4;      // at rest, sinking actions 0/3/5 (0x002018E0), and float-up action 4
@@ -200,6 +202,10 @@ bool sUnderActive = false;
 uint32_t sUnderStartFrame = 0;
 float sUnderFrom[3] = {};
 float sFloatLastAt[3] = {};
+// step 31b: the float's return from where the fight left it
+bool sReturnActive = false;
+uint32_t sReturnStartFrame = 0;
+float sReturnFrom[3] = {};
 // step 29g-2: the float was drawn this frame at sFloatLastAt (z_fishing.c threads the line through it)
 bool sFloatDrawn = false;
 uint32_t sFloatDrawnFrame = 0;
@@ -1030,8 +1036,18 @@ extern "C" void RF3LureModel_DrawFloat(PlayState* play, const float* baitPos, co
     const char* where;
     // Step 29g: from the bite (cast state 4: hooked) the float goes under and follows the fish.
     if (castState != 4) {
+        // Step 31b: the fight ended (lost or landed): blend back from where the float was last drawn, if that was
+        // the frame before (else it was off screen or not drawn, and there is nothing to blend from).
+        if (sUnderActive && sFloatDrawn && play->gameplayFrames - sFloatDrawnFrame <= 1) {
+            sReturnActive = true;
+            sReturnStartFrame = play->gameplayFrames;
+            for (int32_t i = 0; i < 3; i++) {
+                sReturnFrom[i] = sFloatLastAt[i];
+            }
+        }
         sUnderActive = false;
     } else if (!sUnderActive) {
+        sReturnActive = false;
         sUnderActive = true;
         sUnderStartFrame = play->gameplayFrames;
         for (int32_t i = 0; i < 3; i++) {
@@ -1130,6 +1146,34 @@ extern "C" void RF3LureModel_DrawFloat(PlayState* play, const float* baitPos, co
         if (sFloatBobState != "float-bob state=none") { // step 29e: no bob off the water
             sFloatBobState = "float-bob state=none";
             Log(sFloatBobState);
+        }
+    }
+    if (sReturnActive) {
+        // Step 31b: from where the fight left it to this frame's spot (which keeps its bob), over returnTime s
+        // (smoothstep).
+        float returnTime = std::max(0.05f, CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatReturnTime"),
+                                                        kDefaultFloatReturnTime));
+        uint32_t frames = play->gameplayFrames - sReturnStartFrame;
+        float share = std::min(1.0f, static_cast<float>(frames) * kGameFrameSeconds / returnTime);
+        if (frames == 0) {
+            char line[160];
+            std::snprintf(line, sizeof(line),
+                          "float-return start time_s=%.2f cast=%d from=(%.1f %.1f %.1f) to=(%.1f %.1f %.1f) where=%s",
+                          returnTime, castState, sReturnFrom[0], sReturnFrom[1], sReturnFrom[2], at[0], at[1], at[2],
+                          where);
+            Log(line);
+        }
+        if (share >= 1.0f) {
+            sReturnActive = false;
+            char line[100];
+            std::snprintf(line, sizeof(line), "float-return done frames=%u where=%s", frames, where);
+            Log(line);
+        } else {
+            share = share * share * (3.0f - 2.0f * share);
+            for (int32_t i = 0; i < 3; i++) {
+                at[i] = sReturnFrom[i] + (at[i] - sReturnFrom[i]) * share;
+            }
+            where = "return";
         }
     }
     float unitsPerMetre = CVarGetFloat(kKindInfo[kFloat].cvar, kKindInfo[kFloat].defaultScale);

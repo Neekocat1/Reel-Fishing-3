@@ -293,6 +293,9 @@ int32_t RF3Tackle_BoxOwned(int32_t box);
 int32_t RF3Tackle_ItemOwned(int32_t box, int32_t rowKind, int32_t index);
 // Can Link cast with the current choice? If not, reason = RF3's text ("Lure not selected." etc.).
 int32_t RF3Tackle_Ready(const char** reason);
+// Step 32a: 1 if the open box is a lure/fly box with no owned lure/fly on the line (after a line break): nothing is
+// drawn at the line's end.
+int32_t RF3Tackle_LureMissing(void);
 // Step 23c: OoT's pole (box 10) uses OoT's own lure movement. -1 if another box is chosen, else 1 for the
 // sinking lure (92) and 0 for the normal lure (91).
 int32_t RF3Tackle_PoleLure(void);

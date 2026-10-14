@@ -21,6 +21,8 @@
 // Reel Fishing III mod (step 25c-2): this frame's lure is RF3's own model, so OoT's lure and hook models are not
 // drawn (the hook points and the owner's hat still work).
 static u8 sRF3LureModelShown = false;
+// Step 32a: the line has no lure (it snapped off; RF3Tackle_LureMissing): nothing is drawn at its end.
+static u8 sRF3NoLure = false;
 
 // Reel Fishing III mod: RF3 steps are 1/60 s; OoT's game logic runs R_UPDATE_RATE of them per
 // game frame (3 = 20 Hz in normal play).
@@ -1781,14 +1783,15 @@ void Fishing_DrawLureHook(PlayState* play, Vec3f* pos, Vec3f* refPos, u8 hookInd
     Matrix_Scale(0.0039999997f, 0.0039999997f, 0.005f, MTXMODE_APPLY);
     Matrix_RotateY(M_PI, MTXMODE_APPLY);
 
-    if (!sRF3LureModelShown) { // Reel Fishing III mod (step 25c-2): RF3's lure brings its own hook
+    // Reel Fishing III mod (step 25c-2): RF3's lure brings its own hook; step 32a: no lure, no hook
+    if (!sRF3LureModelShown && !sRF3NoLure) {
         gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gSPDisplayList(POLY_OPA_DISP++, gFishingLureHookDL);
     }
 
     Matrix_RotateZ(M_PI / 2, MTXMODE_APPLY);
 
-    if (!sRF3LureModelShown) {
+    if (!sRF3LureModelShown && !sRF3NoLure) {
         gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gSPDisplayList(POLY_OPA_DISP++, gFishingLureHookDL);
     }
@@ -2013,6 +2016,7 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
     }
 
     sRF3LureModelShown = false;
+    sRF3NoLure = RF3_IsEnabled() && RF3Tackle_LureMissing(); // step 32a
     if (sLureEquipped != FS_LURE_SINKING) {
         Matrix_Translate(sLurePos.x, sLurePos.y, sLurePos.z, MTXMODE_NEW);
         Matrix_RotateY(sLureRot.y + sLure1Rotate, MTXMODE_APPLY);
@@ -2020,7 +2024,8 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
         // Reel Fishing III mod (steps 25c-2, 25d-2): RF3's own model of the chosen lure, fly or bait.
         // Step 27b/27c: the cast state picks RF3's lure motion; hooked, the region fish's slot lets the lure hang
         // from its mouth.
-        sRF3LureModelShown = RF3LureModel_Draw(
+        // Step 32a: an empty line draws no RF3 lure (and, below, no OoT lure or hooks).
+        sRF3LureModelShown = !sRF3NoLure && RF3LureModel_Draw(
             play, &sLurePos.x, sLureRot.y + sLure1Rotate, sLureRot.x, sLurePosZOffset, sRodCastState,
             (((sRodCastState == 4) || (sRodCastState == 5)) && (sFishingHookedFish != NULL) &&
              RF3_IS_REGION_FISH(sFishingHookedFish))
@@ -2034,7 +2039,7 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
 
         Gfx_SetupDL_25Opa(play->state.gfxCtx);
 
-        if (!sRF3LureModelShown) {
+        if (!sRF3LureModelShown && !sRF3NoLure) {
             gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
             gSPDisplayList(POLY_OPA_DISP++, gFishingLureFloatDL);
         }
@@ -4703,6 +4708,9 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                         Sfx_PlaySfxCentered(NA_SE_IT_BOW_FLICK);
                         RF3Stock_LoseCurrent(); // step 21e: the fish takes the lure, until the next scene
                                                 // change
+                        if (RF3Tackle_LureMissing()) {
+                            sLureEquipped = FS_LURE_STOCK; // step 32a: a lost pole sinking lure isn't drawn either
+                        }
                     }
                 }
                 sFishingCaughtTextDelay = 20;

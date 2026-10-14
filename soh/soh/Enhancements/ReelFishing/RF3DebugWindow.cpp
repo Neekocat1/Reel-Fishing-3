@@ -359,6 +359,11 @@ static void DrawLureModel() {
     if (ImGui::SliderFloat("Float going under time (s)", &underTime, 0.05f, 2.0f, "%.2f")) {
         CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatUnderTime"), underTime);
     }
+    // Step 31b: back to the surface (or the line) when the fight ends.
+    float returnTime = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatReturnTime"), 0.3f);
+    if (ImGui::SliderFloat("Float return time (s)", &returnTime, 0.05f, 2.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatReturnTime"), returnTime);
+    }
     bool flip = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModelFlip"), 0) != 0;
     if (ImGui::Checkbox("Turn lures and flies around (front <-> back)", &flip)) {
         CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModelFlip"), flip ? 1 : 0);
