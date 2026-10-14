@@ -144,8 +144,15 @@ void Build(SkinnedModel& m) {
     size_t first = 0;
     int32_t current = -1;
     const int32_t nBones = static_cast<int32_t>(m.bones.size());
+    m.boneVerts.assign(nBones, 0);
+    m.boneHookVerts.assign(nBones, 0);
     for (const json& b : j["batches"]) {
         int32_t si = b.value("surface", 0);
+        bool hookSurface = false;
+        if (si >= 0 && si < static_cast<int32_t>(j["surfaces"].size())) {
+            const std::string name = j["surfaces"][si].value("name", "");
+            hookSurface = name == "hook" || name == "lhook" || name == "hari";
+        }
         if (si != current && si >= 0 && si < static_cast<int32_t>(surfaces.size())) {
             current = si;
             const Surface& s = surfaces[si];
@@ -167,6 +174,10 @@ void Build(SkinnedModel& m) {
             if (bone < 0 || bone >= nBones) {
                 m.why = "batch group bone " + std::to_string(bone) + " out of range";
                 return;
+            }
+            m.boneVerts[bone] += count;
+            if (hookSurface) {
+                m.boneHookVerts[bone] += count;
             }
             // Segmented address: LUS marks it with bit 0 (Interpreter::SegAddr).
             uintptr_t mtxAddr = (static_cast<uintptr_t>(kSegment) << 24) | (bone * sizeof(Mtx)) | 1;

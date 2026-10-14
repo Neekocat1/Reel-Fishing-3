@@ -110,6 +110,7 @@ static void Fishing_RF3WallTest(Fishing* this, PlayState* play);
 static f32 Fishing_RF3ShoreDistance(Fishing* this, PlayState* play);
 static s32 Fishing_RF3OutOfArea(f32 x, f32 z);
 static s32 Fishing_RF3FishIndex(Fishing* this);
+static s32 Fishing_RF3ApproachMove(Fishing* this, PlayState* play);
 static f32 Fishing_RF3Perception(Fishing* this);
 static void Fishing_RF3RegionTarget(Fishing* this);
 static void Fishing_RF3ClampFightTarget(Vec3f* target);
@@ -1942,6 +1943,25 @@ void Fishing_DrawSinkingLure(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Step 29g-2: one straight piece of line from a to b (the same model and scale as the hooked line).
+static void Fishing_RF3LinePiece(PlayState* play, Vec3f* a, Vec3f* b) {
+    f32 dx = b->x - a->x;
+    f32 dy = b->y - a->y;
+    f32 dz = b->z - a->z;
+    f32 ry = Math_FAtan2F(dx, dz);
+    f32 rx = -Math_FAtan2F(dy, sqrtf(SQ(dx) + SQ(dz)));
+    f32 dist = sqrtf(SQ(dx) + SQ(dy) + SQ(dz)) * 0.001f;
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Translate(a->x, a->y, a->z, MTXMODE_NEW);
+    Matrix_RotateY(ry, MTXMODE_APPLY);
+    Matrix_RotateX(rx, MTXMODE_APPLY);
+    Matrix_Scale(sFishingLineScale, 1.0f, dist, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, gFishingLineModelDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
     Vec3f posSrc;
     Vec3f posStep;
@@ -2029,13 +2049,25 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
         Fishing_DrawLureHook(play, &hookPos[1], &sLureHookRefPos[1], 1);
 
         // Reel Fishing III mod (step 25d-2): a bait set's float, on the surface above the bait or on the line.
-        RF3LureModel_DrawFloat(play, &sLurePos.x, &sRodTipPos.x, WATER_SURFACE_Y(play), sLureRot.y + sLure1Rotate);
+        // Step 29g: the cast state lets the float go under at the bite.
+        RF3LureModel_DrawFloat(play, &sLurePos.x, &sRodTipPos.x, WATER_SURFACE_Y(play), sLureRot.y + sLure1Rotate,
+                               sRodCastState);
     }
 
     POLY_XLU_DISP = Gfx_SetupDL(POLY_XLU_DISP, 0x14);
 
     gDPSetCombineMode(POLY_XLU_DISP++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 255, 255, 255, 55);
+
+    // Step 29g-2: a bait set's float drawn this frame: the line runs through it (rod -> float -> bait).
+    Vec3f rf3Float;
+    s32 rf3FloatOn = RF3LureModel_FloatLinePoint(&rf3Float.x, play->gameplayFrames);
+
+    // Step 27e-1: where the drawn line ends, for the lure-tie log (the branches below, in order)
+    Vec3f lineDrawnEnd = linePos[LINE_SEG_COUNT - 1];
+    if ((sLureEquipped == FS_LURE_STOCK) && (sRodCastState == 3) && (spooled <= LINE_SEG_COUNT - 3)) {
+        lineDrawnEnd = sLureDrawPos;
+    }
 
     if ((sRodCastState == 4) && ((sLineHooked != 0) || (sLureEquipped != 2))) {
         f32 rx;
@@ -2051,36 +2083,64 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
         if (sRF3LureModelShown) {
             RF3LureModel_LineTie(&lineEnd.x);
         }
-        dx = lineEnd.x - sRodTipPos.x;
-        dy = lineEnd.y - sRodTipPos.y;
-        dz = lineEnd.z - sRodTipPos.z;
+        lineDrawnEnd = lineEnd;
+        if (rf3FloatOn) {
+            // Step 29g-2: hooked with a float: rod -> float -> the fish's end.
+            Fishing_RF3LinePiece(play, &sRodTipPos, &rf3Float);
+            Fishing_RF3LinePiece(play, &rf3Float, &lineEnd);
+        } else {
+            dx = lineEnd.x - sRodTipPos.x;
+            dy = lineEnd.y - sRodTipPos.y;
+            dz = lineEnd.z - sRodTipPos.z;
 
-        ry = Math_FAtan2F(dx, dz);
-        dist = sqrtf(SQ(dx) + SQ(dz));
-        rx = -Math_FAtan2F(dy, dist);
+            ry = Math_FAtan2F(dx, dz);
+            dist = sqrtf(SQ(dx) + SQ(dz));
+            rx = -Math_FAtan2F(dy, dist);
 
-        dist = sqrtf(SQ(dx) + SQ(dy) + SQ(dz)) * 0.001f;
+            dist = sqrtf(SQ(dx) + SQ(dy) + SQ(dz)) * 0.001f;
 
-        Matrix_Translate(sRodTipPos.x, sRodTipPos.y, sRodTipPos.z, MTXMODE_NEW);
-        Matrix_RotateY(ry, MTXMODE_APPLY);
-        Matrix_RotateX(rx, MTXMODE_APPLY);
-        Matrix_Scale(sFishingLineScale, 1.0f, dist, MTXMODE_APPLY);
+            Matrix_Translate(sRodTipPos.x, sRodTipPos.y, sRodTipPos.z, MTXMODE_NEW);
+            Matrix_RotateY(ry, MTXMODE_APPLY);
+            Matrix_RotateX(rx, MTXMODE_APPLY);
+            Matrix_Scale(sFishingLineScale, 1.0f, dist, MTXMODE_APPLY);
 
-        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_XLU_DISP++, gFishingLineModelDL);
+            gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx),
+                      G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gSPDisplayList(POLY_XLU_DISP++, gFishingLineModelDL);
+        }
     } else {
+        // Step 27e-2: at the rod (0) and at rest (3) the line ends at the RF3 lure's tie (lure-tie log: 3.2 and 3.4
+        // units short; OoT's lure is drawn sLurePosZOffset along its axis and its eye is sLureDrawPos). Flight and
+        // landing keep OoT's line.
+        Vec3f rf3Tie;
+        s32 rf3TieOn = sRF3LureModelShown && ((sRodCastState == 0) || (sRodCastState == 3)) &&
+                       RF3LureModel_TieAny(&rf3Tie.x);
+        // Step 29g-5 (user's choice after 29g-3/4 failed, 2026-10-13): at rest with a float the line is straight, as
+        // in the fight: rod tip -> float -> the bait (the lure's tie, or OoT's lure eye). OoT's segments meet the water
+        // short of the float, so no cut of them gave rod -> float.
+        if (rf3FloatOn && (sRodCastState == 3)) {
+            Vec3f* end = rf3TieOn ? &rf3Tie : &sLureDrawPos;
+
+            lineDrawnEnd = *end;
+            Fishing_RF3LinePiece(play, &sRodTipPos, &rf3Float);
+            Fishing_RF3LinePiece(play, &rf3Float, end);
+            spooled = LINE_SEG_COUNT; // skip OoT's segments below
+        }
         for (i = spooled; i < LINE_SEG_COUNT - 1; i++) {
-            if ((i == LINE_SEG_COUNT - 3) && (sLureEquipped == FS_LURE_STOCK) && (sRodCastState == 3)) {
+            if (((i == LINE_SEG_COUNT - 3) && (sLureEquipped == FS_LURE_STOCK) && (sRodCastState == 3)) ||
+                (rf3TieOn && (sRodCastState == 0) && (i == LINE_SEG_COUNT - 2))) {
                 f32 rx;
                 f32 ry;
                 f32 dist;
                 f32 dx;
                 f32 dy;
                 f32 dz;
+                Vec3f* end = rf3TieOn ? &rf3Tie : &sLureDrawPos;
 
-                dx = sLureDrawPos.x - (linePos + i)->x;
-                dy = sLureDrawPos.y - (linePos + i)->y;
-                dz = sLureDrawPos.z - (linePos + i)->z;
+                lineDrawnEnd = *end;
+                dx = end->x - (linePos + i)->x;
+                dy = end->y - (linePos + i)->y;
+                dz = end->z - (linePos + i)->z;
 
                 ry = Math_FAtan2F(dx, dz);
                 dist = sqrtf(SQ(dx) + SQ(dz));
@@ -2107,6 +2167,9 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
             gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
             gSPDisplayList(POLY_XLU_DISP++, gFishingLineModelDL);
         }
+    }
+    if (sRF3LureModelShown) {
+        RF3LureModel_LogLineEnd(&lineDrawnEnd.x, sRodCastState, play->gameplayFrames);
     }
 
     Matrix_Pop();
@@ -3561,6 +3624,7 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
     u8 rf3Fight;
     u8 rf3Hooked;
     s32 rf3Approach;
+    s32 rf3Reached; // step 29h: the chase's "reached the bait" input
 
     this->actor.uncullZoneForward = 700.0f;
     this->actor.uncullZoneScale = 50.0f;
@@ -3941,37 +4005,44 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
             break;
 
         case 2:
-            if (((this->actor.params + D_80B7E118) & 1) != 0) {
-                multiVecSrc.x = 10.0f;
+            // Step 29h: an RF3 region fish moves as RF3's CHASE/WAIT (straight to the bait, then backs off while
+            // inspecting it) instead of OoT's circling; OoT's target, turn and speed below are skipped for it.
+            rf3Reached = distToTarget < ((this->fishLength * 0.5f) + 20.0f);
+            if (RF3_IsEnabled() && RF3_IS_REGION_FISH(this)) {
+                rf3Reached = Fishing_RF3ApproachMove(this, play);
             } else {
-                multiVecSrc.x = -10.0f;
+                if (((this->actor.params + D_80B7E118) & 1) != 0) {
+                    multiVecSrc.x = 10.0f;
+                } else {
+                    multiVecSrc.x = -10.0f;
+                }
+                multiVecSrc.y = 0.0f;
+                multiVecSrc.z = 0.0f;
+                Matrix_RotateY(sLureRot.y, MTXMODE_NEW);
+                Matrix_MultVec3f(&multiVecSrc, &targetPosOffset);
+
+                this->fishTargetPos.x = sLurePos.x + targetPosOffset.x;
+                this->fishTargetPos.z = sLurePos.z + targetPosOffset.z;
+
+                if (sLureEquipped == FS_LURE_SINKING) {
+                    this->fishTargetPos.y = sLurePos.y;
+                } else if (this->isLoach == 0) {
+                    this->fishTargetPos.y = sLurePos.y - 15.0f;
+                } else {
+                    this->fishTargetPos.y = sLurePos.y - 5.0f;
+                }
+
+                if (this->fishTargetPos.y <= this->actor.floorHeight) {
+                    this->fishTargetPos.y = this->actor.floorHeight + 3.0f;
+                }
+
+                if ((sLureEquipped != FS_LURE_SINKING) && (this->fishTargetPos.y < this->actor.world.pos.y)) {
+                    Math_ApproachF(&this->actor.world.pos.y, this->fishTargetPos.y, 0.1f,
+                                   (this->actor.world.pos.y - this->fishTargetPos.y) * 0.1f);
+                }
+
+                Math_ApproachF(&this->rotationStep, 8192.0f, 1.0f, (KREG(16) * 128) + 384.0f);
             }
-            multiVecSrc.y = 0.0f;
-            multiVecSrc.z = 0.0f;
-            Matrix_RotateY(sLureRot.y, MTXMODE_NEW);
-            Matrix_MultVec3f(&multiVecSrc, &targetPosOffset);
-
-            this->fishTargetPos.x = sLurePos.x + targetPosOffset.x;
-            this->fishTargetPos.z = sLurePos.z + targetPosOffset.z;
-
-            if (sLureEquipped == FS_LURE_SINKING) {
-                this->fishTargetPos.y = sLurePos.y;
-            } else if (this->isLoach == 0) {
-                this->fishTargetPos.y = sLurePos.y - 15.0f;
-            } else {
-                this->fishTargetPos.y = sLurePos.y - 5.0f;
-            }
-
-            if (this->fishTargetPos.y <= this->actor.floorHeight) {
-                this->fishTargetPos.y = this->actor.floorHeight + 3.0f;
-            }
-
-            if ((sLureEquipped != FS_LURE_SINKING) && (this->fishTargetPos.y < this->actor.world.pos.y)) {
-                Math_ApproachF(&this->actor.world.pos.y, this->fishTargetPos.y, 0.1f,
-                               (this->actor.world.pos.y - this->fishTargetPos.y) * 0.1f);
-            }
-
-            Math_ApproachF(&this->rotationStep, 8192.0f, 1.0f, (KREG(16) * 128) + 384.0f);
             if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
                 this->perception += 0.005f;
             }
@@ -3989,7 +4060,9 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                 this->perception += 0.008f;
             }
 
-            if (distToTarget < ((this->fishLength * 0.5f) + 20.0f)) {
+            if (RF3_IsEnabled() && RF3_IS_REGION_FISH(this)) {
+                // step 29h: the speed is set by Fishing_RF3ApproachMove
+            } else if (distToTarget < ((this->fishLength * 0.5f) + 20.0f)) {
                 if (this->unk_15E == 0) {
                     this->unk_190 = 1.0f;
                     this->unk_194 = 500.0f;
@@ -4015,7 +4088,7 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                     Fishing_RF3FishIndex(this), (sRodCastState == 3) && RF3_LURE_IN_BITE_AREA(),
                     (SQ(sLurePos.x - player->actor.world.pos.x) + SQ(sLurePos.z - player->actor.world.pos.z)) <
                         SQ(KREG(59) + 50.0f),
-                    distToTarget < ((this->fishLength * 0.5f) + 20.0f), RF3_SUBSTEPS);
+                    rf3Reached, RF3_SUBSTEPS);
                 if (rf3Approach == RF3_APPROACH_STRIKE) {
                     // OoT's own strike setup: line up (state 3, or -3 for a loach), then lunge.
                     if (this->isLoach == 0) {
@@ -7113,6 +7186,167 @@ static s32 Fishing_RF3OutOfArea(f32 x, f32 z) {
 // The bridge's fish index: pond fish 0..31 (params - 100), region fish 32 + slot.
 static s32 Fishing_RF3FishIndex(Fishing* this) {
     return RF3_IS_REGION_FISH(this) ? (32 + this->actor.params - EN_FISH_REGION) : (this->actor.params - EN_FISH_PARAM);
+}
+
+// Step 29h (RF3-MECHANICS 2.5/2.6, DESIGN "29h details"): an RF3 region fish's movement while it chases the bait
+// (OoT's state 2). CHASE: straight at the bait, slowing near it, stopping when its mouth reaches it. WAIT (RF3's
+// inspect, 0x001A1FD0): backs off 0.1 m (0.15 m if longer than 0.2 m) over the WAIT, still facing the bait [code].
+// Sets fishTargetPos, rotationStep and speedXZ; returns whether it reached the bait (RF3Approach_Chase's input).
+static s32 sRF3WaitFish = -1; // the fish and WAIT count the back-off speed was set for
+static s32 sRF3WaitCount = -1;
+static f32 sRF3WaitSpeed = 0.0f; // units per game frame
+static s32 sRF3ApproachLogFish = -1;
+static s32 sRF3ApproachLogMode = -1;
+static s32 sRF3ApproachTick = 0; // step 29h-2: calls since the last periodic approach line
+// step 29h-4: the lure's own movement per game frame (without the current), measured between frames
+static Vec3f sRF3PrevLurePos;
+static u32 sRF3PrevLureFrame = 0;
+static f32 sRF3LureVelX = 0.0f;
+static f32 sRF3LureVelZ = 0.0f;
+
+static s32 Fishing_RF3ApproachMove(Fishing* this, PlayState* play) {
+    RF3ApproachStatus ap;
+    RF3RegionFishInfo info;
+    s32 me = Fishing_RF3FishIndex(this);
+    f32 lengthM = 0.3f; // [assumed] if the region slot has no RF3 length
+    f32 reach;
+    f32 dx;
+    f32 dz;
+    f32 dxz;
+    f32 dy;
+    s32 waiting;
+    s32 mode;
+
+    if (RF3RegionFish_Get(this->actor.params - EN_FISH_REGION, &info) && (info.mm > 0.0f)) {
+        lengthM = info.mm * 0.001f;
+    }
+    // the centre within half the body + 0.05 m [assumed] of the bait: the mouth is at it
+    reach = (lengthM * 0.5f + 0.05f) * RF3_UNITS_PER_METRE;
+
+    RF3Approach_GetStatus(&ap);
+    waiting = (ap.chaser == me) && (ap.chaserMode == 3);
+
+    this->fishTargetPos.x = sLurePos.x;
+    this->fishTargetPos.z = sLurePos.z;
+    if ((ap.rodKind == 2) || (sLureEquipped == FS_LURE_SINKING)) {
+        this->fishTargetPos.y = sLurePos.y; // bait and sinking lures: the bait itself
+    } else {
+        this->fishTargetPos.y = sLurePos.y - 15.0f; // floating lures: just under it, as OoT
+    }
+    if (this->fishTargetPos.y <= this->actor.floorHeight) {
+        this->fishTargetPos.y = this->actor.floorHeight + 3.0f;
+    }
+
+    // 29h-3: the resting bait drifts with the region's current (step 20c-4, about 0.6 units/frame in the user's log),
+    // so the chasing fish drifts with it, the same amount the bait got this frame. Relative to the bait, the chase
+    // and the back-off then work as in still water (29h-2 log: the fish held a fixed gap at the bait's own speed and
+    // never reached it).
+    f32 driftX = 0.0f;
+    f32 driftZ = 0.0f;
+    if (RF3Lure_IsActive() && (sRodCastState == 3)) {
+        f32 curX;
+        f32 curZ;
+        if (RF3Current_At(!sRF3Portable, play->sceneNum, sLurePos.x, sLurePos.z, &curX, &curZ)) {
+            f32 share = RF3Lure_DriftScale() * (RF3_SUBSTEPS / 60.0f);
+            driftX = curX * share;
+            driftZ = curZ * share;
+            this->actor.world.pos.x += driftX;
+            this->actor.world.pos.z += driftZ;
+        }
+    }
+    // 29h-4: the lure's own speed (reeling, twitches), without the current the fish already shares. Measured once per
+    // game frame; a jump (a new cast) or a gap in frames counts as still.
+    if (play->gameplayFrames != sRF3PrevLureFrame) {
+        f32 mx = sLurePos.x - sRF3PrevLurePos.x - driftX;
+        f32 mz = sLurePos.z - sRF3PrevLurePos.z - driftZ;
+        if ((play->gameplayFrames - sRF3PrevLureFrame == 1) && ((SQ(mx) + SQ(mz)) < SQ(20.0f))) {
+            sRF3LureVelX = mx;
+            sRF3LureVelZ = mz;
+        } else {
+            sRF3LureVelX = sRF3LureVelZ = 0.0f;
+        }
+        sRF3PrevLurePos = sLurePos;
+        sRF3PrevLureFrame = play->gameplayFrames;
+    }
+
+    dx = this->fishTargetPos.x - this->actor.world.pos.x;
+    dz = this->fishTargetPos.z - this->actor.world.pos.z;
+    dy = this->fishTargetPos.y - this->actor.world.pos.y;
+    dxz = sqrtf(SQ(dx) + SQ(dz));
+
+    Math_ApproachF(&this->rotationStep, 8192.0f, 1.0f, 2048.0f); // turns to face the bait quickly
+
+    if (waiting) {
+        if ((sRF3WaitFish != me) || (sRF3WaitCount != ap.chaserWaits)) {
+            f32 backM = (lengthM > 0.2f) ? 0.15f : 0.1f;
+            f32 frames = ap.chaserWaitLeft * 20.0f; // game frames are 1/20 s
+            if (frames < 1.0f) {
+                frames = 1.0f;
+            }
+            sRF3WaitFish = me;
+            sRF3WaitCount = ap.chaserWaits;
+            sRF3WaitSpeed = backM * RF3_UNITS_PER_METRE / frames;
+        }
+        // 29h-2: straight back horizontally, as RF3 (its back-off direction is flattened). A negative speedXZ moved
+        // along the fish's pitch too, so a fish facing down at the bait rose as it backed off, pitched further down
+        // and rose more (log: 12 -> 32-40 units away, 23 above the bait after one WAIT).
+        this->actor.speedXZ = 0.0f;
+        if (dxz > 0.01f) {
+            this->actor.world.pos.x -= dx / dxz * sRF3WaitSpeed;
+            this->actor.world.pos.z -= dz / dxz * sRF3WaitSpeed;
+        }
+    } else {
+        // 29h-4: the lure's own speed away from the fish, plus closing in (3 units/frame, slowing over the last 20
+        // units [assumed]). Without the first part a reeled lure kept the fish at the gap where the closing speed
+        // equalled the lure's (user: "the fish just followed until I got to shore").
+        f32 away = (dxz > 0.01f) ? ((sRF3LureVelX * dx + sRF3LureVelZ * dz) / dxz) : 0.0f;
+        f32 want = 0.0f;
+        if (away < 0.0f) {
+            away = 0.0f; // coming toward the fish: closing in alone does it
+        }
+        if (dxz > reach) {
+            want = (dxz - reach) * 0.15f;
+            if (want > 3.0f) {
+                want = 3.0f;
+            } else if (want < 0.3f) {
+                want = 0.3f;
+            }
+        }
+        want += away;
+        if (want > 4.5f) {
+            want = 4.5f; // [assumed] as OoT's strike lunge
+        }
+        Math_ApproachF(&this->actor.speedXZ, want, 1.0f, 0.3f);
+    }
+
+    mode = waiting ? 3 : 1;
+    sRF3ApproachTick++;
+    if ((me == sRF3ApproachLogFish) && (mode == sRF3ApproachLogMode) && (sRF3ApproachTick >= 20)) {
+        // 29h-2: once a second during the approach, to see where a chase stalls
+        char line[260];
+        s16 yawErr = (s16)(Math_Atan2S(dz, dx) - this->actor.world.rot.y);
+        sRF3ApproachTick = 0;
+        snprintf(line, sizeof(line),
+                 "slot=%d rf3-approach-tick mode=%s dist_xz=%.1f dy=%.1f reach=%.1f speed=%.2f yaw_err=%.0f "
+                 "pitch=%.0f fish_y=%.1f floor=%.1f bait=(%.0f,%.1f,%.0f) lure_vel=%.2f",
+                 (s32)(this->actor.params - EN_FISH_REGION), waiting ? "WAIT" : "CHASE", dxz, dy, reach,
+                 this->actor.speedXZ, yawErr * (360.0f / 65536.0f), this->actor.world.rot.x * (360.0f / 65536.0f),
+                 this->actor.world.pos.y, this->actor.floorHeight, sLurePos.x, sLurePos.y, sLurePos.z,
+                 sqrtf(SQ(sRF3LureVelX) + SQ(sRF3LureVelZ)));
+        RF3FishMove_Log(line);
+    }
+    if ((me != sRF3ApproachLogFish) || (mode != sRF3ApproachLogMode)) {
+        char line[200];
+        sRF3ApproachLogFish = me;
+        sRF3ApproachLogMode = mode;
+        sRF3ApproachTick = 0;
+        snprintf(line, sizeof(line),
+                 "slot=%d rf3-approach mode=%s waits=%d dist_xz=%.1f dy=%.1f reach=%.1f length_m=%.2f back=%.3f/frame",
+                 (s32)(this->actor.params - EN_FISH_REGION), waiting ? "WAIT" : "CHASE", ap.chaserWaits, dxz, dy,
+                 reach, lengthM, waiting ? sRF3WaitSpeed : 0.0f);
+        RF3FishMove_Log(line);
+    }
+    return (dxz < reach) && (fabsf(dy) < 20.0f);
 }
 
 static f32 Fishing_RF3Perception(Fishing* this) {

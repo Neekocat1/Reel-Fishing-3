@@ -332,6 +332,33 @@ static void DrawLureModel() {
             CVarSetFloat(r.cvar, v);
         }
     }
+    // Step 29e: the float's idle bob on the surface (the mod's own design; RF3 has no float in the water).
+    float bobM = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatBobM"), 0.01f);
+    if (ImGui::SliderFloat("Float bob size (m, up and down)", &bobM, 0.0f, 0.05f, "%.3f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatBobM"), bobM);
+    }
+    float bobPeriod = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatBobPeriod"), 2.5f);
+    if (ImGui::SliderFloat("Float bob period (s)", &bobPeriod, 0.5f, 6.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatBobPeriod"), bobPeriod);
+    }
+    // Step 29f: the nibble dip, once per WAIT of the fish at the bait.
+    float dipM = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatDipM"), 0.03f);
+    if (ImGui::SliderFloat("Float nibble dip (m)", &dipM, 0.0f, 0.15f, "%.3f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatDipM"), dipM);
+    }
+    float dipDown = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatDipDown"), 0.1f);
+    if (ImGui::SliderFloat("Float nibble dip: down time (s)", &dipDown, 0.05f, 1.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatDipDown"), dipDown);
+    }
+    float dipUp = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatDipUp"), 0.4f);
+    if (ImGui::SliderFloat("Float nibble dip: back up time (s)", &dipUp, 0.05f, 2.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatDipUp"), dipUp);
+    }
+    // Step 29g: going under at the bite (29g-2: then on the line, the float depth from the fish).
+    float underTime = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatUnderTime"), 0.2f);
+    if (ImGui::SliderFloat("Float going under time (s)", &underTime, 0.05f, 2.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatUnderTime"), underTime);
+    }
     bool flip = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModelFlip"), 0) != 0;
     if (ImGui::Checkbox("Turn lures and flies around (front <-> back)", &flip)) {
         CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModelFlip"), flip ? 1 : 0);

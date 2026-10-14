@@ -48,6 +48,9 @@ struct SkinnedModel {
     int32_t tris = 0;
     int32_t batches = 0;
     int32_t texturesMissing = 0;
+    // step 27e-3: per bone, its vertex count and how many of them are on a hook surface (hook, lhook, hari)
+    std::vector<int32_t> boneVerts;
+    std::vector<int32_t> boneHookVerts;
 };
 
 // Appends one line to logs/rf3_models.txt.

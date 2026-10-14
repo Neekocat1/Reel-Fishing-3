@@ -14,8 +14,8 @@
       "randoArea": "RR_LH_FISHING_ISLAND",
       "records": [
         {
-          "name": "Largemouth Bass b",
-          "record": 16
+          "name": "Bluegill n",
+          "record": 20
         }
       ],
       "scene": 87,
@@ -195,6 +195,24 @@
       ],
       "scene": 95,
       "surfaceY": 1510.0
+    },
+    {
+      "angle": 30.5,
+      "currentReach": 5.0,
+      "fishCount": 6,
+      "maxX": 1017.2396850585938,
+      "maxZ": 3517.105224609375,
+      "minX": 787.7612915039063,
+      "minZ": 3144.670654296875,
+      "name": "Scene 87 region 3",
+      "records": [
+        {
+          "name": "Largemouth Bass n",
+          "record": 15
+        }
+      ],
+      "scene": 87,
+      "surfaceY": -1313.0
     }
   ],
   "version": 1

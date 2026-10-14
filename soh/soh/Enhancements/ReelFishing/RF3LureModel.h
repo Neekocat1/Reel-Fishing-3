@@ -28,10 +28,22 @@ int32_t RF3LureModel_Draw(struct PlayState* play, const float* pos, float rotY, 
 // Step 25d-2: a bait set's float. baitPos: the hooked bait (sLurePos); rodTip: sRodTipPos; waterY: the surface.
 // With the bait under water the float sits on the surface above it; otherwise on the line toward the rod tip, the
 // set's float depth away. Draws nothing for sets without a float.
-void RF3LureModel_DrawFloat(struct PlayState* play, const float* baitPos, const float* rodTip, float waterY, float rotY);
+// Steps 29e-g (the mod's own design; RF3 has no float in the water): on the surface it bobs and dips once per WAIT
+// of the fish at the bait; from the bite (castState 4, z_fishing.c's sRodCastState) it goes under and follows the
+// hooked fish on the line.
+void RF3LureModel_DrawFloat(struct PlayState* play, const float* baitPos, const float* rodTip, float waterY, float rotY,
+                            int32_t castState);
 // Step 27c fix: if this frame's lure draw hung the lure from the fish's mouth, its line tie (world) in out; returns 1.
 // z_fishing.c draws the hooked line to it; the game logic keeps the fish's snout (fishMouthPos).
 int32_t RF3LureModel_LineTie(float* out);
+// Step 29g-2: where the line passes through the float (its foot, world), if the float was drawn this frame
+// (frame = play->gameplayFrames); returns 1. z_fishing.c draws the line rod -> float -> lure through it.
+int32_t RF3LureModel_FloatLinePoint(float* out, uint32_t frame);
+// Step 27e-2: this frame's lure tie (world) in any state (the model origin as drawn); returns 1 if the lure was drawn.
+int32_t RF3LureModel_TieAny(float* out);
+// Step 27e-1: logs `lure-tie` (once a second and on cast state changes): the line's drawn end vs this frame's lure tie
+// (the gap, world units) and how far the lure's pose moved the tie off the bind origin. lineEnd: world.
+void RF3LureModel_LogLineEnd(const float* lineEnd, int32_t castState, uint32_t frame);
 // Step 28a: the item-get model of a tackle item: kind RF3_STOCK_LURE/FLY/BAIT/FLOAT (RF3Bridge.h) and its index,
 // drawn at the current matrix (the get-item frame), centred, its longest side `size` frame units, side-on.
 // Returns 0 (draw OoT's) if the item has no RF3 model.
