@@ -119,6 +119,12 @@ static s32 Fishing_RF3Probe(const f32 from[3], const f32 to[3], f32 normal[3]);
 static f32 Fishing_RF3FloorAt(PlayState* play, f32 x, f32 z);
 static PlayState* sRF3MovePlay = NULL; // step 26e-4: the play state for Fishing_RF3PointInWater's water probe
 static Fishing* sRF3MoveFish = NULL;   // step 26f-2: the fish RF3FishMove is probing for (Fishing_RF3Probe)
+// Step 30b-1d: the fish RF3FishMove moved, and on which frame (OoT's line leash skips it the next frame)
+static Fishing* sRF3MovedFish = NULL;
+static u32 sRF3MovedFrame = 0;
+static s32 sRF3LeashSkips = 0; // skips since the last rf3-leash line
+static u32 sRF3LeashLogFrame = 0;
+static u32 sRF3ReelTurnLogFrame = 0; // step 30b-1e: the last rf3-reel-turn line
 #define RF3_OOT_WALL_HEIGHT 30.0f       // step 26f-2: OoT's fish wall check (Actor_UpdateBgCheckInfo in Fishing_UpdateFishImpl)
 #define RF3_OOT_WALL_RADIUS 30.0f
 #define RF3_PROBE_LAND_STEP 10.0f // step 26f-3: spacing of the probe's land tests [assumed]
@@ -3541,14 +3547,31 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
             mi.frame = play->gameplayFrames;
             mi.inWater = Fishing_RF3PointInWater;
             mi.probe = Fishing_RF3Probe; // step 26f-1
+            // Step 30a-2: RF3's fight centre -> the region box's centre (the box turns about it) [assumed stand-in]
+            mi.centerPos[0] = (regionInfo.minX + regionInfo.maxX) * 0.5f;
+            mi.centerPos[1] = regionInfo.surfaceY;
+            mi.centerPos[2] = (regionInfo.minZ + regionInfo.maxZ) * 0.5f;
+            mi.hasCenter = 1;
+            {
+                // Step 30c-1: the fight's inputs, for AWAY's run
+                RF3FightStatus fs;
+                RF3Fight_GetStatus(&fs);
+                mi.reelHeld = fs.reelHeld;
+                mi.stickY = fs.stickY;
+            }
             sRF3MovePlay = play;
             sRF3MoveFish = this; // step 26f-2
             if (RF3FishMove_Step(&mi, &mo)) {
+                sRF3MovedFish = this; // step 30b-1d: OoT's line leash leaves this fish alone next frame
+                sRF3MovedFrame = play->gameplayFrames;
                 this->fishTargetPos.x = mo.target[0];
                 this->fishTargetPos.y = mo.target[1];
                 this->fishTargetPos.z = mo.target[2];
                 sRF3FishSpeed = mo.speed;
                 this->actor.speedXZ = mo.speed;
+                // Step 30b-2b: the line's drag while it turns on the spot (before OoT's move and wall check)
+                this->actor.world.pos.x += mo.drag[0];
+                this->actor.world.pos.z += mo.drag[2];
                 this->rotationStep = 16384.0f; // RF3 sets the heading; OoT's turn just follows it
                 sRF3TurnScale = 1;
             }
@@ -4523,8 +4546,24 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                 } else {
                     if (((this->timerArray[1] & 0xF) == 0) && CHECK_BTN_ALL(input->cur.button, BTN_A) &&
                         (!(this->fishLength >= 60.0f) || (sFishFightTime >= 2000))) {
-                        this->unk_152 = (s16)Rand_ZeroFloat(30.0f) + 15;
-                        this->unk_154 = this->actor.yawTowardsPlayer - this->actor.shape.rot.y;
+                        if ((sRF3MovedFish == this) && ((u32)(play->gameplayFrames - sRF3MovedFrame) <= 1)) {
+                            // Step 30b-1e (user, 2026-10-14: in AWAY, while reeling, "the fish occasionally twitches
+                            // towards the reeling direction"): OoT's reel turn (every 16 frames with A held) turns the
+                            // drawn body toward Link for 15-45 frames (unk_152/154 -> rotationTarget.y -> unk_162, which
+                            // Fishing_DrawFishImpl adds to the RF3 model's yaw). Skipped for a fish on RF3's movement.
+                            if ((u32)(play->gameplayFrames - sRF3ReelTurnLogFrame) >= 20) {
+                                char line[160];
+                                snprintf(line, sizeof(line), "slot=%d rf3-reel-turn skipped toward_link=%.0fdeg",
+                                         (s32)(this->actor.params - EN_FISH_REGION),
+                                         (s16)(this->actor.yawTowardsPlayer - this->actor.shape.rot.y) *
+                                             (360.0f / 65536.0f));
+                                RF3FishMove_Log(line);
+                                sRF3ReelTurnLogFrame = play->gameplayFrames;
+                            }
+                        } else {
+                            this->unk_152 = (s16)Rand_ZeroFloat(30.0f) + 15;
+                            this->unk_154 = this->actor.yawTowardsPlayer - this->actor.shape.rot.y;
+                        }
                     }
 
                     this->unk_190 = 1.0f;
@@ -4580,7 +4619,30 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
             multiVecSrc.y = sReelLinePos[LINE_SEG_COUNT - 1].y - sReelLinePos[LINE_SEG_COUNT - 2].y;
             multiVecSrc.z = sReelLinePos[LINE_SEG_COUNT - 1].z - sReelLinePos[LINE_SEG_COUNT - 2].z;
 
-            if ((SQ(multiVecSrc.x) + SQ(multiVecSrc.y) + SQ(multiVecSrc.z)) > SQ(20.0f)) {
+            if (((SQ(multiVecSrc.x) + SQ(multiVecSrc.y) + SQ(multiVecSrc.z)) > SQ(20.0f)) &&
+                (sRF3MovedFish == this) && ((u32)(play->gameplayFrames - sRF3MovedFrame) <= 1)) {
+                // Step 30b-1d (user, 2026-10-14: in AWAY, while reeling, "the fish occasionally twitches towards the
+                // reeling direction"): OoT's line leash pulls a hooked fish to the line's next point once its mouth is
+                // more than 20 units away. Reeling shortens OoT's line, so a fish on RF3's movement (the sim's distance
+                // and FOLLOW's drag already follow the line) was yanked toward Link. Skipped for it; logged.
+                f32 gapX = sReelLinePos[LINE_SEG_COUNT - 2].x - this->actor.world.pos.x;
+                f32 gapZ = sReelLinePos[LINE_SEG_COUNT - 2].z - this->actor.world.pos.z;
+                f32 gap = sqrtf(SQ(multiVecSrc.x) + SQ(multiVecSrc.y) + SQ(multiVecSrc.z));
+                f32 pull = MIN(sqrtf(SQ(gapX) + SQ(gapZ)) * 0.2f, 3.0f * this->actor.speedXZ);
+                sRF3LeashSkips++;
+                if ((u32)(play->gameplayFrames - sRF3LeashLogFrame) >= 20) {
+                    RF3FightStatus fs;
+                    char line[200];
+                    RF3Fight_GetStatus(&fs);
+                    snprintf(line, sizeof(line),
+                             "slot=%d rf3-leash skipped=%d gap=%.1f would_pull=%.2f/frame mode=%d reel=%d",
+                             (s32)(this->actor.params - EN_FISH_REGION), sRF3LeashSkips, gap, pull,
+                             fs.active ? fs.mode : -1, fs.reelHeld);
+                    RF3FishMove_Log(line);
+                    sRF3LeashSkips = 0;
+                    sRF3LeashLogFrame = play->gameplayFrames;
+                }
+            } else if ((SQ(multiVecSrc.x) + SQ(multiVecSrc.y) + SQ(multiVecSrc.z)) > SQ(20.0f)) {
                 Math_ApproachF(&this->actor.world.pos.x, sReelLinePos[LINE_SEG_COUNT - 2].x, 0.2f,
                                2.0f * (this->actor.speedXZ * 1.5f));
                 Math_ApproachF(&this->actor.world.pos.y, sReelLinePos[LINE_SEG_COUNT - 2].y, 0.2f,

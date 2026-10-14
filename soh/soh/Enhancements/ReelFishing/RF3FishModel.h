@@ -36,6 +36,9 @@ int32_t RF3FishModel_PlaysMotions(int32_t slot);
 // Step 26e-3: the movement values of a fishdata record: species speed (m/s), speed ramp (s) and the model's height
 // per metre of length (fish models are 1 m long). Returns 0 if unknown.
 int32_t RF3FishModel_MoveInfo(int32_t record, float* speedMps, float* rampSeconds, float* heightPerMetre);
+// Step 30b-2: a request code's pattern: its total course yaw (degrees, + = RF3's right) and length (seconds).
+// Returns 0 if the code has no pattern.
+int32_t RF3FishModel_CodeTurn(int32_t code, float* yawDeg, float* seconds);
 // Step 27c: the region fish's mouth point (RF3 locator 0, 1 or 2: where RF3 puts the hook, RF3-MECHANICS 6.6) in world
 // space and the fish's drawn frame (rot: its x, y, z axes in world, 3 x 3 floats), from its last draw. frame: when
 // that was (play->gameplayFrames). Returns 0 if the fish wasn't drawn with an RF3 model or has no such point.

@@ -438,9 +438,14 @@ static void DrawFishModel() {
         CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMotionFast"), fast);
     }
     // Step 26e-4: the hooked fish's RF3 movement speed (RF3 = 1.0; user found it too fast).
-    float moveSpeed = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMoveSpeed"), 0.5f);
+    float moveSpeed = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMoveSpeed"), 0.2f); // user, 2026-10-14
     if (ImGui::SliderFloat("Hooked fish speed (x RF3's)", &moveSpeed, 0.1f, 1.5f, "%.2f")) {
         CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishMoveSpeed"), moveSpeed);
+    }
+    // Step 30b-1b: the fight target's leg is as long as RF3's at this distance (RF3's fights are 10-30 m).
+    float arcRef = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishArcRefM"), 15.0f);
+    if (ImGui::SliderFloat("Fight leg length as RF3's at (m)", &arcRef, 1.0f, 40.0f, "%.1f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishArcRefM"), arcRef);
     }
     int turnRate = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishMotionTurnRate"), 0x300);
     if (ImGui::SliderInt("Turn motion above yaw/frame", &turnRate, 0, 0x2000)) {

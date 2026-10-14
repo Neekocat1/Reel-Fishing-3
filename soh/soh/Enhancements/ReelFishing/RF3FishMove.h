@@ -29,16 +29,29 @@ typedef struct RF3FishMoveInput {
     // Returns 0 = clear, 1 = scenery hit with its unit surface normal in `normal`, 2 = blocked with no normal
     // (the tip isn't open water). May be null (no probing).
     int32_t (*probe)(const float from[3], const float to[3], float normal[3]);
+    // Step 30a-2: RF3's fight centre (0x0019A3D0: the spot's centre point; the mod: the region box's centre), world.
+    // hasCenter 0 = none (the bearing is then the line at the fight's start).
+    float centerPos[3];
+    int32_t hasCenter;
+    // Step 30c-1: the fight's inputs (RF3 convention: stickY + = rod raised), for AWAY's run (0x001A3B90)
+    int32_t reelHeld;
+    float stickY;
 } RF3FishMoveInput;
 
 typedef struct RF3FishMoveOutput {
     float target[3]; // a point straight ahead on RF3's heading: z_fishing.c's fishTargetPos
     float speed;     // units per game frame: actor.speedXZ
+    float drag[3];   // step 30b-2b: units this game frame added straight to the position (the line's drag while the
+                     // fish turns on the spot in FOLLOW), whatever its heading; 0 otherwise
 } RF3FishMoveOutput;
 
 // One game frame. Returns 1 if RF3 movement applies (out is filled), 0 for modes it leaves to the old code
 // (HIT, BUKKONUKI, CATCH, none) or when the species is unknown.
 int32_t RF3FishMove_Step(const RF3FishMoveInput* in, RF3FishMoveOutput* out);
+
+// Step 30b-1: the motion code the movement asks for in this slot's current state (STIFFEN's turns), or -1 to let
+// RF3FishModel choose.
+int32_t RF3FishMove_MotionCode(int32_t slot);
 
 // Step 26e-8: one line to logs/rf3_models.txt (z_fishing.c's wall test).
 void RF3FishMove_Log(const char* line);

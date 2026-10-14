@@ -37,6 +37,7 @@
 
 #include "soh/cvar_prefixes.h"
 #include "RF3Bridge.h"
+#include "RF3FishMove.h"
 #include "RF3SkinnedModel.h"
 
 extern "C" {
@@ -160,6 +161,7 @@ struct SlotAnim {
     int32_t step = 0;
     float stepLeft = 0.0f;
     bool patternDone = false;
+    bool movementTurns = false; // step 30b-2: a hooked fish's turn on the spot (63-66): RF3FishMove turns the heading
     // course/bank offsets, degrees: yaw (+ = RF3's right), pitch (+ = down), roll (bank)
     float off[3] = { 0, 0, 0 };
     float target[3] = { 0, 0, 0 };
@@ -790,6 +792,9 @@ void StartStep(SlotAnim& a, const MotionSet& s, int32_t slot, bool logSteps) {
     } else if (st.course & 2) {
         d[0] = st.leftright;
     }
+    if (a.movementTurns && a.code >= 63 && a.code <= 66) {
+        d[0] = 0.0f; // step 30b-2: the movement turns the heading instead (else the fish would turn twice)
+    }
     if (st.course & 4) {
         d[1] = -st.updown;
     } else if (st.course & 8) {
@@ -902,10 +907,23 @@ int32_t ChooseRequest(const RF3FishDrawInput& in, SlotAnim& a, int32_t yawRate, 
             case 10: // AWAY: no code, so 0x0019B7A0's accelerating swim: raw 20 for 1 s, then 4 until 2 s, then 3
                 blend = 0.1f;
                 return a.modeTime < 1.0f ? kRawSwimFast : (a.modeTime < 2.0f ? kCodeSwimLarge : kCodeSwimMedium);
-            case 11: // FOLLOW (its turns come with 26e-3)
+            case 11: { // FOLLOW: step 30b-2, the movement's turn on the spot (63-66) or held turn (25/26), else towed
                 blend = 0.5f;
+                int32_t code = RF3FishMove_MotionCode(in.slot);
+                if (code >= 0) {
+                    why += " follow-turn";
+                    return code;
+                }
                 return kCodeTowed;
-            case 12: // STIFFEN (its turn codes come with 26e-3)
+            }
+            case 12: { // STIFFEN: step 30b-1, the movement's turn motion (RF3FishMove: 25/26/65/66 from AWAY, else 28)
+                int32_t code = RF3FishMove_MotionCode(in.slot);
+                if (code >= 0) {
+                    why += " stiffen-turn";
+                    return code;
+                }
+                return kCodeSwimSmall;
+            }
             case 7:  // STOP
             case 15: // BUKKONUKI
             case 16: // CATCH
@@ -1010,6 +1028,7 @@ bool MotionPose(const rf3model::SkinnedModel& m, int32_t record, const RF3FishDr
         why += " (code " + std::to_string(want) + " not playable)";
         want = kCodeSwimSmall;
     }
+    a.movementTurns = in.hooked != 0; // step 30b-2
     Request(a, *s, in.slot, want, blend, rawRate, why, in.hooked != 0);
     if (a.pattern < 0) {
         a.animRate = rawRate; // raw animations follow the fish's speed class (and the fight's 1.5x)
@@ -1214,6 +1233,26 @@ extern "C" void RF3FishModel_SetLineTie(int32_t slot, const float* tie, uint32_t
 extern "C" int32_t RF3FishModel_PlaysMotions(int32_t slot) {
     auto it = sAnims.find(slot);
     return (it != sAnims.end() && it->second.animated) ? 1 : 0;
+}
+
+extern "C" int32_t RF3FishModel_CodeTurn(int32_t code, float* yawDeg, float* seconds) {
+    LoadIndex();
+    auto it = sCodes.find(code);
+    if (it == sCodes.end() || it->second.pattern < 0 || it->second.pattern >= static_cast<int32_t>(sPatterns.size())) {
+        return 0;
+    }
+    float yaw = 0.0f;
+    float time = 0.0f;
+    for (const PatternStep& st : sPatterns[it->second.pattern].steps) {
+        if (st.time < 0.0f) {
+            continue; // RF3 skips these
+        }
+        time += st.time;
+        yaw += (st.course & 1) ? -st.leftright : ((st.course & 2) ? st.leftright : 0.0f);
+    }
+    *yawDeg = yaw;
+    *seconds = time;
+    return 1;
 }
 
 extern "C" int32_t RF3FishModel_MoveInfo(int32_t record, float* speedMps, float* rampSeconds, float* heightPerMetre) {
