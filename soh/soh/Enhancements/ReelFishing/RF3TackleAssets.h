@@ -36,6 +36,10 @@ struct Item {
     rf3::LureMove move;
     // Step 20c-3b: flies only, RFLY +0x0E: 0 dry, 1 sunken; -1 = not a fly or an archive before step 20c.
     int32_t sunk = -1;
+    // Step 35a: lures and flies, the item menu's type page (record +0x2C; -1 = none or an older archive), and
+    // every item's RF3 description ("" if none).
+    int32_t type = -1;
+    std::string desc;
 };
 
 // Step 19c: a bait (RBIT group) and its 5 hook sizes, small to big (sizes[k] = RBIT record 5 * index + k).
@@ -43,6 +47,8 @@ struct Bait {
     int32_t index = -1;
     std::string name;
     std::string hook; // the bait's hook type
+    int32_t hookIndex = -1; // step 33b: its hook model (model/hook/hookNNN), -1 in an older tackle.json
+    std::string desc;       // step 35a: RF3's description
     std::vector<Item> sizes;
 };
 
@@ -73,6 +79,7 @@ struct Box {
     std::vector<Item> floats;
     std::vector<Bait> baits;
     std::string hookDefault; // the hook RF3 shows with no bait chosen
+    int32_t hookDefaultIndex = -1; // step 33b: its hook model, -1 in an older tackle.json
 };
 
 struct Sprite {
@@ -128,6 +135,8 @@ struct Assets {
     std::vector<std::string> digitPaths; // 0-9, minus, plus
     std::vector<int32_t> fishRodMask;    // step 18: per fish record, bit n = rod n allowed
     std::vector<std::string> depthNames; // step 19c: Ldr below Flt, left to right (Surface .. Deepest)
+    // Step 35a: the item menu's type names by box kind ("lure": Top Water .. Bottom, "fly": Dry .. Streamer)
+    std::map<std::string, std::vector<std::string>> typeNames;
 };
 
 // Loads on the first call (later calls return the same result). Safe to call every frame.

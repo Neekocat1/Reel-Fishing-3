@@ -320,9 +320,9 @@ static void DrawLureModel() {
         float max;
     };
     static const SizeRow kRows[] = {
-        { "Lure size (units/m; 270 = OoT's lure)", CVAR_ENHANCEMENT("ReelFishing3.LureModelScale"), 270.0f, 1000.0f },
+        { "Lure size (units/m; 270 = OoT's lure)", CVAR_ENHANCEMENT("ReelFishing3.LureModelScale"), 70.0f, 1000.0f },
         { "Fly size (units/m)", CVAR_ENHANCEMENT("ReelFishing3.FlyModelScale"), 600.0f, 2000.0f },
-        { "Bait size (units/m)", CVAR_ENHANCEMENT("ReelFishing3.BaitModelScale"), 400.0f, 2000.0f },
+        { "Bait size (units/m; also the bare hook)", CVAR_ENHANCEMENT("ReelFishing3.BaitModelScale"), 200.0f, 2000.0f },
         { "Float size (units/m; 68 = the game's metre)", CVAR_ENHANCEMENT("ReelFishing3.FloatModelScale"), 68.0f,
           500.0f },
     };
@@ -331,6 +331,22 @@ static void DrawLureModel() {
         if (ImGui::SliderFloat(r.label, &v, 20.0f, r.max, "%.0f")) {
             CVarSetFloat(r.cvar, v);
         }
+    }
+    // Step 39a-2..39c: the tackle screen's rod pane: fine-tuning of the lure/fly's tilt and turn (0: RF3's camera
+    // gives the view; the 39a roll slider is gone, RF3's rod node sets the roll).
+    float paneTilt = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneItemTilt"), 0.0f);
+    if (ImGui::SliderFloat("Rod pane item tilt (degrees; + shows its top)", &paneTilt, -60.0f, 60.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneItemTilt"), paneTilt);
+    }
+    // 39a-3/4: the item's turn about the pane's vertical (+ = counterclockwise from above) [assumed 5] and the
+    // pane's light (diffuse; 200 = the user's value).
+    float paneTurn = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneItemTurn"), 0.0f);
+    if (ImGui::SliderFloat("Rod pane item turn (degrees, about the vertical)", &paneTurn, -30.0f, 30.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneItemTurn"), paneTurn);
+    }
+    float paneLight = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneLight"), 200.0f);
+    if (ImGui::SliderFloat("Rod pane light (0-255)", &paneLight, 0.0f, 255.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneLight"), paneLight);
     }
     // Step 29e: the float's idle bob on the surface (the mod's own design; RF3 has no float in the water).
     float bobM = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FloatBobM"), 0.01f);

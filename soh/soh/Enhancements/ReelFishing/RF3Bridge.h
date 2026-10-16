@@ -224,6 +224,9 @@ void RF3Stock_GetRodProgress(RF3RodProgress* out);
 // Step 21e: the line broke: the chosen box's lure/fly (or a bait set's bait) loses 1 until the next scene
 // change (then it comes back; baits are refilled to 9). Returns 1 if something was taken.
 int32_t RF3Stock_LoseCurrent(void);
+// Step 33a (RF3-MECHANICS 5.4): a bite (why "strike") or a give-up at the bait ("give-up") uses 1 of the open bait
+// set's bait and empties the hook. 0 if not a bait set or no bait on the hook.
+int32_t RF3Stock_UseBait(const char* why);
 int32_t RF3Stock_LastLost(int32_t* kind, int32_t* index); // what the latest line break took; 0 if nothing
 int32_t RF3Stock_Lost(int32_t kind, int32_t index);       // how many are waiting to come back
 // What the latest catch unlocked; returns 0 (kind/index -1) if nothing.
@@ -296,6 +299,12 @@ int32_t RF3Tackle_Ready(const char** reason);
 // Step 32a: 1 if the open box is a lure/fly box with no owned lure/fly on the line (after a line break): nothing is
 // drawn at the line's end.
 int32_t RF3Tackle_LureMissing(void);
+// Step 33a: a bite or a give-up took the open bait set's bait: its bait becomes "---" (RF3Stock_UseBait calls it).
+void RF3Tackle_BaitTaken(const char* why);
+// Step 33a: on a scene change (after the bait refill), sets whose bait was taken get the same bait back on.
+void RF3Tackle_SceneRestore(void);
+// Step 33b: the open bait set's hook model index (model/hook/hookNNN), or -1.
+int32_t RF3Tackle_HookIndex(void);
 // Step 23c: OoT's pole (box 10) uses OoT's own lure movement. -1 if another box is chosen, else 1 for the
 // sinking lure (92) and 0 for the normal lure (91).
 int32_t RF3Tackle_PoleLure(void);

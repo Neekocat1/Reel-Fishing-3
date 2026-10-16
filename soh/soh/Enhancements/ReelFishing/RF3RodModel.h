@@ -22,6 +22,12 @@ int32_t RF3RodModel_Draw(struct PlayState* play, float bendY, float bendX, const
 // centred, horizontal, lengthWorld world units long (the frame's scale is measured). Returns 0 (draw OoT's
 // pole) for OoT's pole (rod 10) or a missing model.
 int32_t RF3RodModel_DrawGI(struct PlayState* play, int32_t rod, float lengthWorld);
+// Step 39c: the tackle screen's rod as RF3 places it (DESIGN "Step 39 design" 39c): in RF3's own frame (x right, y
+// down, z forward) at the current matrix, node T(pos) Rz Ry Rx S(scale) (rotXYZ radians, RF3's order z, y, x),
+// posed with RF3's motion 30 (the rod JSON's menu_pose; the bind pose without it). Writes the tip (current-matrix
+// units) to tipOut. Returns 0 for OoT's pole (rod 10) or a missing model; *posed = 1 if menu_pose was used.
+int32_t RF3RodModel_DrawMenu(struct PlayState* play, int32_t rod, const float* pos, const float* rotXYZ,
+                             const float* scale, float* tipOut, int32_t* posed);
 // The last draw decision, as logged, for the debug window.
 const char* RF3RodModel_Status(void);
 

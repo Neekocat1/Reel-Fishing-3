@@ -48,6 +48,22 @@ void RF3LureModel_LogLineEnd(const float* lineEnd, int32_t castState, uint32_t f
 // drawn at the current matrix (the get-item frame), centred, its longest side `size` frame units, side-on.
 // Returns 0 (draw OoT's) if the item has no RF3 model.
 int32_t RF3LureModel_DrawGI(struct PlayState* play, int32_t stockKind, int32_t index, float size);
+// Step 35c: the item menu's preview: the item's model, slowly turning, drawn into framebuffer `fb` (width x height,
+// at most 128 x 144) cleared to clearRgb. Returns 0 (fb untouched) if the item has no RF3 model.
+// Step 39a: the tackle screen's rod pane, as RF3's: rod `rod` (RROD), a straight line from its tip and the lure/fly
+// (stockKind RF3_STOCK_LURE/FLY, index; anything else = none) at the line's end; 39b: stockKind RF3_STOCK_BAIT =
+// a bait set's layout, the bait `index` (< 0: the bare hook) and float floatIdx (< 0: none) at depth 0-4; 39b-2:
+// item, float and line placed from RF3's own record for tackle set `box` (0-9; else nothing is drawn), drawn into framebuffer `fb` (width x
+// height, at most 128 x 176) over `background` (a Gfx display list drawing the pane's picture into the buffer, or
+// nullptr; SoH clears framebuffers opaque, so the pane can't be transparent). paneRf3 = the pane's RF3 box (x0, y0, x1, y1, 640 x 480 pixels).
+// 39c: drawn in RF3's frame with RF3's camera; the item's tilt/turn fine-tuning are the sliders RodPaneItemTilt/Turn. Writes a one-line state for the log to
+// stateOut. Returns 0 (fb untouched or empty) if nothing was drawn.
+int32_t RF3LureModel_DrawRodPane(struct PlayState* play, int32_t fb, int32_t width, int32_t height,
+                                 const void* background, const float* paneRf3, int32_t rod, int32_t box,
+                                 int32_t stockKind, int32_t index, int32_t floatIdx, int32_t depth, char* stateOut,
+                                 int32_t stateSize);
+int32_t RF3LureModel_DrawMenuPreview(struct PlayState* play, int32_t stockKind, int32_t index, int32_t fb,
+                                     int32_t width, int32_t height, uint32_t frame, const uint8_t* clearRgb);
 // The last draw decisions, as logged, for the debug window.
 const char* RF3LureModel_Status(void);
 const char* RF3LureModel_FloatStatus(void);

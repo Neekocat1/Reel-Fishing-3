@@ -252,6 +252,69 @@ extern "C" int32_t RF3RodModel_DrawGI(PlayState* play, int32_t rod, float length
     return 1;
 }
 
+extern "C" int32_t RF3RodModel_DrawMenu(PlayState* play, int32_t rod, const float* pos, const float* rotXYZ,
+                                        const float* scale, float* tipOut, int32_t* posed) {
+    *posed = 0;
+    if (rod < 0 || rod >= kRodCount) {
+        return 0; // OoT's pole is rod 10
+    }
+    LoadIndex();
+    auto it = sRodFiles.find(rod);
+    if (it == sRodFiles.end()) {
+        return 0;
+    }
+    rf3model::SkinnedModel* m = rf3model::Get(it->second, "rod", "rod=" + std::to_string(rod));
+    if (m == nullptr || !m->ok) {
+        return 0;
+    }
+    std::vector<Mat3> rot;
+    std::vector<std::array<float, 3>> bpos;
+    const auto& pose = m->extra.contains("menu_pose") ? m->extra["menu_pose"] : nlohmann::json();
+    if (pose.is_array() && pose.size() == m->bones.size()) {
+        // RF3's motion 30: local translation and axis + angle per bone (angles negated as the bind's, 25b)
+        std::vector<std::array<float, 3>> localT(pose.size());
+        std::vector<Mat3> localR(pose.size());
+        for (size_t i = 0; i < pose.size(); i++) {
+            for (int k = 0; k < 3; k++) {
+                localT[i][k] = pose[i]["t"][k].get<float>();
+            }
+            localR[i] = rf3model::AxisAngle(pose[i]["axis"][0].get<float>(), pose[i]["axis"][1].get<float>(),
+                                            pose[i]["axis"][2].get<float>(), -pose[i]["angle"].get<float>());
+        }
+        rf3model::BoneWorldsLocal(*m, localT, localR, rot, bpos);
+        *posed = 1;
+    } else {
+        rf3model::BoneWorlds(*m, nullptr, rot, bpos);
+    }
+    float pre[3] = { m->offset[0], m->offset[1], m->offset[2] };
+    std::vector<RF3SkinnedPoint> points;
+    int32_t tipBone = m->extra.value("tip_bone", -1);
+    if (tipOut != nullptr && tipBone >= 0) {
+        RF3SkinnedPoint p = { tipBone, { 0.0f, 0.0f, 0.0f }, tipOut };
+        if (m->extra.contains("tip_local") && m->extra["tip_local"].size() == 3) {
+            for (int i = 0; i < 3; i++) {
+                p.local[i] = m->extra["tip_local"][i].get<float>();
+            }
+        }
+        points.push_back(p);
+    }
+    Matrix_Push();
+    Matrix_Translate(pos[0], pos[1], pos[2], MTXMODE_APPLY);
+    Matrix_RotateZ(rotXYZ[2], MTXMODE_APPLY);
+    Matrix_RotateY(rotXYZ[1], MTXMODE_APPLY);
+    Matrix_RotateX(rotXYZ[0], MTXMODE_APPLY);
+    Matrix_Scale(scale[0], scale[1], scale[2], MTXMODE_APPLY);
+    // RF3Skinned_Draw's axis fix 1 turns y-down into y-up by a half turn about z; this frame is RF3's own, so undo it
+    Matrix_RotateZ(static_cast<f32>(M_PI), MTXMODE_APPLY);
+    RF3Skinned_Draw(play, *m, rot, bpos, 1.0f / m->posScale, 1, pre, points); // pos units -> metres
+    Matrix_Pop();
+    char state[200];
+    std::snprintf(state, sizeof(state), "menu-rod-model rod=%d posed=%d scale=%.2f,%.2f,%.2f", rod, *posed, scale[0],
+                  scale[1], scale[2]);
+    NoteRod(state);
+    return 1;
+}
+
 extern "C" const char* RF3RodModel_Status(void) {
     return sStatus.c_str();
 }

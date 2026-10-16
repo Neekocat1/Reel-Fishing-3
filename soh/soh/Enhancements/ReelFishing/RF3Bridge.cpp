@@ -450,6 +450,9 @@ extern "C" int32_t RF3Approach_Chase(int32_t fishIndex, int32_t lureInWater, int
     }
     if (e == rf3::ApproachEvent::Fail) {
         sChaser = -1;
+        if (sApproach[fishIndex].TookBait()) {
+            RF3Stock_UseBait("give-up"); // step 33a: the fish left with the bait
+        }
         return RF3_APPROACH_FAIL;
     }
     if (e == rf3::ApproachEvent::Strike) {

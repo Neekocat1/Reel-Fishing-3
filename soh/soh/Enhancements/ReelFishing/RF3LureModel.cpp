@@ -40,6 +40,7 @@
 #include "RF3TackleAssets.h"
 #include "RF3SkinnedModel.h"
 #include "RF3FishModel.h"
+#include "RF3RodModel.h"
 
 extern "C" {
 #include "z64.h"
@@ -59,7 +60,9 @@ constexpr const char* kOtrPrefix = "__OTR__";
 constexpr float kOotLureScale = 0.0039999997f; // z_fishing.c's lure model scale (sLurePosZOffset is in it)
 
 // The model kinds, as tools/rf3_models.py MODEL_KINDS writes them. Item N = file N [assumed: the counts match].
-enum Kind { kLure, kFly, kBait, kFloat, kKinds };
+// step 33b: kHook, the bait rig's bare hook; step 35c-3: kBaitMenu, the bait alone (RF3's model/bait/btNNN) for the
+// item menu's preview (kBait is the bait on its hook, as on the line)
+enum Kind { kLure, kFly, kBait, kFloat, kHook, kBaitMenu, kKinds };
 struct KindInfo {
     const char* name;
     const char* file;   // printf pattern of the archive path
@@ -68,12 +71,20 @@ struct KindInfo {
     float defaultScale; // [assumed] (DESIGN 25c/25d): lure 4.4 cm ~ OoT's lure; fly, bait visible; float real size
 };
 constexpr KindInfo kKindInfo[kKinds] = {
-    { "lure", "rf3models/lure/lur%03d.json", 91, CVAR_ENHANCEMENT("ReelFishing3.LureModelScale"), 270.0f },
+    // step 36a (user, 2026-10-14): default 70 (was 270, OoT's lure size); step 38 (user, 2026-10-16): bait (and so
+    // the bare hook) default 200 (was 400)
+    { "lure", "rf3models/lure/lur%03d.json", 91, CVAR_ENHANCEMENT("ReelFishing3.LureModelScale"), 70.0f },
     { "fly", "rf3models/fly/fly%03d.json", 40, CVAR_ENHANCEMENT("ReelFishing3.FlyModelScale"), 600.0f },
-    { "bait", "rf3models/bait/baithook%03d.json", 12, CVAR_ENHANCEMENT("ReelFishing3.BaitModelScale"), 400.0f },
+    { "bait", "rf3models/bait/baithook%03d.json", 12, CVAR_ENHANCEMENT("ReelFishing3.BaitModelScale"), 200.0f },
     { "float", "rf3models/float/float%03d.json", 6, CVAR_ENHANCEMENT("ReelFishing3.FloatModelScale"),
       RF3_UNITS_PER_METRE },
+    // step 33b: RF3's 7 hooks (tackle.trf 0x300 + n), at the bait's size so the hook matches its bait (33b-4, user:
+    // 33b-2's own slider removed once 33b-3 made them visible)
+    { "hook", "rf3models/hook/hook%03d.json", 7, CVAR_ENHANCEMENT("ReelFishing3.BaitModelScale"), 200.0f },
+    // step 35c-3: bait type n = btNNN [assumed, as baithook n]; only the item menu's preview (sized there)
+    { "baitmenu", "rf3models/baitmenu/bt%03d.json", 12, CVAR_ENHANCEMENT("ReelFishing3.BaitModelScale"), 200.0f },
 };
+constexpr uint8_t kUntexturedGrey[3] = { 170, 170, 178 }; // step 33b-3: untextured surfaces [assumed]; step 37: bare hooks have a texture now, so a fallback
 constexpr float kFloatMaxShare = 0.9f; // out of the water: at most this share of the way from the bait to the rod
 // Step 29e: the float's idle bob on the surface. RF3 has no float in the water (RF3-MECHANICS 2.9, 29b), so this is
 // the mod's own design [assumed], tuned with the debug window's sliders.
@@ -330,12 +341,18 @@ void Build(LureModel& m, int32_t kind, int32_t index) {
             const Surface& s = surfaces[si];
             gDPPipeSync(g++);
             if (s.tex != nullptr) {
+                gDPSetRenderMode(g++, G_RM_AA_ZB_TEX_EDGE, G_RM_AA_ZB_TEX_EDGE2);
                 gDPSetCombineMode(g++, G_CC_MODULATEIDECALA, G_CC_MODULATEIDECALA);
                 gSPTexture(g++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
                 gDPLoadTextureBlock(g++, s.tex, G_IM_FMT_RGBA, G_IM_SIZ_32b, s.w, s.h, 0, G_TX_NOMIRROR | G_TX_WRAP,
                                     G_TX_NOMIRROR | G_TX_WRAP, Log2(s.w), Log2(s.h), G_TX_NOLOD, G_TX_NOLOD);
             } else {
-                gDPSetCombineMode(g++, G_CC_SHADE, G_CC_SHADE);
+                // Step 33b-3: untextured: opaque, flat grey. TEX_EDGE + shade drew nothing visible (33b/33b-2, user)
+                // [grey assumed]. Step 37: the bare hooks carry the mod's metal swatch, so only a missing texture
+                // lands here.
+                gDPSetRenderMode(g++, G_RM_AA_ZB_OPA_SURF, G_RM_AA_ZB_OPA_SURF2);
+                gDPSetPrimColor(g++, 0, 0, kUntexturedGrey[0], kUntexturedGrey[1], kUntexturedGrey[2], 255);
+                gDPSetCombineMode(g++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
                 gSPTexture(g++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF);
             }
         }
@@ -419,6 +436,9 @@ std::pair<int32_t, int32_t> ChosenItem(std::string& why) {
         return { kFly, c.lure };
     }
     if (boxKind == "bait") {
+        if (RF3Tackle_LureMissing()) {
+            return { kHook, RF3Tackle_HookIndex() }; // step 33b: no bait on the hook (taken, or "---"): the bare hook
+        }
         return { kBait, c.bait };
     }
     why = "box=" + std::to_string(c.box) + " kind=" + (boxKind.empty() ? "?" : boxKind);
@@ -851,6 +871,11 @@ extern "C" int32_t RF3LureModel_Draw(PlayState* play, const float* pos, float ro
                       std::to_string(index));
         return 0;
     }
+    if (kind == kHook && (castState == 4 || castState == 5)) {
+        // Step 33b: the bare hook in the fish's mouth is hidden, as 27e-3's lure hooks (a non-RF3 choice).
+        NoteState(sLastDrawState, sStatus, "model-off why=bare-hook-in-mouth index=" + std::to_string(index));
+        return 0;
+    }
     LureModel* m = Get(kind, index);
     if (m == nullptr || !m->ok) {
         NoteState(sLastDrawState, sStatus,
@@ -859,7 +884,7 @@ extern "C" int32_t RF3LureModel_Draw(PlayState* play, const float* pos, float ro
         return 0;
     }
     float unitsPerMetre = CVarGetFloat(kKindInfo[kind].cvar, kKindInfo[kind].defaultScale);
-    bool flip = kind != kBait && CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModelFlip"), 0);
+    bool flip = kind != kBait && kind != kHook && CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModelFlip"), 0);
     char state[200];
     std::snprintf(state, sizeof(state),
                   "model-draw kind=%s index=%d units_per_m=%.0f flip=%d preview=%d length_units=%.1f", kKindInfo[kind].name,
@@ -942,7 +967,7 @@ extern "C" int32_t RF3LureModel_Draw(PlayState* play, const float* pos, float ro
     } else {
         Matrix_Translate(pos[0], pos[1], pos[2], MTXMODE_NEW);
         Matrix_RotateY(rotY, MTXMODE_APPLY);
-        if (kind != kBait) {
+        if (kind != kBait && kind != kHook) { // step 33b: the bare hook hangs as the bait does
             // Along the line, as OoT's lure (z_fishing.c applies sLurePosZOffset after its 0.004 scale).
             Matrix_RotateX(rotX, MTXMODE_APPLY);
             Matrix_Translate(0.0f, 0.0f, zOffset * kOotLureScale, MTXMODE_APPLY);
@@ -1237,6 +1262,406 @@ extern "C" int32_t RF3LureModel_DrawGI(PlayState* play, int32_t stockKind, int32
     DrawModel(play, m, unitsPerMetre, false);
     Matrix_Pop();
     return 1;
+}
+
+// Step 35c: the tackle screen's item menu preview. As SoH's pause Link (Player_DrawPauseImpl): on the work list the
+// framebuffer `fb` is bound, a nested opaque list clears depth and colour (the pane's colour), sets the viewport,
+// perspective, look-at and lights and draws the rigid model, turning about the vertical; the caller shows `fb` as
+// a texture. Framed as RF3LureModel_DrawGI (longest side fitted, centred). Returns 0 with nothing to draw.
+constexpr float kPreviewTurnSeconds = 6.0f; // one turn per 6 s [assumed; user: RF3's preview slowly spins]
+constexpr float kPreviewEyeDist = 200.0f;
+constexpr float kPreviewFovy = 30.0f;
+constexpr float kPreviewFill = 0.75f;  // the longest side's share of the view's height
+constexpr int32_t kPreviewMaxW = 128; // the work buffers below (the pane is 108 x 132)
+constexpr int32_t kPreviewMaxH = 144;
+
+// Steps 35c / 39a: an offscreen pass, as SoH's pause Link (Player_DrawPauseImpl): on the work list the framebuffer
+// `fb` is bound and a nested opaque list clears depth and colour (clearRgb) and sets the viewport and the lit render
+// state. The caller then sets its projection and lights and draws; EndOffscreen closes the list and unbinds `fb`.
+// Returns the slot EndOffscreen branches from.
+static Gfx* BeginOffscreen(PlayState* play, int32_t fb, int32_t width, int32_t height, const uint8_t* clearRgb,
+                           u16* colorBuf, u16* depthBuf, Vp* viewport) {
+    Gfx* opaRef = nullptr; // outside OPEN_DISPS's block (35c's first build: C2065)
+    OPEN_DISPS(play->state.gfxCtx);
+    gsSPSetFB(WORK_DISP++, fb);
+    opaRef = POLY_OPA_DISP;
+    POLY_OPA_DISP++;
+    gSPDisplayList(WORK_DISP++, POLY_OPA_DISP);
+
+    gDPPipeSync(POLY_OPA_DISP++);
+    gSPLoadGeometryMode(POLY_OPA_DISP++, 0);
+    gSPTexture(POLY_OPA_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF);
+    gDPSetCombineMode(POLY_OPA_DISP++, G_CC_SHADE, G_CC_SHADE);
+    gDPSetOtherMode(POLY_OPA_DISP++,
+                    G_AD_DISABLE | G_CD_MAGICSQ | G_CK_NONE | G_TC_FILT | G_TF_BILERP | G_TT_NONE | G_TL_TILE |
+                        G_TD_CLAMP | G_TP_PERSP | G_CYC_FILL | G_PM_NPRIMITIVE,
+                    G_AC_NONE | G_ZS_PIXEL | G_RM_NOOP | G_RM_NOOP2);
+    gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    gDPSetScissor(POLY_OPA_DISP++, G_SC_NON_INTERLACE, 0, 0, width, height);
+    gSPClipRatio(POLY_OPA_DISP++, FRUSTRATIO_1);
+
+    gDPSetColorImage(POLY_OPA_DISP++, G_IM_FMT_RGBA, G_IM_SIZ_16b, width, depthBuf);
+    gDPSetCycleType(POLY_OPA_DISP++, G_CYC_FILL);
+    gDPSetRenderMode(POLY_OPA_DISP++, G_RM_NOOP, G_RM_NOOP2);
+    gDPSetFillColor(POLY_OPA_DISP++, (GPACK_ZDZ(G_MAXFBZ, 0) << 16) | GPACK_ZDZ(G_MAXFBZ, 0));
+    gDPFillRectangle(POLY_OPA_DISP++, 0, 0, width - 1, height - 1);
+    gDPPipeSync(POLY_OPA_DISP++);
+
+    const u16 clear = GPACK_RGBA5551(clearRgb[0], clearRgb[1], clearRgb[2], 1);
+    gDPSetColorImage(POLY_OPA_DISP++, G_IM_FMT_RGBA, G_IM_SIZ_16b, width, colorBuf);
+    gDPSetCycleType(POLY_OPA_DISP++, G_CYC_FILL);
+    gDPSetRenderMode(POLY_OPA_DISP++, G_RM_NOOP, G_RM_NOOP2);
+    gDPSetFillColor(POLY_OPA_DISP++, (clear << 16) | clear);
+    gDPFillRectangle(POLY_OPA_DISP++, 0, 0, width - 1, height - 1);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetDepthImage(POLY_OPA_DISP++, depthBuf);
+
+    viewport->vp.vscale[0] = viewport->vp.vtrans[0] = width * ((1 << 2) / 2);
+    viewport->vp.vscale[1] = viewport->vp.vtrans[1] = height * ((1 << 2) / 2);
+    viewport->vp.vscale[2] = viewport->vp.vtrans[2] = G_MAXZ / 2;
+    gSPViewport(POLY_OPA_DISP++, viewport);
+    CLOSE_DISPS(play->state.gfxCtx);
+    return opaRef;
+}
+
+static void EndOffscreen(PlayState* play, Gfx* opaRef) {
+    OPEN_DISPS(play->state.gfxCtx);
+    gSPEndDisplayList(POLY_OPA_DISP++);
+    gSPBranchList(opaRef, POLY_OPA_DISP);
+    gsSPResetFB(WORK_DISP++);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static Lights1 sPreviewLights = gdSPDefLights1(80, 80, 80, 255, 255, 255, 84, 84, -84); // pause Link's
+
+extern "C" int32_t RF3LureModel_DrawMenuPreview(PlayState* play, int32_t stockKind, int32_t index, int32_t fb,
+                                                int32_t width, int32_t height, uint32_t frame, const uint8_t* clearRgb) {
+    int32_t kind = -1;
+    switch (stockKind) {
+        case RF3_STOCK_LURE: kind = kLure; break;
+        case RF3_STOCK_FLY: kind = kFly; break;
+        case RF3_STOCK_BAIT: kind = kBaitMenu; break; // 35c-3: RF3's bait-only model, as RF3's bait menu (user)
+        case RF3_STOCK_FLOAT: kind = kFloat; break;
+    }
+    if (fb < 0 || width <= 0 || height <= 0 || width > kPreviewMaxW || height > kPreviewMaxH || kind < 0 ||
+        index < 0 || index >= kKindInfo[kind].count) {
+        return 0; // OoT's pole lures 91/92 have no RF3 model
+    }
+    LureModel* m = Get(kind, index);
+    if (m == nullptr || !m->ok) {
+        return 0;
+    }
+    const float longestM = std::fmax(std::fmax(m->sizeM[0], m->sizeM[1]), m->sizeM[2]);
+    if (longestM <= 1e-5f) {
+        return 0;
+    }
+    // The longest side fills kPreviewFill of the view's height at the eye's distance.
+    const float viewH = 2.0f * kPreviewEyeDist * std::tan(kPreviewFovy * 0.5f * static_cast<float>(M_PI) / 180.0f);
+    const float unitsPerMetre = kPreviewFill * viewH / longestM;
+    const float s = unitsPerMetre / m->posScale;
+    const float turn = 2.0f * static_cast<float>(M_PI) * std::fmod(frame * kGameFrameSeconds, kPreviewTurnSeconds) /
+                       kPreviewTurnSeconds;
+
+    static u16 sColorBuf[kPreviewMaxW * kPreviewMaxH];
+    static u16 sDepthBuf[kPreviewMaxW * kPreviewMaxH];
+    static Vp viewport;
+    Gfx* opaRef = BeginOffscreen(play, fb, width, height, clearRgb, sColorBuf, sDepthBuf, &viewport);
+    Mtx* perspMtx = static_cast<Mtx*>(Graph_Alloc(play->state.gfxCtx, sizeof(Mtx)));
+    Mtx* lookAtMtx = static_cast<Mtx*>(Graph_Alloc(play->state.gfxCtx, sizeof(Mtx)));
+    u16 perspNorm;
+    OPEN_DISPS(play->state.gfxCtx);
+    guPerspective(perspMtx, &perspNorm, kPreviewFovy, static_cast<f32>(width) / static_cast<f32>(height), 10.0f,
+                  4000.0f, 1.0f);
+    gSPPerspNormalize(POLY_OPA_DISP++, perspNorm);
+    gSPMatrix(POLY_OPA_DISP++, perspMtx, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
+    guLookAt(lookAtMtx, 0.0f, 0.0f, kPreviewEyeDist, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+    gSPMatrix(POLY_OPA_DISP++, lookAtMtx, G_MTX_NOPUSH | G_MTX_MUL | G_MTX_PROJECTION);
+    gSPSetLights1(POLY_OPA_DISP++, sPreviewLights);
+
+    Matrix_Push();
+    Matrix_Translate(0.0f, 0.0f, 0.0f, MTXMODE_NEW);
+    Matrix_RotateY(turn, MTXMODE_APPLY);
+    Matrix_Translate(-s * m->center[0], s * m->center[1], s * m->center[2], MTXMODE_APPLY);
+    DrawModel(play, m, unitsPerMetre, false);
+    Matrix_Pop();
+
+    CLOSE_DISPS(play->state.gfxCtx);
+    EndOffscreen(play, opaRef);
+
+    char state[160];
+    std::snprintf(state, sizeof(state), "menu-preview kind=%s index=%d units_per_m=%.0f longest_m=%.3f fb=%d %dx%d",
+                  kKindInfo[kind].name, index, unitsPerMetre, longestM, fb, width, height);
+    NoteState(sLastDrawState, sStatus, state);
+    return 1;
+}
+
+// Step 39a-39c (DESIGN "Step 39 design"): the tackle screen's rod pane as RF3 draws it. 39c: everything in RF3's own
+// frame (x right, y down, z forward, metres) from RF3's pane record per tackle set, seen by RF3's camera: at the
+// origin looking down +z, projection distance 450 px [code: 0x0012BFD0], pixel aspect and image centre fitted to the
+// user's screenshots (10 points within 4.5 px RMS) [measured].
+// 39b-2/39c: RF3's pane record per tackle set [code: 0x00255F70 + box x 0x160, set by 0x001B0A80]: the rod node
+// (+0x189C) position, rotation (x, y, z; applied z, y, x) and scale, posed with motion 30; the item node (+0x18A8)
+// position (z 4.16), its scale x the extra node's (+0x18AC) scale, that node's turn about y; the float node (+0x18A4)
+// scale and turn about z; line points 6-10 (the float sits on point 10 - depth).
+struct PaneBox {
+    float rodPos[3];
+    float rodRot[3];
+    float rodScale[3];
+    float item[2];
+    float itemScale;
+    float itemTurn;      // radians about y (1.57: lures side-on)
+    float floatScale[3];
+    float floatTurn;     // radians about z
+    float line[5][2];    // points 6..10
+};
+constexpr float kPaneItemZ = 4.16f; // every item, float and line point
+constexpr PaneBox kPaneBoxes[10] = {
+    { { 1.65f, 0.55f, 2.65f }, { 1.12f, -1.01f, 0.00f }, { 2.5f, 0.8f, 0.8f }, { 1.01f, 1.20f }, 10.00f, 1.57f, { 10.00f, 10.00f, 10.00f }, 0.00f, { { 1.00f, 1.20f }, { 1.00f, 1.20f }, { 1.00f, 1.20f }, { 1.00f, 1.20f }, { 1.00f, 1.20f } } }, // box 0
+    { { 1.65f, 0.55f, 2.65f }, { 1.12f, -1.01f, 0.00f }, { 1.5f, 0.9f, 0.9f }, { 1.03f, 1.20f }, 15.00f, 1.57f, { 10.00f, 10.00f, 10.00f }, 0.00f, { { 1.03f, 1.20f }, { 1.03f, 1.20f }, { 1.03f, 1.20f }, { 1.03f, 1.20f }, { 1.03f, 1.20f } } }, // box 1
+    { { 1.70f, 0.65f, 2.65f }, { 1.12f, -1.01f, 0.00f }, { 2.0f, 1.0f, 1.0f }, { 1.00f, 1.20f }, 10.00f, 1.57f, { 10.00f, 10.00f, 10.00f }, 0.00f, { { 1.03f, 1.20f }, { 1.03f, 1.20f }, { 1.03f, 1.20f }, { 1.03f, 1.20f }, { 1.03f, 1.20f } } }, // box 2
+    { { 1.60f, 0.65f, 2.65f }, { 1.12f, -1.01f, 0.00f }, { 0.9f, 1.2f, 0.9f }, { 1.00f, 1.20f }, 60.00f, 1.57f, { 10.00f, 10.00f, 10.00f }, 0.00f, { { 1.00f, 1.20f }, { 1.00f, 1.20f }, { 1.00f, 1.20f }, { 1.00f, 1.20f }, { 1.00f, 1.20f } } }, // box 3
+    { { 1.70f, 0.70f, 2.65f }, { 1.12f, -1.01f, 0.00f }, { 1.0f, 1.0f, 1.0f }, { 1.00f, 1.20f }, 60.00f, 1.57f, { 10.00f, 10.00f, 10.00f }, 0.00f, { { 1.00f, 1.20f }, { 1.00f, 1.20f }, { 1.00f, 1.20f }, { 1.00f, 1.20f }, { 1.00f, 1.20f } } }, // box 4
+    { { 1.68f, 1.00f, 2.65f }, { 1.57f, 0.00f, -0.31f }, { 3.0f, 1.0f, 1.0f }, { 1.20f, 0.90f }, 30.00f, 0.00f, { 9.00f, 9.00f, 9.00f }, -0.21f, { { 1.40f, 0.00f }, { 1.36f, 0.16f }, { 1.33f, 0.32f }, { 1.29f, 0.48f }, { 1.25f, 0.64f } } }, // box 5
+    { { 1.70f, 1.00f, 2.65f }, { 1.57f, 0.00f, -0.31f }, { 4.0f, 1.0f, 1.0f }, { 1.20f, 0.90f }, 30.00f, 0.00f, { 9.00f, 9.00f, 9.00f }, -0.21f, { { 1.38f, 0.00f }, { 1.35f, 0.16f }, { 1.32f, 0.32f }, { 1.28f, 0.48f }, { 1.25f, 0.64f } } }, // box 6
+    { { 1.60f, 0.95f, 2.65f }, { 1.57f, 0.00f, -0.31f }, { 2.5f, 1.0f, 1.0f }, { 1.12f, 1.25f }, 20.00f, 1.57f, { 5.00f, 3.00f, 3.00f }, -0.21f, { { 1.38f, 0.05f }, { 1.35f, 0.21f }, { 1.32f, 0.37f }, { 1.28f, 0.53f }, { 1.24f, 0.69f } } }, // box 7
+    { { 1.70f, 1.00f, 2.65f }, { 1.57f, 0.00f, -0.31f }, { 2.5f, 1.0f, 1.0f }, { 1.12f, 1.25f }, 12.00f, 0.00f, { 3.00f, 2.00f, 2.00f }, -0.21f, { { 1.38f, 0.05f }, { 1.35f, 0.21f }, { 1.32f, 0.37f }, { 1.28f, 0.53f }, { 1.24f, 0.69f } } }, // box 8
+    { { 1.59f, 0.70f, 2.65f }, { 1.57f, 0.00f, -0.47f }, { 2.0f, 0.9f, 0.9f }, { 1.20f, 0.90f }, 30.00f, 0.00f, { 9.00f, 9.00f, 9.00f }, -0.21f, { { 1.38f, 0.00f }, { 1.35f, 0.16f }, { 1.32f, 0.32f }, { 1.28f, 0.48f }, { 1.25f, 0.64f } } }, // box 9
+};
+// RF3's camera: at the origin, looking down +z; RF3 pixel = centre + f (aspect x / z, y / z).
+constexpr float kPaneCamF = 450.0f;                        // [code] 0x0012BFD0 (+0x324)
+constexpr float kPaneCamAspect = 1.048f;                   // [measured, fitted]
+constexpr float kPaneCamCentre[2] = { 313.1f, 244.7f };    // [measured, fitted; RF3's default is (320, 240)]
+constexpr float kPaneNear = 0.5f;                          // the pane's depth range (the scene is at z 2.5-4.3)
+constexpr float kPaneFar = 20.0f;
+// 39c-2: the pane is drawn in millimetres. In metres a rod bone's matrix carries 1/10000 (pos units -> m), entries
+// ~1e-4, and the fixed-point Mtx (1/65536 steps) rounded them by up to ~10 % per bone: the rod came out crooked
+// and thick (user, 2026-10-16: "Pose 30 doesn't seem to be properly matched to the model"); a Python render of the
+// same pose was smooth. x1000 gives entries ~0.1. The projection divides by z, so only near/far scale.
+constexpr float kPaneUnitsPerM = 1000.0f;
+constexpr uint8_t kPaneLineRgb[3] = { 190, 170, 150 }; // [measured, approximate]
+constexpr float kPaneLinePx = 1.3f;                // RF3 pixels [measured]
+// The rod's turn about its axis was a 39a slider (150); RF3's rod node has its own rotation now (39c), so it is gone.
+// 39a-2..39c: the item's tilt (top toward the viewer) and turn (about the vertical): the user's 15 / 15 for the flat
+// view were the perspective RF3's camera gives (the lure seen 16 deg from above, 14 from the side), so 0 now; the
+// sliders "Rod pane item tilt" / "Rod pane item turn" stay for fine-tuning.
+constexpr float kDefaultRodPaneItemTilt = 0.0f;
+constexpr float kDefaultRodPaneItemTurn = 0.0f;
+// 39a-3 (user: "lit up a little"): the pane's own light, from the upper left and in front. 35c's light comes from
+// behind, so the side facing the viewer got only the ambient. Ambient 70 + diffuse 200 (39a-4: the user's slider
+// value); slider "Rod pane light". 39c: the direction in RF3's frame (up = -y, toward the viewer = -z).
+constexpr uint8_t kRodPaneAmbient = 70;
+constexpr float kDefaultRodPaneLight = 200.0f;
+constexpr int8_t kRodPaneLightDir[3] = { -30, -60, -100 }; // toward the light: left, up, toward the viewer
+constexpr int32_t kPaneMaxW = 128;                 // the work buffers (the pane is 108 x 166)
+constexpr int32_t kPaneMaxH = 176;
+
+// The line from a to b (RF3 frame, metres): a strip facing the camera, ~kPaneLinePx wide where it is, opaque in one
+// colour (untextured: OPA + primitive, 33b-3); its vertices in the pane's mm.
+static void DrawPaneLine(PlayState* play, const float* a, const float* b) {
+    const float d[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+    const float m[3] = { (a[0] + b[0]) * 0.5f, (a[1] + b[1]) * 0.5f, (a[2] + b[2]) * 0.5f }; // the camera's ray
+    float n[3] = { d[1] * m[2] - d[2] * m[1], d[2] * m[0] - d[0] * m[2], d[0] * m[1] - d[1] * m[0] };
+    const float nl = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    if (nl <= 1e-9f) {
+        return;
+    }
+    const float half = kPaneLinePx * 0.5f * m[2] / kPaneCamF; // metres per pixel at that depth
+    for (float& c : n) {
+        c *= half / nl;
+    }
+    const float corners[4][3] = { { a[0] + n[0], a[1] + n[1], a[2] + n[2] }, { a[0] - n[0], a[1] - n[1], a[2] - n[2] },
+                                  { b[0] - n[0], b[1] - n[1], b[2] - n[2] }, { b[0] + n[0], b[1] + n[1], b[2] + n[2] } };
+    Vtx* v = static_cast<Vtx*>(Graph_Alloc(play->state.gfxCtx, 4 * sizeof(Vtx)));
+    for (int32_t i = 0; i < 4; i++) {
+        v[i] = {};
+        for (int32_t k = 0; k < 3; k++) {
+            v[i].v.ob[k] = static_cast<s16>(std::lround(corners[i][k] * kPaneUnitsPerM)); // mm, at most 32 m
+        }
+        v[i].v.cn[3] = 255;
+    }
+    OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Push();
+    Matrix_Translate(0.0f, 0.0f, 0.0f, MTXMODE_NEW); // the vertices are already in the pane's mm
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetCycleType(POLY_OPA_DISP++, G_CYC_1CYCLE);
+    gSPTexture(POLY_OPA_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF);
+    gSPClearGeometryMode(POLY_OPA_DISP++, G_LIGHTING | G_CULL_BACK | G_CULL_FRONT);
+    gDPSetRenderMode(POLY_OPA_DISP++, G_RM_AA_ZB_OPA_SURF, G_RM_AA_ZB_OPA_SURF2);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, kPaneLineRgb[0], kPaneLineRgb[1], kPaneLineRgb[2], 255);
+    gDPSetCombineMode(POLY_OPA_DISP++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPVertex(POLY_OPA_DISP++, reinterpret_cast<uintptr_t>(v), 4, 0);
+    gSP2Triangles(POLY_OPA_DISP++, 0, 1, 2, 0, 0, 2, 3, 0);
+    // the models after this set their own state but not the geometry mode: lit again
+    gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// The loaded model of kind/index, or nullptr (no model, or out of range).
+static LureModel* PaneModel(int32_t kind, int32_t index) {
+    if (kind < 0 || index < 0 || index >= kKindInfo[kind].count) {
+        return nullptr;
+    }
+    LureModel* m = Get(kind, index);
+    return (m != nullptr && m->ok) ? m : nullptr;
+}
+
+// A rigid model drawn in RF3's frame at the current matrix (metres): DrawModel's half turn about x (RF3 y-down ->
+// y-up) undone first.
+static void DrawModelRf3(PlayState* play, const LureModel* m) {
+    Matrix_RotateX(static_cast<f32>(M_PI), MTXMODE_APPLY);
+    DrawModel(play, m, 1.0f, false);
+}
+
+// RF3 pixel of an RF3-frame point (for the log).
+static void PanePixel(const float* w, float* out) {
+    out[0] = kPaneCamCentre[0] + kPaneCamF * kPaneCamAspect * w[0] / w[2];
+    out[1] = kPaneCamCentre[1] + kPaneCamF * w[1] / w[2];
+}
+
+extern "C" int32_t RF3LureModel_DrawRodPane(PlayState* play, int32_t fb, int32_t width, int32_t height,
+                                            const void* background, const float* paneRf3, int32_t rod,
+                                            int32_t box, int32_t stockKind, int32_t index, int32_t floatIdx,
+                                            int32_t depth, char* stateOut, int32_t stateSize) {
+    if (fb < 0 || width <= 0 || height <= 0 || width > kPaneMaxW || height > kPaneMaxH) {
+        std::snprintf(stateOut, stateSize, "rod-pane drawn=0 why=buffer %dx%d", width, height);
+        return 0;
+    }
+    if (box < 0 || box >= 10) {
+        std::snprintf(stateOut, stateSize, "rod-pane drawn=0 why=box %d (no RF3 record: OoT's pole)", box);
+        return 0;
+    }
+    const bool baitSet = stockKind == RF3_STOCK_BAIT;
+    const PaneBox& rec = kPaneBoxes[box];
+    int32_t kind = -1;
+    int32_t itemIndex = index;
+    switch (stockKind) {
+        case RF3_STOCK_LURE: kind = kLure; break;
+        case RF3_STOCK_FLY: kind = kFly; break;
+        case RF3_STOCK_BAIT:
+            kind = index >= 0 ? kBait : kHook; // 33b: no bait (taken, or "---"): the bare hook
+            itemIndex = index >= 0 ? index : RF3Tackle_HookIndex();
+            break;
+    }
+    LureModel* item = PaneModel(kind, itemIndex);
+    LureModel* flt = baitSet ? PaneModel(kFloat, floatIdx) : nullptr;
+    const float tiltDeg = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneItemTilt"), kDefaultRodPaneItemTilt);
+    const float turnDeg = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneItemTurn"), kDefaultRodPaneItemTurn);
+    const uint8_t light = static_cast<uint8_t>(
+        std::clamp(CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneLight"), kDefaultRodPaneLight), 0.0f, 255.0f));
+    Lights1* lights = static_cast<Lights1*>(Graph_Alloc(play->state.gfxCtx, sizeof(Lights1)));
+    *lights = gdSPDefLights1(kRodPaneAmbient, kRodPaneAmbient, kRodPaneAmbient, light, light, light, kRodPaneLightDir[0],
+                             kRodPaneLightDir[1], kRodPaneLightDir[2]);
+
+    // RF3's camera as a projection onto the pane's box (pane RF3 pixels x0..x1, y0..y1): clip w = z, row vectors
+    const float pw = paneRf3[2] - paneRf3[0];
+    const float ph = paneRf3[3] - paneRf3[1];
+    MtxF proj = {};
+    proj.mf[0][0] = 2.0f * kPaneCamF * kPaneCamAspect / pw;
+    proj.mf[2][0] = 2.0f * (kPaneCamCentre[0] - paneRf3[0]) / pw - 1.0f;
+    proj.mf[1][1] = -2.0f * kPaneCamF / ph;
+    proj.mf[2][1] = 1.0f - 2.0f * (kPaneCamCentre[1] - paneRf3[1]) / ph;
+    const float zn = kPaneNear * kPaneUnitsPerM; // 39c-2: the pane's units are mm
+    const float zf = kPaneFar * kPaneUnitsPerM;
+    proj.mf[2][2] = (zf + zn) / (zf - zn);
+    proj.mf[3][2] = -2.0f * zf * zn / (zf - zn);
+    proj.mf[2][3] = 1.0f;
+    Mtx* projMtx = Matrix_MtxFToNewMtx(&proj, play->state.gfxCtx);
+
+    static const uint8_t kClear[3] = { 0, 0, 0 }; // under the background
+    static u16 sColorBuf[kPaneMaxW * kPaneMaxH];
+    static u16 sDepthBuf[kPaneMaxW * kPaneMaxH];
+    static Vp viewport;
+    Gfx* opaRef = BeginOffscreen(play, fb, width, height, kClear, sColorBuf, sDepthBuf, &viewport);
+    // kept for the log, so outside OPEN_DISPS's block
+    const float tie[3] = { rec.item[0], rec.item[1], kPaneItemZ };
+    float tip[3] = { tie[0], tie[1], tie[2] };
+    float floatAt[3] = { tie[0], tie[1], tie[2] };
+    int32_t rodDrawn = 0;
+    int32_t rodPosed = 0;
+    OPEN_DISPS(play->state.gfxCtx);
+    if (background != nullptr) {
+        // 39a-2: the pane's own picture (SoH's framebuffer clear is opaque)
+        gSPDisplayList(POLY_OPA_DISP++, const_cast<Gfx*>(static_cast<const Gfx*>(background)));
+        gDPPipeSync(POLY_OPA_DISP++);
+        gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    }
+    gSPMatrix(POLY_OPA_DISP++, projMtx, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
+    gSPSetLights1(POLY_OPA_DISP++, (*lights));
+
+    // the rod node, bent by motion 30; where its tip lands starts the line
+    Matrix_Push();
+    Matrix_Scale(kPaneUnitsPerM, kPaneUnitsPerM, kPaneUnitsPerM, MTXMODE_NEW); // metres -> the pane's mm
+    rodDrawn = RF3RodModel_DrawMenu(play, rod, rec.rodPos, rec.rodRot, rec.rodScale, tip, &rodPosed);
+    Matrix_Pop();
+    if (rodDrawn) {
+        for (float& c : tip) {
+            c /= kPaneUnitsPerM; // back to metres
+        }
+    }
+
+    // the item node: position, the extra node's turn about y, scale; the user's fine-tuning about its origin
+    if (item != nullptr) {
+        Matrix_Push();
+        Matrix_Scale(kPaneUnitsPerM, kPaneUnitsPerM, kPaneUnitsPerM, MTXMODE_NEW);
+        Matrix_Translate(tie[0], tie[1], tie[2], MTXMODE_APPLY);
+        if (!baitSet) {
+            // RF3's frame is y-down: a turn about y and a tilt about x keep 39a-4's senses (+ = counterclockwise seen
+            // from above, + = top toward the viewer)
+            Matrix_RotateY(-turnDeg * static_cast<f32>(M_PI) / 180.0f, MTXMODE_APPLY);
+            Matrix_RotateX(tiltDeg * static_cast<f32>(M_PI) / 180.0f, MTXMODE_APPLY);
+        }
+        Matrix_RotateY(rec.itemTurn, MTXMODE_APPLY);
+        Matrix_Scale(rec.itemScale, rec.itemScale, rec.itemScale, MTXMODE_APPLY);
+        DrawModelRf3(play, item);
+        Matrix_Pop();
+    }
+
+    // the float node on line point 10 - depth
+    if (flt != nullptr) {
+        const float* p = rec.line[4 - std::clamp(depth, 0, 4)]; // line[i] = point 6 + i
+        floatAt[0] = p[0];
+        floatAt[1] = p[1];
+        floatAt[2] = kPaneItemZ;
+        Matrix_Push();
+        Matrix_Scale(kPaneUnitsPerM, kPaneUnitsPerM, kPaneUnitsPerM, MTXMODE_NEW);
+        Matrix_Translate(floatAt[0], floatAt[1], floatAt[2], MTXMODE_APPLY);
+        Matrix_RotateZ(rec.floatTurn, MTXMODE_APPLY);
+        Matrix_Scale(rec.floatScale[0], rec.floatScale[1], rec.floatScale[2], MTXMODE_APPLY);
+        DrawModelRf3(play, flt);
+        Matrix_Pop();
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    if (rodDrawn) {
+        if (flt != nullptr) {
+            DrawPaneLine(play, tip, floatAt); // through the float's eye
+            DrawPaneLine(play, floatAt, tie);
+        } else {
+            DrawPaneLine(play, tip, tie);
+        }
+    }
+    EndOffscreen(play, opaRef);
+
+    float tipPx[2] = { 0.0f, 0.0f };
+    float tiePx[2];
+    float floatPx[2];
+    if (tip[2] > 1e-3f) {
+        PanePixel(tip, tipPx);
+    }
+    PanePixel(tie, tiePx);
+    PanePixel(floatAt, floatPx);
+    std::snprintf(stateOut, stateSize,
+                  "rod-pane box=%d rod=%d rod_drawn=%d rod_posed=%d item=%s/%d item_drawn=%d item_scale=%.0f float=%d "
+                  "float_drawn=%d depth=%d tip_px=(%.0f,%.0f) tie_px=(%.0f,%.0f) float_px=(%.0f,%.0f) tilt=%.0f "
+                  "turn=%.0f light=%d bg=%d fb=%d %dx%d",
+                  box, rod, rodDrawn, rodPosed, kind >= 0 ? kKindInfo[kind].name : "none", itemIndex, item ? 1 : 0,
+                  rec.itemScale, baitSet ? floatIdx : -1, flt ? 1 : 0, baitSet ? depth : -1, tipPx[0], tipPx[1],
+                  tiePx[0], tiePx[1], floatPx[0], floatPx[1], tiltDeg, turnDeg, light, background != nullptr ? 1 : 0,
+                  fb, width, height);
+    return rodDrawn || item != nullptr ? 1 : 0;
 }
 
 extern "C" int32_t RF3LureModel_LineTie(float* out) {

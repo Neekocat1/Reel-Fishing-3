@@ -88,6 +88,90 @@ void DrawRecordChoices(rf3::FishRegion& r) {
     }
 }
 
+// Step 36c (user, 2026-10-14): the age a region is for and the game flags its fish need (explicit, the user's choice
+// over an automatic water check). Presets for the water that changes in the overworld (DESIGN step 36 survey).
+struct ConditionPreset {
+    const char* label;
+    rf3::RegionCondition cond;
+};
+const ConditionPreset kConditionPresets[] = {
+    { "Lake Hylia raised (adult)", { "event", EVENTCHKINF_RAISED_LAKE_HYLIA_WATER, true, rf3::RegionAge::Adult } },
+    { "Kakariko well not drained", { "event", EVENTCHKINF_DRAINED_WELL_IN_KAKARIKO, false, rf3::RegionAge::Both } },
+    { "Rando water control: lake not lowered (switch 0x3E)", { "switch", 0x3E, false, rf3::RegionAge::Both } },
+};
+const char* kAgeLabels[] = { "both", "child", "adult" };
+
+bool AgeCombo(const char* label, rf3::RegionAge* age) {
+    int v = static_cast<int>(*age);
+    if (ImGui::Combo(label, &v, kAgeLabels, IM_ARRAYSIZE(kAgeLabels))) {
+        *age = static_cast<rf3::RegionAge>(v);
+        return true;
+    }
+    return false;
+}
+
+void DrawSpawnConditions(rf3::FishRegion& r) {
+    if (AgeCombo("Link's age", &r.age)) {
+        rf3::RegionsDirty() = true;
+    }
+    char head[64];
+    std::snprintf(head, sizeof(head), "Spawn conditions (%d)###conditions", static_cast<int>(r.conditions.size()));
+    if (!ImGui::TreeNode(head)) {
+        return;
+    }
+    ImGui::TextWrapped("Every condition at Link's age must hold when the scene's fish spawn (on entry, or Respawn). "
+                       "A condition's age limits when it counts.");
+    int remove = -1;
+    for (size_t i = 0; i < r.conditions.size(); i++) {
+        rf3::RegionCondition& c = r.conditions[i];
+        ImGui::PushID(static_cast<int>(i));
+        int kind = c.kind == "switch" ? 1 : 0;
+        const char* kinds[] = { "event", "switch" };
+        ImGui::SetNextItemWidth(90);
+        if (ImGui::Combo("##kind", &kind, kinds, 2)) {
+            c.kind = kinds[kind];
+            rf3::RegionsDirty() = true;
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110);
+        if (ImGui::InputInt("##flag", &c.flag, 1, 16, ImGuiInputTextFlags_CharsHexadecimal)) {
+            c.flag = std::max(0, c.flag);
+            rf3::RegionsDirty() = true;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("0x%X", c.flag);
+        ImGui::SameLine();
+        if (ImGui::Checkbox("set", &c.set)) {
+            rf3::RegionsDirty() = true;
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80);
+        if (AgeCombo("##age", &c.age)) {
+            rf3::RegionsDirty() = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Remove")) {
+            remove = static_cast<int>(i);
+        }
+        ImGui::PopID();
+    }
+    if (remove >= 0) {
+        r.conditions.erase(r.conditions.begin() + remove);
+        rf3::RegionsDirty() = true;
+    }
+    for (const ConditionPreset& p : kConditionPresets) {
+        if (ImGui::SmallButton((std::string("+ ") + p.label).c_str())) {
+            r.conditions.push_back(p.cond);
+            rf3::RegionsDirty() = true;
+        }
+    }
+    if (ImGui::SmallButton("+ Custom flag")) {
+        r.conditions.push_back(rf3::RegionCondition{});
+        rf3::RegionsDirty() = true;
+    }
+    ImGui::TreePop();
+}
+
 void DrawRegion(PlayState* play, rf3::FishRegion& r, int index, const Vec3f& link) {
     char header[160];
     std::snprintf(header, sizeof(header), "#%d %s  (%.0f x %.0f, %d fish, %d records)%s###region%d", index,
@@ -226,6 +310,8 @@ void DrawRegion(PlayState* play, rf3::FishRegion& r, int index, const Vec3f& lin
     }
     ImGui::SameLine();
     ImGui::TextDisabled("(%d in scene)", static_cast<int>(areas.size()));
+
+    DrawSpawnConditions(r); // step 36c
 
     if (ImGui::TreeNode("Species and size classes (s juvenile, n normal, b big)")) {
         DrawRecordChoices(r);

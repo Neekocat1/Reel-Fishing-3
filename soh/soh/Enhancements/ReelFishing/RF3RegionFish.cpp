@@ -25,6 +25,7 @@ extern "C" {
 #include "z64.h"
 #include "functions.h"
 #include "macros.h"
+#include "variables.h" // step 36c: gSaveContext (LINK_IS_ADULT)
 extern PlayState* gPlayState;
 s32 Fishing_RF3KillRegionFish(PlayState* play); // z_fishing.c
 }
@@ -110,6 +111,33 @@ bool FindSpot(PlayState* play, const rf3::FishRegion& r, Vec3f* pos) {
     return false;
 }
 
+// Step 36c: is the region for Link's age, and do its flag conditions (at that age) hold? `why` names the first that
+// fails.
+bool RegionActive(PlayState* play, const rf3::FishRegion& r, std::string* why) {
+    const bool adult = LINK_IS_ADULT;
+    auto ageMatches = [adult](rf3::RegionAge age) {
+        return age == rf3::RegionAge::Both || (age == rf3::RegionAge::Adult) == adult;
+    };
+    if (!ageMatches(r.age)) {
+        *why = std::string("age=") + rf3::RegionAgeName(r.age) + " link=" + (adult ? "adult" : "child");
+        return false;
+    }
+    for (const rf3::RegionCondition& c : r.conditions) {
+        if (!ageMatches(c.age)) {
+            continue; // counts only at its age
+        }
+        const bool isSet = c.kind == "switch" ? Flags_GetSwitch(play, c.flag) != 0 : Flags_GetEventChkInf(c.flag) != 0;
+        if (isSet != c.set) {
+            char buf[96];
+            std::snprintf(buf, sizeof(buf), "%s 0x%X is %s (needs %s)", c.kind.c_str(), c.flag, isSet ? "set" : "unset",
+                          c.set ? "set" : "unset");
+            *why = buf;
+            return false;
+        }
+    }
+    return true;
+}
+
 int SpawnForScene(PlayState* play) {
     for (Slot& s : sSlots) {
         s = {};
@@ -128,6 +156,11 @@ int SpawnForScene(PlayState* play) {
     for (size_t ri = 0; ri < regions.size(); ri++) {
         const rf3::FishRegion& r = regions[ri];
         if ((r.scene != play->sceneNum) || r.records.empty()) {
+            continue;
+        }
+        if (std::string why; !RegionActive(play, r, &why)) { // step 36c
+            Log("scene " + std::to_string(play->sceneNum) + " region " + std::to_string(ri) + " (" + r.name +
+                "): no fish, " + why);
             continue;
         }
         for (int k = 0; k < r.fishCount; k++) {

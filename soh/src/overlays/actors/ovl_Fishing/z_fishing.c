@@ -2024,8 +2024,9 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
         // Reel Fishing III mod (steps 25c-2, 25d-2): RF3's own model of the chosen lure, fly or bait.
         // Step 27b/27c: the cast state picks RF3's lure motion; hooked, the region fish's slot lets the lure hang
         // from its mouth.
-        // Step 32a: an empty line draws no RF3 lure (and, below, no OoT lure or hooks).
-        sRF3LureModelShown = !sRF3NoLure && RF3LureModel_Draw(
+        // Step 32a: an empty line draws no RF3 lure (and, below, no OoT lure or hooks). Step 33b: an empty bait set's
+        // RF3 draw is its bare hook; an empty lure/fly box draws nothing.
+        sRF3LureModelShown = RF3LureModel_Draw(
             play, &sLurePos.x, sLureRot.y + sLure1Rotate, sLureRot.x, sLurePosZOffset, sRodCastState,
             (((sRodCastState == 4) || (sRodCastState == 5)) && (sFishingHookedFish != NULL) &&
              RF3_IS_REGION_FISH(sFishingHookedFish))
@@ -4664,6 +4665,8 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
             if (rf3Fight) {
                 if (!sLineHooked && !RF3Fight_IsActive()) {
                     RF3Fight_StartStrike(Fishing_RF3FishIndex(this), this->fishLength); // the bite is the strike
+                    // Step 33a: a bait set's bait goes with the bite (after StartStrike read the fight's tackle).
+                    RF3Stock_UseBait("strike");
                     Fishing_RF3ResetVisuals(this);
                 }
                 rf3Outcome = Fishing_RF3Fight(this, play, input, &rf3Hooked);

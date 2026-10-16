@@ -67,6 +67,14 @@ bool IsRegionRecord(int record) {
            ((r->sizeClass == 's') || (r->sizeClass == 'n') || (r->sizeClass == 'b'));
 }
 
+const char* RegionAgeName(RegionAge age) {
+    return age == RegionAge::Child ? "child" : (age == RegionAge::Adult ? "adult" : "both");
+}
+
+RegionAge RegionAgeFromName(const std::string& name) {
+    return name == "child" ? RegionAge::Child : (name == "adult" ? RegionAge::Adult : RegionAge::Both);
+}
+
 bool LoadFishRegions(std::string* error) {
     std::vector<FishRegion> loaded;
     std::ifstream in(FishRegionsPath());
@@ -98,6 +106,15 @@ bool LoadFishRegions(std::string* error) {
             }
             r.currentReachM = std::clamp(j.value("currentReach", 5.0f), 0.0f, 50.0f); // step 20c-4
             r.randoArea = j.value("randoArea", std::string()); // step 24a; absent = any area of the scene
+            r.age = RegionAgeFromName(j.value("age", std::string("both"))); // step 36c
+            for (const nlohmann::json& c : j.value("conditions", nlohmann::json::array())) {
+                RegionCondition cond;
+                cond.kind = c.value("kind", std::string("event")) == "switch" ? "switch" : "event";
+                cond.flag = std::max(0, c.value("flag", 0));
+                cond.set = c.value("set", true);
+                cond.age = RegionAgeFromName(c.value("age", std::string("both")));
+                r.conditions.push_back(cond);
+            }
             for (const nlohmann::json& rec : j.value("records", nlohmann::json::array())) {
                 int index = rec.is_object() ? rec.at("record").get<int>() : rec.get<int>();
                 if (IsRegionRecord(index) && (std::find(r.records.begin(), r.records.end(), index) == r.records.end())) {
@@ -138,6 +155,12 @@ bool SaveFishRegions(std::string* error) {
         j["currentReach"] = r.currentReachM; // step 20c-4
         if (!r.randoArea.empty()) {
             j["randoArea"] = r.randoArea; // step 24a
+        }
+        j["age"] = RegionAgeName(r.age); // step 36c
+        j["conditions"] = nlohmann::json::array();
+        for (const RegionCondition& c : r.conditions) {
+            j["conditions"].push_back(
+                { { "kind", c.kind }, { "flag", c.flag }, { "set", c.set }, { "age", RegionAgeName(c.age) } });
         }
         j["records"] = nlohmann::json::array();
         for (int record : r.records) {

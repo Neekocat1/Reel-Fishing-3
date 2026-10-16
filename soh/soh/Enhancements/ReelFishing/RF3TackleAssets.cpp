@@ -99,6 +99,8 @@ std::vector<Item> ReadItems(const json& arr) {
             item.hasMove = true;
         }
         item.sunk = j.value("sunk", -1); // step 20c-3b, flies
+        item.type = j.value("type", -1);  // step 35a
+        item.desc = j.value("desc", std::string());
         out.push_back(std::move(item));
     }
     return out;
@@ -134,14 +136,24 @@ void ReadTackle(const json& t) {
                 bait.index = bt.at("index").get<int32_t>();
                 bait.name = bt.at("name").get<std::string>();
                 bait.hook = bt.at("hook").get<std::string>();
+                bait.hookIndex = bt.value("hook_index", -1); // step 33b
+                bait.desc = bt.value("desc", std::string()); // step 35a
                 bait.sizes = ReadItems(bt.at("sizes"));
                 box.baits.push_back(std::move(bait));
             }
         }
         box.hookDefault = b.value("hook_default", std::string());
+        box.hookDefaultIndex = b.value("hook_default_index", -1); // step 33b
         sAssets.boxes.push_back(std::move(box));
     }
     sAssets.fishRodMask = ReadInts(t, "fish_rod_mask");
+    if (t.contains("type_names") && t.at("type_names").is_object()) { // step 35a
+        for (auto& [kind, names] : t.at("type_names").items()) {
+            for (const json& n : names) {
+                sAssets.typeNames[kind].push_back(n.get<std::string>());
+            }
+        }
+    }
     if (t.contains("depth_names")) {
         for (const json& d : t.at("depth_names")) {
             sAssets.depthNames.push_back(d.get<std::string>());

@@ -19,6 +19,20 @@ struct RandoArea {
 std::vector<RandoArea> RandoAreasForScene(int scene);
 int RandoAreaFromName(const std::string& name); // RR_* value, -1 if empty or unknown
 
+// Step 36c (user, 2026-10-14): when a region's fish are there. Age: Link's age the region is for. A condition is a
+// game flag that must be set (or unset), counted only at its age: e.g. Lake Hylia's water is low as an adult until
+// EVENTCHKINF_RAISED_LAKE_HYLIA_WATER is set. kind "event" = eventChkInf, "switch" = the scene's switch flag.
+enum class RegionAge { Both, Child, Adult };
+const char* RegionAgeName(RegionAge age); // "both", "child", "adult"
+RegionAge RegionAgeFromName(const std::string& name);
+
+struct RegionCondition {
+    std::string kind = "event";
+    int flag = 0;
+    bool set = true;
+    RegionAge age = RegionAge::Both;
+};
+
 // A box on the water. minX..maxX / minZ..maxZ are the box in its own frame, turned by `angle` (degrees,
 // seen from above) about its centre (step 16i). With angle 0 it is a plain world box.
 //   world     = centre + R(angle)  * (box point - centre)
@@ -45,6 +59,9 @@ struct FishRegion {
     // Step 24a: the randomizer area (logic region) the water is in, by its enum name ("RR_ZORAS_RIVER"); empty =
     // any area of the scene. Randomizer logic (step 24c) requires reaching it to catch this region's fish.
     std::string randoArea;
+    // Step 36c: the age it is for, and the flags that must hold (older files: both, none).
+    RegionAge age = RegionAge::Both;
+    std::vector<RegionCondition> conditions;
 
     float CentreX() const { return (minX + maxX) * 0.5f; }
     float CentreZ() const { return (minZ + maxZ) * 0.5f; }

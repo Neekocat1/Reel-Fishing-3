@@ -101,6 +101,7 @@ bool ApproachFish::TryNotice(const NoticeInput& in) {
 }
 
 ApproachEvent ApproachFish::UpdateChase(const ChaseInput& in, uint32_t randomRoll) {
+    mTookBait = false;
     if (mMode == ApproachMode::Normal) {
         return ApproachEvent::None;
     }
@@ -146,6 +147,7 @@ ApproachEvent ApproachFish::UpdateChase(const ChaseInput& in, uint32_t randomRol
         if (roll < c / 4) {
             mMode = ApproachMode::Normal;
             mWary = 30.0f;
+            mTookBait = true; // step 33a: RF3 takes the bait off the hook here (0x001B38F0)
             return ApproachEvent::Fail;
         }
     } else if (roll < 78) {

@@ -49,6 +49,12 @@ struct Entry {
 };
 Entry sStock[RF3_STOCK_KINDS][kMaxSize];
 
+// Step 32b (user, 2026-10-14): one copy of each lure and fly, owned or lost (rods and floats are already 1; bait
+// keeps RF3's 9).
+bool SingleCopy(int32_t kind) {
+    return (kind == RF3_STOCK_LURE) || (kind == RF3_STOCK_FLY);
+}
+
 // Step 21b: fish caught (counted when the catch is submitted) since the rod was bought, and what the
 // latest catch unlocked (-1 = nothing), for the catch message.
 uint32_t sCatchCount = 0;
@@ -202,7 +208,8 @@ void RestoreForScene(int16_t sceneNum) {
             Entry& e = sStock[k][i];
             if (e.lost > 0) {
                 int32_t n = e.count + e.lost;
-                e.count = static_cast<uint8_t>(n > kMaxCount ? kMaxCount : n);
+                const int32_t cap = SingleCopy(k) ? 1 : kMaxCount; // step 32b
+                e.count = static_cast<uint8_t>(n > cap ? cap : n);
                 restored += e.lost;
                 e.lost = 0;
             }
@@ -216,6 +223,9 @@ void RestoreForScene(int16_t sceneNum) {
         char why[64];
         std::snprintf(why, sizeof(why), "scene=%d restored=%d baitsRefilled=%d", sceneNum, restored, refilled);
         Log("stock-restore", -1, -1, why);
+    }
+    RF3Tackle_SceneRestore(); // step 33a: a set whose bait was taken gets the same bait back on
+    if ((restored > 0) || (refilled > 0)) {
         RF3Tackle_StockChanged("stock-restore"); // e.g. a box whose only lure was lost gets it back
     }
 }
@@ -252,6 +262,7 @@ void SaveSection(const SaveContext& saveContext, int sectionID, bool fullSave) {
 
 void LoadSection() {
     bool fixed = false;
+    int32_t singleFixed[RF3_STOCK_KINDS] = {}; // step 32b
     for (int32_t k = 0; k < RF3_STOCK_KINDS; k++) {
         SaveManager::Instance->LoadArray(kSaveName[k], kSize[k], [k](size_t i) {
             SaveManager::Instance->LoadStruct("", [&]() {
@@ -269,7 +280,19 @@ void LoadSection() {
                 e.lost = (e.lost > kMaxCount) ? kMaxCount : e.lost;
                 fixed = true;
             }
+            // Step 32b: a save from before keeps one copy: owned if any was owned, else lost.
+            if (SingleCopy(k) && (e.count + e.lost > 1)) {
+                e.lost = (e.count > 0) ? 0 : 1;
+                e.count = (e.count > 0) ? 1 : 0;
+                singleFixed[k]++;
+            }
         }
+    }
+    if ((singleFixed[RF3_STOCK_LURE] > 0) || (singleFixed[RF3_STOCK_FLY] > 0)) {
+        char why[80];
+        std::snprintf(why, sizeof(why), "single-copy-fixed lures=%d flies=%d", singleFixed[RF3_STOCK_LURE],
+                      singleFixed[RF3_STOCK_FLY]);
+        Log("stock-load", -1, -1, why);
     }
     SaveManager::Instance->LoadData("catches", sCatchCount, 0u); // step 21b; absent before it
     SaveManager::Instance->LoadStruct("rodProgress", [&]() { // step 21c; absent before it: all 0
@@ -344,6 +367,20 @@ extern "C" int32_t RF3Stock_Give(int32_t kind, int32_t index, const char* why) {
     }
     Entry& e = sStock[kind][index];
     e.collected = 1;
+    if (SingleCopy(kind)) {
+        // Step 32b: one copy. Owned already: nothing changes. Lost on a line break: it comes back now.
+        const char* what = "stock-give";
+        if (e.count > 0) {
+            what = "stock-give-dupe";
+        } else if (e.lost > 0) {
+            e.lost = 0;
+            what = "stock-give-back";
+        }
+        e.count = 1;
+        Log(what, kind, index, why);
+        RF3Tackle_StockChanged(what); // step 32a: an emptied box takes a returned lure back
+        return 1;
+    }
     if ((kind == RF3_STOCK_ROD) || (kind == RF3_STOCK_FLOAT)) {
         e.count = 1;
     } else if (kind == RF3_STOCK_BAIT) {
@@ -572,6 +609,30 @@ extern "C" int32_t RF3Stock_LoseCurrent(void) {
     sLastLostIndex = index;
     Log("stock-lost", kind, index, "line-break");
     RF3Tackle_StockChanged("stock-lost"); // none left: the box moves to another owned item, or unset
+    return 1;
+}
+
+// Step 33a (RF3-MECHANICS 5.4): a bite or a give-up at the bait takes the bait off the hook: 1 of its count. The
+// set's bait becomes "---" until the menu picks one or the scene changes (RF3Tackle_BaitTaken).
+extern "C" int32_t RF3Stock_UseBait(const char* why) {
+    if (!RF3_IsEnabled()) {
+        return 0;
+    }
+    RF3TackleChoice c;
+    RF3Tackle_Get(&c);
+    const rf3tackle::Assets& a = rf3tackle::Get();
+    if (!a.loaded || (c.box < 0) || (c.box >= static_cast<int32_t>(a.boxes.size())) ||
+        (a.boxes[c.box].kind != "bait")) {
+        return 0; // not a bait set
+    }
+    if (!Valid(RF3_STOCK_BAIT, c.bait) || (sStock[RF3_STOCK_BAIT][c.bait].count == 0)) {
+        Log("stock-bait-none", RF3_STOCK_BAIT, Valid(RF3_STOCK_BAIT, c.bait) ? c.bait : -1, why);
+        return 0;
+    }
+    sStock[RF3_STOCK_BAIT][c.bait].count--;
+    Log("stock-bait-used", RF3_STOCK_BAIT, c.bait, why);
+    RF3Tackle_BaitTaken(why);
+    RF3Tackle_StockChanged("stock-bait-used");
     return 1;
 }
 

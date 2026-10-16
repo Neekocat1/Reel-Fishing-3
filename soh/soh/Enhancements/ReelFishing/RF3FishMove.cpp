@@ -98,6 +98,7 @@ struct MoveState {
     int32_t motionCode = -1; // step 30b-1: the motion code asked of RF3FishModel, -1 = its own choice
     float prevDist = -1.0f;  // step 30b-1c: the fight's distance last frame (FOLLOW drags by its change)
     int32_t awayAim = 0;       // step 30c-1: AWAY's aim mode (RF3 fish +0x210; zeroed on every state entry)
+    float awayPulled = 0.0f;   // step 36b: units the line pulled the fish in during this AWAY (pumping)
     float spotTurnLeft = 0.0f; // step 30b-2: seconds left of FOLLOW's turn on the spot
     float spotTurnRate = 0.0f; // its heading change, rad per tick (OoT sense, + = left)
 };
@@ -309,6 +310,13 @@ extern "C" int32_t RF3FishMove_Step(const RF3FishMoveInput* inp, RF3FishMoveOutp
     s.sinceSideLog += kTick * std::max(1, in.substeps);
 
     if (in.mode != s.mode) {
+        if (s.mode == 10) { // step 36b: how far pumping brought the fish in during the AWAY that just ended
+            char line[120];
+            std::snprintf(line, sizeof(line), "slot=%d rf3-away-pulled units=%.0f next_mode=%d", in.slot, s.awayPulled,
+                          in.mode);
+            rf3model::Log(line);
+        }
+        s.awayPulled = 0.0f;
         s.prevMode = s.mode;
         s.mode = in.mode;
         s.motionCode = -1;
@@ -595,6 +603,20 @@ extern "C" int32_t RF3FishMove_Step(const RF3FishMoveInput* inp, RF3FishMoveOutp
         const float reelIn = (s.prevDist > 0.0f) ? std::max(0.0f, s.prevDist - in.distUnits) : 0.0f;
         const float catchUp = std::clamp(gap * kCatchUpShare, 0.0f, kCatchUpMax);
         speedFrame = std::clamp(std::min(gap, reelIn + catchUp), 0.0f, kMaxDragUnits) * toward;
+    } else if (in.mode == 10) {
+        // Step 36b (user: "in RF3, you can bring in the fish during away if you are holding down on the stick and
+        // reeling"): pumping (reel + stick back) gains line in AWAY (RF3-MECHANICS 1.5: -0.5); the line drags the fish
+        // toward the angler by what it gained this frame, on top of its own run. Was: AWAY never followed the line.
+        const float reelIn = (s.prevDist > 0.0f) ? std::max(0.0f, s.prevDist - in.distUnits) : 0.0f;
+        float ax = in.anglerPos[0] - in.fishPos[0];
+        float az = in.anglerPos[2] - in.fishPos[2];
+        float dist = std::sqrt(ax * ax + az * az);
+        if (reelIn > 0.0f && dist > 1.0f) {
+            const float d = std::min(reelIn, kMaxDragUnits);
+            out->drag[0] = ax / dist * d;
+            out->drag[2] = az / dist * d;
+            s.awayPulled += d;
+        }
     }
     s.prevDist = in.distUnits;
     float cp = std::cos(s.pitch);

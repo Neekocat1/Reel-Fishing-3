@@ -192,6 +192,8 @@ class ApproachFish {
     float GetWaitLeft() const { return mWaitLeft; }
     int GetWaits() const { return mWaits; } // step 20b-5: WAITs in this chase (2.6, 2.9)
     const FishParams& GetFish() const { return *mFish; } // step 14b: the chaser's species values
+    // Step 33a: the last UpdateChase's Fail was the bait give-up roll (RF3-MECHANICS 5.4: it takes the bait).
+    bool TookBait() const { return mTookBait; }
 
   private:
     const FishParams* mFish = &kBassNormal;
@@ -206,6 +208,7 @@ class ApproachFish {
     RodKind mKind = RodKind::Lure;
     float mLostInterest = 0.0f;       // s without interest in this chase (bait patience)
     int mWaits = 0;
+    bool mTookBait = false;           // step 33a
 };
 
 // Fly and bait rods: a chase fails after this long without interest (2.5, 2.9; 0x001A08D0).

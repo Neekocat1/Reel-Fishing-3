@@ -1,7 +1,9 @@
 {
   "regions": [
     {
+      "age": "child",
       "angle": -16.60000228881836,
+      "conditions": [],
       "currentReach": 5.0,
       "currentSpeed": 0.20000000298023224,
       "currentYaw": 58.0,
@@ -22,7 +24,16 @@
       "surfaceY": -1313.0
     },
     {
+      "age": "both",
       "angle": -20.0,
+      "conditions": [
+        {
+          "age": "adult",
+          "flag": 105,
+          "kind": "event",
+          "set": true
+        }
+      ],
       "currentReach": 5.0,
       "currentSpeed": 0.20000000298023224,
       "currentYaw": -153.0,
@@ -171,7 +182,9 @@
       "surfaceY": -1313.0
     },
     {
+      "age": "both",
       "angle": 0.0,
+      "conditions": [],
       "currentReach": 5.0,
       "fishCount": 4,
       "maxX": 794.6702880859375,
@@ -197,7 +210,9 @@
       "surfaceY": 1510.0
     },
     {
+      "age": "child",
       "angle": 30.5,
+      "conditions": [],
       "currentReach": 5.0,
       "fishCount": 6,
       "maxX": 1017.2396850585938,
@@ -207,8 +222,8 @@
       "name": "Scene 87 region 3",
       "records": [
         {
-          "name": "Largemouth Bass n",
-          "record": 15
+          "name": "Florida Bass b",
+          "record": 18
         }
       ],
       "scene": 87,

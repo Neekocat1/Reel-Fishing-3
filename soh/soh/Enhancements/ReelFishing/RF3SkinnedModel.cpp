@@ -65,10 +65,11 @@ void Build(SkinnedModel& m) {
         m.center[i] = j["center"][i].get<float>();
         m.offset[i] = j["offset"][i].get<float>();
     }
-    // "parts": step 26g's part controllers (left out of this list at first, so every fish loaded parts=0)
+    // "parts": step 26g's part controllers (left out of this list at first, so every fish loaded parts=0);
+    // "menu_pose": step 39c, the rod's tackle-screen pose (RF3's motion 30)
     for (const char* key :
          { "spine", "mouth_bone", "locators", "chain", "chain_z", "tip_bone", "tip_local", "motion", "parts",
-           "body_bone" }) {
+           "body_bone", "menu_pose" }) {
         if (j.contains(key)) {
             m.extra[key] = j[key];
         }
