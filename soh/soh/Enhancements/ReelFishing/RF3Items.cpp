@@ -236,7 +236,8 @@ static int32_t GiOffset(const GetItemEntry* e) {
 }
 
 extern "C" void RF3Items_DrawTackleGI(PlayState* play, GetItemEntry* getItemEntry) {
-    // Step 28a: the item's own RF3 model when it has one (OoT's pole lures 91/92 keep the pond lure).
+    // Step 28a: the item's own RF3 model when it has one; step 40b: OoT's pole lures 91/92 get OoT's detailed models
+    // there (the pond body below stays as the fallback).
     int32_t offset = GiOffset(getItemEntry);
     float size = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.GiTackleSize"), kDefaultGiTackleSize);
     if (offset >= 0 && RF3_IsEnabled() &&

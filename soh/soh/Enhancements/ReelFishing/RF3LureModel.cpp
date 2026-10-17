@@ -47,6 +47,7 @@ extern "C" {
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "objects/object_fish/object_fish.h" // step 40b: OoT's pole lures
 // OPEN_DISPS / CLOSE_DISPS (as kaleido.cpp declares them)
 void FrameInterpolation_RecordOpenChild(const void* a, int b);
 void FrameInterpolation_RecordCloseChild(void);
@@ -1221,6 +1222,85 @@ extern "C" void RF3LureModel_DrawFloat(PlayState* play, const float* baitPos, co
     Matrix_Pop();
 }
 
+// Step 40b (DESIGN "Step 40 design"): OoT's own pole lures (the pole box's lures 91 normal, 92 sinking), which have no
+// RF3 model, drawn still with the pond's display lists for the item get and the item menu preview: centred at the
+// current matrix, side-on (their length along the frame's x), the longest side `size` frame units. billboard: the
+// rotation the sinking lure's segments face (the camera's). Sizes from the models' vertex bounds [test].
+constexpr int32_t kOoTLureNormal = 91;
+constexpr int32_t kOoTLureSinking = 92;
+constexpr float kOoTLureScale = kOotLureScale;              // the pond's 0.004 (body and hooks; hooks 0.005 deep)
+constexpr float kOoTLureLength = 12.5f;                     // body 3128 units x 0.004
+constexpr float kOoTLureCentre[3] = { 0.0f, -1.4f, -2.78f }; // body + hanging hooks, pond units, before the side turn
+constexpr float kOoTLureHooks[2][3] = { { 500.0f, 0.0f, -300.0f }, { 2100.0f, 0.0f, -50.0f } }; // body points (pond)
+constexpr int32_t kOoTSinkingSegs = 20;
+constexpr float kOoTSinkingSizes[kOoTSinkingSegs] = { 1.0f, 1.5f,  1.8f, 2.0f, 1.8f, 1.6f, 1.4f, 1.2f, 1.0f, 1.0f,
+                                                      0.9f, 0.85f, 0.8f, 0.7f, 0.8f, 1.0f, 1.2f, 1.1f, 1.0f, 0.8f };
+constexpr float kOoTSinkingStep = 0.85f;  // pond units between segments (Fishing_UpdateSinkingLure)
+constexpr float kOoTSinkingLength = 18.2f; // 19 steps + the end segments (31 units x 0.04 x their size)
+
+static bool DrawOoTLure(PlayState* play, int32_t index, float size, const MtxF* billboard) {
+    if (index != kOoTLureNormal && index != kOoTLureSinking) {
+        return false;
+    }
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Push();
+    if (index == kOoTLureNormal) {
+        const float k = size / kOoTLureLength;
+        Matrix_Scale(k, k, k, MTXMODE_APPLY);
+        Matrix_RotateY(static_cast<f32>(M_PI) / 2.0f, MTXMODE_APPLY); // the body's length (pond z) along the frame's x
+        Matrix_Translate(-kOoTLureCentre[0], -kOoTLureCentre[1], -kOoTLureCentre[2], MTXMODE_APPLY);
+        // the body, as Fishing_DrawLureAndLine places it (its own z offset left out)
+        Matrix_Push();
+        Matrix_Scale(kOoTLureScale, kOoTLureScale, kOoTLureScale, MTXMODE_APPLY);
+        Matrix_RotateZ(static_cast<f32>(M_PI) / 2.0f, MTXMODE_APPLY);
+        Matrix_RotateY(static_cast<f32>(M_PI) / 2.0f, MTXMODE_APPLY);
+        gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gFishingLureFloatDL);
+        Matrix_Pop();
+        // the hooks, as Fishing_DrawLureHook draws them (two crossed copies), hanging straight down [assumed]. A body
+        // point (x, y, z) sits at 0.004 (-y, z, -x) after the body's turns.
+        for (const auto& h : kOoTLureHooks) {
+            Matrix_Push();
+            Matrix_Translate(-h[1] * kOoTLureScale, h[2] * kOoTLureScale, -h[0] * kOoTLureScale, MTXMODE_APPLY);
+            Matrix_RotateX(static_cast<f32>(M_PI) / 2.0f, MTXMODE_APPLY); // the hook's length (-z) downward
+            Matrix_Scale(kOoTLureScale, kOoTLureScale, 0.005f, MTXMODE_APPLY);
+            Matrix_RotateY(static_cast<f32>(M_PI), MTXMODE_APPLY);
+            gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                      G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gFishingLureHookDL);
+            Matrix_RotateZ(static_cast<f32>(M_PI) / 2.0f, MTXMODE_APPLY);
+            gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                      G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gFishingLureHookDL);
+            Matrix_Pop();
+        }
+    } else {
+        // the sinking lure: OoT's segments in a straight line along the frame's x, each facing the camera
+        const float k = size / kOoTSinkingLength;
+        Matrix_Scale(k, k, k, MTXMODE_APPLY);
+        gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gFishingSinkingLureSegmentMaterialDL);
+        for (int32_t i = kOoTSinkingSegs - 1; i >= 0; i--) {
+            Matrix_Push();
+            Matrix_Translate((i - (kOoTSinkingSegs - 1) * 0.5f) * kOoTSinkingStep, 0.0f, 0.0f, MTXMODE_APPLY);
+            const float s = kOoTSinkingSizes[i] * 0.04f;
+            Matrix_Scale(s, s, s, MTXMODE_APPLY);
+            Matrix_ReplaceRotation(const_cast<MtxF*>(billboard)); // keeps the scale
+            gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                      G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gFishingSinkingLureSegmentModelDL);
+            Matrix_Pop();
+        }
+    }
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+    char state[120];
+    std::snprintf(state, sizeof(state), "oot-lure-model index=%d size=%.0f", index, size);
+    NoteState(sLastDrawState, sStatus, state);
+    return true;
+}
+
 extern "C" int32_t RF3LureModel_DrawGI(PlayState* play, int32_t stockKind, int32_t index, float size) {
     int32_t kind = -1;
     switch (stockKind) {
@@ -1237,8 +1317,11 @@ extern "C" int32_t RF3LureModel_DrawGI(PlayState* play, int32_t stockKind, int32
             kind = kFloat;
             break;
     }
+    if (stockKind == RF3_STOCK_LURE && DrawOoTLure(play, index, size, &play->billboardMtxF)) {
+        return 1; // step 40b: OoT's pole lures 91/92, OoT's detailed models
+    }
     if (kind < 0 || index < 0 || index >= kKindInfo[kind].count) {
-        return 0; // OoT's pole lures 91/92, or not tackle
+        return 0; // not tackle
     }
     LureModel* m = Get(kind, index);
     if (m == nullptr || !m->ok) {
@@ -1343,22 +1426,24 @@ extern "C" int32_t RF3LureModel_DrawMenuPreview(PlayState* play, int32_t stockKi
         case RF3_STOCK_BAIT: kind = kBaitMenu; break; // 35c-3: RF3's bait-only model, as RF3's bait menu (user)
         case RF3_STOCK_FLOAT: kind = kFloat; break;
     }
+    // step 40b: OoT's pole lures 91/92 (no RF3 model) are drawn with OoT's own models
+    const bool oot = stockKind == RF3_STOCK_LURE && (index == kOoTLureNormal || index == kOoTLureSinking);
     if (fb < 0 || width <= 0 || height <= 0 || width > kPreviewMaxW || height > kPreviewMaxH || kind < 0 ||
-        index < 0 || index >= kKindInfo[kind].count) {
-        return 0; // OoT's pole lures 91/92 have no RF3 model
-    }
-    LureModel* m = Get(kind, index);
-    if (m == nullptr || !m->ok) {
+        index < 0 || (!oot && index >= kKindInfo[kind].count)) {
         return 0;
     }
-    const float longestM = std::fmax(std::fmax(m->sizeM[0], m->sizeM[1]), m->sizeM[2]);
+    LureModel* m = oot ? nullptr : Get(kind, index);
+    if (!oot && (m == nullptr || !m->ok)) {
+        return 0;
+    }
+    const float longestM = oot ? 1.0f : std::fmax(std::fmax(m->sizeM[0], m->sizeM[1]), m->sizeM[2]);
     if (longestM <= 1e-5f) {
         return 0;
     }
     // The longest side fills kPreviewFill of the view's height at the eye's distance.
     const float viewH = 2.0f * kPreviewEyeDist * std::tan(kPreviewFovy * 0.5f * static_cast<float>(M_PI) / 180.0f);
     const float unitsPerMetre = kPreviewFill * viewH / longestM;
-    const float s = unitsPerMetre / m->posScale;
+    const float s = oot ? 0.0f : unitsPerMetre / m->posScale;
     const float turn = 2.0f * static_cast<float>(M_PI) * std::fmod(frame * kGameFrameSeconds, kPreviewTurnSeconds) /
                        kPreviewTurnSeconds;
 
@@ -1381,8 +1466,14 @@ extern "C" int32_t RF3LureModel_DrawMenuPreview(PlayState* play, int32_t stockKi
     Matrix_Push();
     Matrix_Translate(0.0f, 0.0f, 0.0f, MTXMODE_NEW);
     Matrix_RotateY(turn, MTXMODE_APPLY);
-    Matrix_Translate(-s * m->center[0], s * m->center[1], s * m->center[2], MTXMODE_APPLY);
-    DrawModel(play, m, unitsPerMetre, false);
+    if (oot) {
+        // the preview's camera looks straight down -z: the segments face it with no rotation
+        static MtxF sFacing = { { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } } };
+        DrawOoTLure(play, index, kPreviewFill * viewH, &sFacing);
+    } else {
+        Matrix_Translate(-s * m->center[0], s * m->center[1], s * m->center[2], MTXMODE_APPLY);
+        DrawModel(play, m, unitsPerMetre, false);
+    }
     Matrix_Pop();
 
     CLOSE_DISPS(play->state.gfxCtx);
@@ -1390,7 +1481,7 @@ extern "C" int32_t RF3LureModel_DrawMenuPreview(PlayState* play, int32_t stockKi
 
     char state[160];
     std::snprintf(state, sizeof(state), "menu-preview kind=%s index=%d units_per_m=%.0f longest_m=%.3f fb=%d %dx%d",
-                  kKindInfo[kind].name, index, unitsPerMetre, longestM, fb, width, height);
+                  oot ? "oot-lure" : kKindInfo[kind].name, index, unitsPerMetre, longestM, fb, width, height);
     NoteState(sLastDrawState, sStatus, state);
     return 1;
 }
@@ -1521,6 +1612,128 @@ static void PanePixel(const float* w, float* out) {
     out[1] = kPaneCamCentre[1] + kPaneCamF * w[1] / w[2];
 }
 
+// Step 41 (DESIGN "Step 41 design"): OoT's Fishing Pole (box 10) has no RF3 pane record or rod model; the mod lays
+// OoT's own rod where box 0's RF3 rod lies (its motion-30 butt and tip, computed from the 39c model [test]) and hangs
+// the OoT lure at box 0's tie, nose left, at RF3's lure scale there [assumed].
+constexpr int32_t kPaneOoTBox = 10;
+constexpr float kPaneOoTButt[3] = { 1.6144f, 0.6704f, 2.6535f };
+constexpr float kPaneOoTTip[3] = { 1.1357f, -0.4275f, 2.9729f };
+constexpr float kPaneOoTBow[3] = { 0.922f, -0.383f, 0.065f }; // box 0's bow (sagitta 1.5 cm), unit, across the chord
+constexpr float kPaneOoTTurn = 0.095f;                         // the bend's total turn for that sagitta (8 s / L)
+constexpr int32_t kOoTRodSegs = 22;                            // Fishing_DrawRod's tables
+constexpr float kOoTRodScales[kOoTRodSegs] = { 1.0f,   1.0f,   1.0f,   0.9625f, 0.925f, 0.8875f, 0.85f,  0.8125f,
+                                               0.775f, 0.7375f, 0.7f,  0.6625f, 0.625f, 0.5875f, 0.55f,  0.5125f,
+                                               0.475f, 0.4375f, 0.4f,  0.3625f, 0.325f, 0.2875f };
+constexpr float kOoTRodRatios[kOoTRodSegs] = { 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,    0.06f,   0.12f,   0.18f,
+                                               0.24f, 0.30f, 0.36f, 0.42f, 0.48f,   0.54f,   0.60f,   0.60f,
+                                               0.5142f, 0.4285f, 0.3428f, 0.2571f, 0.1714f, 0.0857f };
+constexpr float kOoTRodLength = 11020.0f; // 21 steps of 500 + one segment of 1000 x 0.52
+constexpr float kPaneOoTLureM = 0.46f;    // OoT's lure ~4.6 cm (12.5 pond units at 270 units/m) x box 0's item scale 10
+constexpr float kPaneOoTSinkingM = 0.67f; // the sinking lure's 18.2 pond units, the same way
+
+// OoT's rod from the pane's butt toward its tip, bowed as box 0's RF3 rod; the current matrix is the pane's metres.
+// Writes the rod tip (current-matrix units) to tipOut.
+static void DrawOoTRodPane(PlayState* play, float* tipOut) {
+    float f[3] = { kPaneOoTTip[0] - kPaneOoTButt[0], kPaneOoTTip[1] - kPaneOoTButt[1], kPaneOoTTip[2] - kPaneOoTButt[2] };
+    const float chord = std::sqrt(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+    for (float& c : f) {
+        c /= chord;
+    }
+    // the start tilted half the turn toward the bow; the segments then turn back toward -bow (see RotateX below)
+    const float h = kPaneOoTTurn * 0.5f;
+    float z[3], y[3], x[3];
+    for (int i = 0; i < 3; i++) {
+        z[i] = f[i] * std::cos(h) + kPaneOoTBow[i] * std::sin(h);
+    }
+    const float zd = z[0] * kPaneOoTBow[0] + z[1] * kPaneOoTBow[1] + z[2] * kPaneOoTBow[2];
+    for (int i = 0; i < 3; i++) {
+        y[i] = kPaneOoTBow[i] - zd * z[i]; // the bow, square to the start
+    }
+    const float yl = std::sqrt(y[0] * y[0] + y[1] * y[1] + y[2] * y[2]);
+    for (float& c : y) {
+        c /= yl;
+    }
+    x[0] = y[1] * z[2] - y[2] * z[1];
+    x[1] = y[2] * z[0] - y[0] * z[2];
+    x[2] = y[0] * z[1] - y[1] * z[0];
+    MtxF basis = {}; // column vectors x, y, z (OoT's MtxF: mf[column][row])
+    for (int i = 0; i < 3; i++) {
+        basis.mf[0][i] = x[i];
+        basis.mf[1][i] = y[i];
+        basis.mf[2][i] = z[i];
+    }
+    basis.mf[3][3] = 1.0f;
+    float ratioSum = 0.0f;
+    for (float r : kOoTRodRatios) {
+        ratioSum += r;
+    }
+    const float u = chord / kOoTRodLength; // metres per OoT rod unit (the bend shortens the chord by < 0.1 %)
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gFishingRodMaterialDL);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 155, 0, 255);
+    Matrix_Push();
+    Matrix_Translate(kPaneOoTButt[0], kPaneOoTButt[1], kPaneOoTButt[2], MTXMODE_APPLY);
+    Matrix_Mult(&basis, MTXMODE_APPLY);
+    Matrix_Scale(u, u, u, MTXMODE_APPLY);
+    for (int32_t i = 0; i < kOoTRodSegs; i++) {
+        // RotateX(+a) turns +z toward -y: toward -bow, so the rod bows toward +bow
+        Matrix_RotateX(kOoTRodRatios[i] * kPaneOoTTurn / ratioSum, MTXMODE_APPLY);
+        Matrix_Push();
+        Matrix_Scale(kOoTRodScales[i], kOoTRodScales[i], 0.52f, MTXMODE_APPLY);
+        gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        const char* tex = (i < 5) ? gFishingRodSegmentBlackTex
+                                  : ((i < 8) || ((i % 2) == 0)) ? gFishingRodSegmentWhiteTex : gFishingRodSegmentStripTex;
+        gDPLoadTextureBlock(POLY_OPA_DISP++, tex, G_IM_FMT_RGBA, G_IM_SIZ_16b, 16, 8, 0, G_TX_NOMIRROR | G_TX_WRAP,
+                            G_TX_NOMIRROR | G_TX_WRAP, 4, 3, G_TX_NOLOD, G_TX_NOLOD);
+        gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gFishingRodSegmentDL);
+        Matrix_Pop();
+        Matrix_Translate(0.0f, 0.0f, 500.0f, MTXMODE_APPLY);
+        if (i == kOoTRodSegs - 1) {
+            Vec3f zero = { 0.0f, 0.0f, 0.0f };
+            Vec3f out;
+            Matrix_MultVec3f(&zero, &out);
+            tipOut[0] = out.x;
+            tipOut[1] = out.y;
+            tipOut[2] = out.z;
+        }
+    }
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// OoT's lure (91/92) with its line tie at `tie` (the pane's metres; the current matrix is the pane's metres), nose
+// left: step 40's model turned from OoT's y-up into RF3's y-down frame.
+static void DrawOoTLurePane(PlayState* play, int32_t index, const float* tie) {
+    // 41-2: RF3's camera looks down +z, so the segments (one-sided squares facing +z) must face -z: a half turn about x
+    // (also y-down for this frame). Identity faced them away and they were culled (user: "the sinking lure doesn't
+    // render in the main preview screen").
+    static MtxF sFacing = { { { 1, 0, 0, 0 }, { 0, -1, 0, 0 }, { 0, 0, -1, 0 }, { 0, 0, 0, 1 } } };
+    const bool sinking = index == kOoTLureSinking;
+    const float size = sinking ? kPaneOoTSinkingM : kPaneOoTLureM;
+    float tieLocal[3];
+    if (sinking) {
+        const float k = size / kOoTSinkingLength; // the head segment (0), the left end of the line of segments
+        tieLocal[0] = -(kOoTSinkingSegs - 1) * 0.5f * kOoTSinkingStep * k;
+        tieLocal[1] = 0.0f;
+    } else {
+        const float k = size / kOoTLureLength; // the body's front tip (point x -850) in DrawOoTLure's frame
+        tieLocal[0] = (3.4f - kOoTLureCentre[2]) * k; // front tip at pond z +3.4, centre z -2.78: +6.18 along x
+        tieLocal[1] = -kOoTLureCentre[1] * k;          // the body's middle height, 1.4 above the centre
+    }
+    tieLocal[2] = 0.0f;
+    Matrix_Push();
+    Matrix_Translate(tie[0], tie[1], tie[2], MTXMODE_APPLY);
+    Matrix_RotateX(static_cast<f32>(M_PI), MTXMODE_APPLY); // OoT y-up -> RF3 y-down
+    if (!sinking) {
+        Matrix_RotateY(static_cast<f32>(M_PI), MTXMODE_APPLY); // the front from +x to -x: nose left
+    }
+    Matrix_Translate(-tieLocal[0], -tieLocal[1], -tieLocal[2], MTXMODE_APPLY);
+    DrawOoTLure(play, index, size, &sFacing);
+    Matrix_Pop();
+}
+
 extern "C" int32_t RF3LureModel_DrawRodPane(PlayState* play, int32_t fb, int32_t width, int32_t height,
                                             const void* background, const float* paneRf3, int32_t rod,
                                             int32_t box, int32_t stockKind, int32_t index, int32_t floatIdx,
@@ -1529,12 +1742,13 @@ extern "C" int32_t RF3LureModel_DrawRodPane(PlayState* play, int32_t fb, int32_t
         std::snprintf(stateOut, stateSize, "rod-pane drawn=0 why=buffer %dx%d", width, height);
         return 0;
     }
-    if (box < 0 || box >= 10) {
-        std::snprintf(stateOut, stateSize, "rod-pane drawn=0 why=box %d (no RF3 record: OoT's pole)", box);
+    const bool ootPole = box == kPaneOoTBox; // step 41: OoT's Fishing Pole, laid out as box 0
+    if (box < 0 || (box >= 10 && !ootPole)) {
+        std::snprintf(stateOut, stateSize, "rod-pane drawn=0 why=box %d (no RF3 record)", box);
         return 0;
     }
     const bool baitSet = stockKind == RF3_STOCK_BAIT;
-    const PaneBox& rec = kPaneBoxes[box];
+    const PaneBox& rec = kPaneBoxes[ootPole ? 0 : box];
     int32_t kind = -1;
     int32_t itemIndex = index;
     switch (stockKind) {
@@ -1545,7 +1759,8 @@ extern "C" int32_t RF3LureModel_DrawRodPane(PlayState* play, int32_t fb, int32_t
             itemIndex = index >= 0 ? index : RF3Tackle_HookIndex();
             break;
     }
-    LureModel* item = PaneModel(kind, itemIndex);
+    const bool ootLure = stockKind == RF3_STOCK_LURE && (index == kOoTLureNormal || index == kOoTLureSinking);
+    LureModel* item = ootLure ? nullptr : PaneModel(kind, itemIndex);
     LureModel* flt = baitSet ? PaneModel(kFloat, floatIdx) : nullptr;
     const float tiltDeg = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneItemTilt"), kDefaultRodPaneItemTilt);
     const float turnDeg = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.RodPaneItemTurn"), kDefaultRodPaneItemTurn);
@@ -1594,7 +1809,12 @@ extern "C" int32_t RF3LureModel_DrawRodPane(PlayState* play, int32_t fb, int32_t
     // the rod node, bent by motion 30; where its tip lands starts the line
     Matrix_Push();
     Matrix_Scale(kPaneUnitsPerM, kPaneUnitsPerM, kPaneUnitsPerM, MTXMODE_NEW); // metres -> the pane's mm
-    rodDrawn = RF3RodModel_DrawMenu(play, rod, rec.rodPos, rec.rodRot, rec.rodScale, tip, &rodPosed);
+    if (ootPole) {
+        DrawOoTRodPane(play, tip); // step 41
+        rodDrawn = 1;
+    } else {
+        rodDrawn = RF3RodModel_DrawMenu(play, rod, rec.rodPos, rec.rodRot, rec.rodScale, tip, &rodPosed);
+    }
     Matrix_Pop();
     if (rodDrawn) {
         for (float& c : tip) {
@@ -1616,6 +1836,13 @@ extern "C" int32_t RF3LureModel_DrawRodPane(PlayState* play, int32_t fb, int32_t
         Matrix_RotateY(rec.itemTurn, MTXMODE_APPLY);
         Matrix_Scale(rec.itemScale, rec.itemScale, rec.itemScale, MTXMODE_APPLY);
         DrawModelRf3(play, item);
+        Matrix_Pop();
+    }
+
+    if (ootLure) {
+        Matrix_Push();
+        Matrix_Scale(kPaneUnitsPerM, kPaneUnitsPerM, kPaneUnitsPerM, MTXMODE_NEW);
+        DrawOoTLurePane(play, index, tie); // step 41
         Matrix_Pop();
     }
 
@@ -1656,12 +1883,12 @@ extern "C" int32_t RF3LureModel_DrawRodPane(PlayState* play, int32_t fb, int32_t
     std::snprintf(stateOut, stateSize,
                   "rod-pane box=%d rod=%d rod_drawn=%d rod_posed=%d item=%s/%d item_drawn=%d item_scale=%.0f float=%d "
                   "float_drawn=%d depth=%d tip_px=(%.0f,%.0f) tie_px=(%.0f,%.0f) float_px=(%.0f,%.0f) tilt=%.0f "
-                  "turn=%.0f light=%d bg=%d fb=%d %dx%d",
+                  "turn=%.0f light=%d bg=%d oot_rod=%d oot_lure=%d fb=%d %dx%d",
                   box, rod, rodDrawn, rodPosed, kind >= 0 ? kKindInfo[kind].name : "none", itemIndex, item ? 1 : 0,
                   rec.itemScale, baitSet ? floatIdx : -1, flt ? 1 : 0, baitSet ? depth : -1, tipPx[0], tipPx[1],
                   tiePx[0], tiePx[1], floatPx[0], floatPx[1], tiltDeg, turnDeg, light, background != nullptr ? 1 : 0,
-                  fb, width, height);
-    return rodDrawn || item != nullptr ? 1 : 0;
+                  ootPole ? 1 : 0, ootLure ? 1 : 0, fb, width, height);
+    return rodDrawn || item != nullptr || ootLure ? 1 : 0;
 }
 
 extern "C" int32_t RF3LureModel_LineTie(float* out) {

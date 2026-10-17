@@ -7128,6 +7128,12 @@ static void Fishing_RF3DrawPortable(Actor* thisx, PlayState* play) {
     sStickAdjXPrev = input->rel.stick_x;
     sStickAdjYPrev = input->rel.stick_y;
 
+    // Step 40a (user: "The sinking lure isn't visible outside the pond"): the pond draws the equipped sinking lure from
+    // Fishing_DrawOwner; away from the pond only this draw runs, so it draws it too.
+    if (sLureEquipped == FS_LURE_SINKING) {
+        Fishing_DrawSinkingLure(play);
+    }
+
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
