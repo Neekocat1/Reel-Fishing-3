@@ -160,6 +160,9 @@ int32_t RF3RegionFish_Get(int32_t slot, RF3RegionFishInfo* out);
 // has no region. OutsideOutline: distance outside the outline (0 inside; holes don't count).
 int32_t RF3RegionShape_Clamp(int32_t slot, float x, float z, float margin, float* outX, float* outZ);
 float RF3RegionShape_OutsideOutline(int32_t slot, float x, float z);
+// Step 47c: the slot's region current (step 20c-3a): the OoT yaw it flows toward (radians) and its speed (m/s); an
+// unset current is the box's long axis at 0.2 m/s, as the fly drift uses. Returns 0 if the slot has no region.
+int32_t RF3RegionFish_Current(int32_t slot, float* yawRad, float* speedMps);
 
 // --- Size display (step 12b) ------------------------------------------------
 

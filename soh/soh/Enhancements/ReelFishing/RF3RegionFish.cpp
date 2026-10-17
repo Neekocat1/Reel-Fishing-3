@@ -49,6 +49,10 @@ constexpr int kWaterWaitFrames = 400; // 20 s of 20 Hz game frames
 struct Slot {
     bool used = false;
     int region = -1; // step 45a: the region index it was spawned for
+    // Step 47c-2: which region that was (the index is found again if the list changed: an edit, a delete)
+    int regionScene = -1;
+    std::string regionName;
+    bool regionGoneLogged = false;
     RF3RegionFishInfo info = {};
 };
 Slot sSlots[kSlots];
@@ -198,6 +202,9 @@ int SpawnRegion(PlayState* play, size_t ri, const rf3::FishRegion& r, bool* full
         Slot& s = sSlots[slot];
         s.used = true;
         s.region = static_cast<int>(ri);
+        s.regionScene = r.scene;
+        s.regionName = r.name;
+        s.regionGoneLogged = false;
         s.info.minX = r.minX;
         s.info.maxX = r.maxX;
         s.info.minZ = r.minZ;
@@ -437,8 +444,43 @@ static const rf3::FishRegion* SlotRegion(int32_t slot) {
         return nullptr;
     }
     const std::vector<rf3::FishRegion>& regions = rf3::FishRegions();
-    const int ri = sSlots[slot].region;
-    return (ri >= 0 && ri < static_cast<int>(regions.size())) ? &regions[ri] : nullptr;
+    Slot& s = sSlots[slot];
+    const int ri = s.region;
+    if ((ri >= 0) && (ri < static_cast<int>(regions.size())) && (regions[ri].scene == s.regionScene) &&
+        (regions[ri].name == s.regionName)) {
+        return &regions[ri];
+    }
+    // Step 47c-2 (2026-10-17 log: six Lake Hylia fish clamped into Kokiri Forest's region 4 from 03:39:23 on, their
+    // index pointing at another region): the region list changed since the spawn; find the region again by scene and
+    // name.
+    for (size_t i = 0; i < regions.size(); i++) {
+        if ((regions[i].scene == s.regionScene) && (regions[i].name == s.regionName)) {
+            char line[200];
+            std::snprintf(line, sizeof(line), "slot-region-moved slot=%d region %d -> %d (%s)", slot, ri, (int)i,
+                          s.regionName.c_str());
+            Log(line);
+            s.region = static_cast<int>(i);
+            return &regions[i];
+        }
+    }
+    if (!s.regionGoneLogged) {
+        char line[200];
+        std::snprintf(line, sizeof(line), "slot-region-gone slot=%d region %d (%s): no shape until the next spawn",
+                      slot, ri, s.regionName.c_str());
+        Log(line);
+        s.regionGoneLogged = true;
+    }
+    return nullptr;
+}
+
+extern "C" int32_t RF3RegionFish_Current(int32_t slot, float* yawRad, float* speedMps) {
+    const rf3::FishRegion* r = SlotRegion(slot);
+    if (r == nullptr) {
+        return 0;
+    }
+    *yawRad = r->CurrentYawDeg() * 3.14159265f / 180.0f;
+    *speedMps = r->currentSet ? r->currentSpeed : 0.2f; // as the fly drift (RF3Regions.cpp)
+    return 1;
 }
 
 extern "C" int32_t RF3RegionShape_Clamp(int32_t slot, float x, float z, float margin, float* outX, float* outZ) {

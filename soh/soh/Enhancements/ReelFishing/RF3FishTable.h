@@ -115,6 +115,78 @@ inline constexpr FishRecord kFishRecords[] = {
 
 inline constexpr int kFishRecordCount = sizeof(kFishRecords) / sizeof(kFishRecords[0]);
 
+// Step 47b: RF3's free-swim values per record (RF3-MECHANICS 6.9), same rows as kFishRecords. The mod's OoT
+// fish copy the record they copy for the fight.
+struct FishSwim {
+    int16_t record;
+    float speedMps;    // species speed: record +0x14 x 0.075
+    float speedUpS;    // speed ramp up / down (fish +0x2AC / +0x2B0), by record +0x13
+    float slowDownS;
+    float homeRadiusM; // record +0x18: free-swim targets stay this close to the spawn point
+    int8_t layerMin;   // record +0x10 / +0x11: depth layers, sixths of the water column
+    int8_t layerMax;
+    int8_t calmness;   // record +0x36 (also FishParams::resistExtra): shorter hovers when high
+    int8_t rank;       // record +0x3B: 4+ = hovers only
+    bool facesCurrent; // record +0x2C bit 0: hovers facing into the current, no glide
+};
+
+inline constexpr FishSwim kFishSwim[] = {
+    { 0, 0.824999988f, 1.0f, 4.0f, 2.0f, 0, 3, 35, 2, true },
+    { 1, 0.899999976f, 1.0f, 4.0f, 3.0f, 0, 3, 40, 2, true },
+    { 2, 0.975000024f, 1.0f, 4.0f, 4.0f, 0, 3, 45, 3, true },
+    { 3, 1.04999995f, 1.0f, 4.0f, 8.0f, 2, 3, 100, 4, true },
+    { 4, 0.824999988f, 1.0f, 4.0f, 1.5f, 0, 3, 45, 2, true },
+    { 5, 0.899999976f, 1.0f, 4.0f, 2.0f, 0, 3, 50, 3, true },
+    { 6, 0.824999988f, 1.0f, 4.0f, 1.0f, 0, 3, 30, 2, true },
+    { 7, 0.899999976f, 1.0f, 4.0f, 1.5f, 0, 3, 45, 2, true },
+    { 8, 0.375f, 2.0f, 2.0f, 1.0f, 2, 3, 20, 2, true },
+    { 9, 0.524999976f, 1.0f, 4.0f, 1.0f, 0, 3, 20, 2, true },
+    { 10, 0.449999988f, 1.0f, 1.0f, 2.0f, 0, 3, 30, 2, false },
+    { 11, 0.524999976f, 1.0f, 1.0f, 3.0f, 0, 3, 40, 3, false },
+    { 12, 0.449999988f, 4.0f, 1.0f, 0.699999988f, 0, 3, 30, 2, false },
+    { 13, 0.224999994f, 4.0f, 1.0f, 0.5f, 0, 3, 35, 2, false },
+    { 14, 0.600000024f, 1.0f, 1.0f, 3.0f, 0, 3, 100, 2, false },
+    { 15, 0.675000012f, 1.0f, 1.0f, 4.0f, 0, 3, 100, 2, false },
+    { 16, 0.75f, 1.0f, 1.0f, 5.0f, 0, 3, 100, 3, false },
+    { 17, 0.675000012f, 1.0f, 1.0f, 5.0f, 0, 3, 70, 2, false },
+    { 18, 0.75f, 1.0f, 1.0f, 5.0f, 0, 3, 75, 3, false },
+    { 19, 0.524999976f, 1.0f, 4.0f, 6.0f, 0, 3, 55, 2, false },
+    { 20, 0.524999976f, 1.0f, 4.0f, 6.0f, 0, 3, 60, 2, false },
+    { 21, 1.04999995f, 1.0f, 4.0f, 2.0f, 0, 3, 35, 2, false },
+    { 22, 1.125f, 1.0f, 4.0f, 3.0f, 0, 3, 40, 2, false },
+    { 23, 1.125f, 1.0f, 4.0f, 4.0f, 0, 3, 35, 3, false },
+    { 24, 0.899999976f, 4.0f, 1.0f, 4.0f, 0, 3, 40, 2, false },
+    { 25, 0.899999976f, 4.0f, 1.0f, 6.0f, 0, 3, 35, 3, false },
+    { 26, 1.125f, 1.0f, 4.0f, 8.0f, 0, 3, 55, 4, true },
+    { 27, 1.125f, 1.0f, 4.0f, 2.0f, 2, 3, 100, 5, true },
+    { 28, 1.125f, 1.0f, 4.0f, 6.0f, 0, 3, 45, 3, true },
+    { 29, 1.125f, 1.0f, 4.0f, 7.0f, 0, 3, 45, 3, true },
+    { 30, 1.125f, 1.0f, 4.0f, 6.0f, 0, 3, 45, 3, true },
+    { 31, 1.125f, 1.0f, 4.0f, 7.0f, 0, 3, 50, 4, true },
+    { 33, 0.899999976f, 1.0f, 4.0f, 4.0f, 0, 3, 45, 2, true },
+    { 34, 1.04999995f, 1.0f, 4.0f, 5.0f, 0, 3, 55, 3, true },
+    { 35, 0.675000012f, 1.0f, 1.0f, 6.0f, 0, 3, 20, 4, true },
+    { 36, 0.675000012f, 1.0f, 1.0f, 6.0f, 0, 3, 35, 5, true },
+    { 37, 1.125f, 1.0f, 1.0f, 5.0f, 0, 3, 35, 4, true },
+    { 38, 1.125f, 1.0f, 1.0f, 3.0f, 0, 3, 55, 5, true },
+    { 39, 0.600000024f, 1.0f, 1.0f, 5.0f, 0, 3, 70, 4, true },
+    { 40, 1.125f, 1.0f, 1.0f, 5.0f, 0, 3, 35, 5, true },
+    { 41, 0.899999976f, 1.0f, 4.0f, 3.0f, 0, 1, 0, 10, false },
+    { 42, 0.300000012f, 1.0f, 4.0f, 3.0f, 0, 1, 0, 10, false },
+    { 50, 0.675000012f, 1.0f, 1.0f, 4.0f, 0, 3, 100, 2, false },
+    { 51, 0.75f, 1.0f, 1.0f, 5.0f, 0, 3, 100, 3, false },
+    { 52, 0.375f, 2.0f, 2.0f, 1.0f, 2, 3, 20, 2, true },
+};
+
+inline constexpr const FishSwim* FishSwimFor(int record) {
+    for (const FishSwim& s : kFishSwim) {
+        if (s.record == record) {
+            return &s;
+        }
+    }
+    return nullptr;
+}
+
 // Step 23a: RF3's per-record tackle tables (heart, shield, appeal; tackle.json) have RF3's records only.
 // A mod record (OoT fish) reads them at the RF3 record it copies.
 inline constexpr int TackleTableRecord(int record) {

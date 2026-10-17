@@ -18,6 +18,7 @@
 #include "soh/Enhancements/ReelFishing/RF3FishModel.h"
 #include "soh/Enhancements/ReelFishing/RF3RodModel.h"
 #include "soh/Enhancements/ReelFishing/RF3FishMove.h"
+#include "soh/Enhancements/ReelFishing/RF3FishSwim.h" // step 47c
 // Reel Fishing III mod (step 25c-2): this frame's lure is RF3's own model, so OoT's lure and hook models are not
 // drawn (the hook points and the owner's hat still work).
 static u8 sRF3LureModelShown = false;
@@ -131,6 +132,16 @@ static u32 sRF3ReelTurnLogFrame = 0; // step 30b-1e: the last rf3-reel-turn line
 #define RF3_OOT_WALL_RADIUS 30.0f
 #define RF3_PROBE_LAND_STEP 10.0f // step 26f-3: spacing of the probe's land tests [assumed]
 static void Fishing_RF3InitRegionFish(Fishing* this, PlayState* play);
+static s32 Fishing_RF3FreeSwim(Fishing* this, PlayState* play, Input* input); // step 47c
+static void Fishing_RF3SwimClamp(f32 x, f32 z, f32* outX, f32* outZ);
+// Step 47c: RF3's free swimming per region slot
+static u32 sRF3SwimFrame[RF3_REGION_SLOTS];     // the frame after its last run (a gap starts it again in hover)
+static f32 sRF3SwimBand[RF3_REGION_SLOTS][2];   // the depth band (top, bottom), set at that start
+static f32 sRF3SwimCurrent[RF3_REGION_SLOTS][2]; // the region's current (yaw rad, m/s)
+static s16 sRF3SwimYaw[RF3_REGION_SLOTS];       // RF3's heading this frame, drawn after OoT's update
+static s16 sRF3SwimPitch[RF3_REGION_SLOTS];
+static u32 sRF3SwimDrawFrame[RF3_REGION_SLOTS];
+static s32 sRF3SwimSlot = 0;                    // the slot RF3FishSwim's shape clamp is for
 
 typedef struct {
     /* 0x00 */ u8 isLoach;
@@ -3810,6 +3821,10 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
             return;
 
         case 10:
+            if (Fishing_RF3FreeSwim(this, play, input)) { // step 47c
+                rotXYScale = 1;
+                break;
+            }
             this->fishTargetPos = this->actor.home.pos;
 
             Math_ApproachF(&this->actor.speedXZ, 2.0f, 1.0f, 0.5f);
@@ -3832,6 +3847,10 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
             break;
 
         case 11:
+            if (Fishing_RF3FreeSwim(this, play, input)) { // step 47c
+                rotXYScale = 1;
+                break;
+            }
             this->fishTargetPos = this->actor.home.pos;
 
             Math_ApproachF(&this->actor.speedXZ, 0.0f, 1.0f, 0.05f);
@@ -3871,6 +3890,10 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
             break;
 
         case 0:
+            if (Fishing_RF3FreeSwim(this, play, input)) { // step 47c
+                rotXYScale = 1;
+                break;
+            }
             Math_ApproachF(&this->actor.speedXZ, 1.0f, 1.0f, 0.05f);
             Math_ApproachF(&this->rotationStep, 0.0f, 1.0f, 256.0f);
 
@@ -3897,6 +3920,10 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
             break;
 
         case 1:
+            if (Fishing_RF3FreeSwim(this, play, input)) { // step 47c
+                rotXYScale = 1;
+                break;
+            }
             if (this->isLoach == 1) {
                 this->fishState = -1;
                 this->unk_1A4 = 20000;
@@ -5187,6 +5214,13 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play) {
     Fishing_RF3WallTest(this, play);    // step 26e-8
     Fishing_RF3KeepInWater(this, play); // step 16f
     if (sRF3CurRegion != NULL) {
+        s32 slot = this->actor.params - EN_FISH_REGION;
+        // Step 47c: a free-swimming fish faces RF3's heading (its step was made along the direction to its target)
+        if (sRF3SwimDrawFrame[slot] == play->gameplayFrames + 1) {
+            this->actor.world.rot.y = this->actor.shape.rot.y = sRF3SwimYaw[slot];
+            this->actor.world.rot.x = sRF3SwimPitch[slot];
+            this->actor.shape.rot.x = -sRF3SwimPitch[slot];
+        }
         sRF3WallPrev[this->actor.params - EN_FISH_REGION] = this->actor.world.pos; // step 26e-8: where the next test starts
         sRF3WallPrevFrame[this->actor.params - EN_FISH_REGION] = play->gameplayFrames;
     }
@@ -7434,6 +7468,99 @@ static f32 Fishing_RF3Perception(Fishing* this) {
 
 // OoT's wander target is +-150 around the pond's centre: for a region fish, around the box centre,
 // inside the box, and not below the ground.
+// Step 47c: RF3's free swimming (RF3FishSwim.cpp, RF3-MECHANICS 6.9) for a region fish on RF3's model and motions, in
+// the free states 0/1/10/11 (OoT's wander, home seeking and fleeing are skipped; the user's choice: no fleeing). Each
+// frame RF3FishSwim gives the step and RF3's heading. OoT's mover makes exactly that step (its heading set along the
+// step, no OoT turn), so its wall push and floor probe still run; Fishing_UpdateFish then puts the fish back on RF3's
+// heading (RF3 moves toward its target while the body turns, 6.9). RF3 looks for the lure every frame of NORMAL, so
+// the notice check runs here every frame (OoT's states 0/1 ran it only for the sinking lure).
+static s32 Fishing_RF3FreeSwim(Fishing* this, PlayState* play, Input* input) {
+    RF3RegionFishInfo info;
+    RF3FishSwimInput in = { 0 };
+    RF3FishSwimOutput out;
+    s32 slot = this->actor.params - EN_FISH_REGION;
+    s32 layerMin;
+    s32 layerMax;
+    f32 speedMps = 0.0f;
+    f32 rampS = 1.0f;
+    f32 heightPerM = 0.3f; // [assumed] if the model has no height
+    f32 len;
+
+    if (!RF3_IS_REGION_FISH(this) || (slot < 0) || (slot >= RF3_REGION_SLOTS) ||
+        (CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FreeSwim"), 1) == 0) || !RF3FishModel_PlaysMotions(slot) ||
+        !RF3RegionFish_Get(slot, &info) || (info.mm <= 0.0f) ||
+        !RF3FishSwim_Species(info.record, &in.species, &layerMin, &layerMax)) {
+        return false;
+    }
+    RF3FishModel_MoveInfo(info.record, &speedMps, &rampS, &heightPerM);
+    in.slot = slot;
+    // a fish that didn't swim last frame (spawned, back from the approach or a fight) starts again in hover
+    in.reset = (sRF3SwimFrame[slot] != play->gameplayFrames);
+    in.lengthM = info.mm * 0.001f;
+    in.heightM = in.lengthM * heightPerM;
+    in.lengthMm = (s32)info.mm;
+    in.unitsPerMetre = RF3_UNITS_PER_METRE;
+    in.pos[0] = this->actor.world.pos.x;
+    in.pos[1] = this->actor.world.pos.y;
+    in.pos[2] = this->actor.world.pos.z;
+    in.yaw = this->actor.shape.rot.y * (M_PI / 32768.0f);
+    in.pitch = -this->actor.shape.rot.x * (M_PI / 32768.0f);
+    in.home[0] = this->actor.home.pos.x; // the spawn point (Fishing_RF3InitRegionFish)
+    in.home[1] = this->actor.home.pos.y;
+    in.home[2] = this->actor.home.pos.z;
+    if (in.reset) {
+        // the depth band from the water column at the spawn point (RF3: under the spot area's centre) [assumed]
+        f32 floorY = Fishing_RF3FloorAt(play, in.home[0], in.home[2]);
+        RF3FishSwim_DepthBand(info.surfaceY, floorY, floorY, layerMin, layerMax, in.heightM * RF3_UNITS_PER_METRE,
+                              &sRF3SwimBand[slot][0], &sRF3SwimBand[slot][1]);
+        if (!RF3RegionFish_Current(slot, &sRF3SwimCurrent[slot][0], &sRF3SwimCurrent[slot][1])) {
+            sRF3SwimCurrent[slot][0] = sRF3SwimCurrent[slot][1] = 0.0f;
+        }
+    }
+    in.bandTop = sRF3SwimBand[slot][0];
+    in.bandBottom = sRF3SwimBand[slot][1];
+    in.waterY = WATER_SURFACE_Y(play);
+    in.floorY = this->actor.floorHeight;
+    in.currentYaw = sRF3SwimCurrent[slot][0];
+    in.currentSpeedMps = sRF3SwimCurrent[slot][1];
+    in.hp = 100.0f;
+    in.substeps = RF3_SUBSTEPS;
+    in.probe = Fishing_RF3Probe;
+    in.clampXZ = Fishing_RF3SwimClamp;
+    in.codeTurn = RF3FishModel_CodeTurn;
+    in.log = RF3FishMove_Log;
+    sRF3MovePlay = play;
+    sRF3MoveFish = this;
+    sRF3SwimSlot = slot;
+    RF3FishSwim_Step(&in, &out);
+    sRF3SwimFrame[slot] = play->gameplayFrames + 1;
+    sRF3SwimYaw[slot] = (s16)(out.yaw * (32768.0f / M_PI));
+    sRF3SwimPitch[slot] = (s16)(out.pitch * (32768.0f / M_PI));
+    sRF3SwimDrawFrame[slot] = play->gameplayFrames + 1;
+
+    len = sqrtf(SQ(out.step[0]) + SQ(out.step[1]) + SQ(out.step[2]));
+    if (len > 0.0001f) {
+        this->actor.world.rot.y = Math_Atan2S(out.step[2], out.step[0]);
+        this->actor.world.rot.x = Math_Atan2S(sqrtf(SQ(out.step[0]) + SQ(out.step[2])), out.step[1]);
+        this->fishTargetPos.x = this->actor.world.pos.x + out.step[0] / len * 200.0f;
+        this->fishTargetPos.y = this->actor.world.pos.y + out.step[1] / len * 200.0f;
+        this->fishTargetPos.z = this->actor.world.pos.z + out.step[2] / len * 200.0f;
+    } else {
+        this->fishTargetPos = this->actor.world.pos;
+    }
+    this->actor.speedXZ = len;  // OoT's mover: velocity = the step (Actor_UpdateVelocityXYZ)
+    this->rotationStep = 0.0f;  // ... with no OoT turn
+    this->unk_190 = 1.0f;       // OoT's tail beat (OoT's model only)
+    this->unk_194 = 2000.0f;
+    func_80B70ED4(this, input);
+    return true;
+}
+
+static void Fishing_RF3SwimClamp(f32 x, f32 z, f32* outX, f32* outZ) {
+    // step 46b: inside the region's shape, 10 units in (as the wander target)
+    RF3RegionShape_Clamp(sRF3SwimSlot, x, z, 10.0f, outX, outZ);
+}
+
 static void Fishing_RF3RegionTarget(Fishing* this) {
     f32 centreX;
     f32 centreZ;
@@ -7589,6 +7716,10 @@ static void Fishing_RF3InitRegionFish(Fishing* this, PlayState* play) {
     sRF3RegionBoxes[slot].surfaceY = info.surfaceY;
     sRF3RegionBoxes[slot].angle = info.angle; // step 16i
     sRF3RegionLastGood[slot] = this->actor.world.pos; // spawned over deep water (RF3RegionFish.cpp)
+    // Step 47c-2: a new fish in the slot starts its free swim afresh (the log: a fish spawned in a slot swum the frame
+    // before kept that fish's swim, band and current)
+    sRF3SwimFrame[slot] = 0;
+    sRF3SwimDrawFrame[slot] = 0;
 
     this->fishState = 10;
     this->fishStateNext = 10;
