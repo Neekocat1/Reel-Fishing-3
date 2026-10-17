@@ -33,6 +33,9 @@ const char* RF3FishModel_Status(void);
 // Step 25g-4: 1 if the region fish in slot was last drawn with RF3's motions (z_fishing.c then gives it RF3's
 // struggle movement instead of step 8h's sweep).
 int32_t RF3FishModel_PlaysMotions(int32_t slot);
+// Step 49b: 1 if the region fish in slot will be drawn with RF3's motions (the draw's conditions, checked without
+// drawing), so z_fishing.c can run RF3's free swim from the fish's first update, before its first draw.
+int32_t RF3FishModel_WillPlayMotions(int32_t slot);
 // Step 26e-3: the movement values of a fishdata record: species speed (m/s), speed ramp (s) and the model's height
 // per metre of length (fish models are 1 m long). Returns 0 if unknown.
 int32_t RF3FishModel_MoveInfo(int32_t record, float* speedMps, float* rampSeconds, float* heightPerMetre);

@@ -178,6 +178,7 @@ static s32 Fishing_RF3SwamThisFrame(Fishing* this, PlayState* play) {
 static void Fishing_RF3SetMover(s32 slot, PlayState* play, f32 x, f32 y, f32 z, s16 yaw, s16 pitch); // step 49a
 static s32 Fishing_RF3MoverReady(Fishing* this, PlayState* play);
 static void Fishing_RF3Mover(Fishing* this, PlayState* play);
+static s32 Fishing_RF3StrikesInPlace(Fishing* this); // step 49c
 
 typedef struct {
     /* 0x00 */ u8 isLoach;
@@ -4201,7 +4202,14 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                     rf3Reached, RF3_SUBSTEPS);
                 if (rf3Approach == RF3_APPROACH_STRIKE) {
                     // OoT's own strike setup: line up (state 3, or -3 for a loach), then lunge.
-                    if (this->isLoach == 0) {
+                    // Step 49c: an RF3 fish strikes where it reached the lure (RF3-MECHANICS 2.5, 0x001A0B00 -> HIT):
+                    // straight to state 4, which bites in place for it.
+                    if (Fishing_RF3StrikesInPlace(this)) {
+                        this->fishState = 4;
+                        this->unk_190 = 1.2f;
+                        this->unk_194 = 5000.0f;
+                        this->timerArray[0] = 60;
+                    } else if (this->isLoach == 0) {
                         this->fishState = 3;
                         this->unk_190 = 1.2f;
                         this->unk_194 = 5000.0f;
@@ -4364,6 +4372,10 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
             rotXYScale = 2;
             this->fishTargetPos = sLurePos;
             Math_ApproachF(&this->actor.speedXZ, this->speedTarget, 1.0f, 1.0f);
+            if (Fishing_RF3StrikesInPlace(this)) { // step 49c: no lunge; it bites where it is, facing as it is
+                this->actor.speedXZ = 0.0f;
+                this->rotationStep = 0.0f;
+            }
 
             if ((sRodCastState != 3) || (this->timerArray[0] == 0) || (sLurePos.y > (WATER_SURFACE_Y(play) + 5.0f)) ||
                 Fishing_RF3OutOfArea(sLurePos.x, sLurePos.z)) {
@@ -4372,7 +4384,19 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                 this->fishState = this->fishStateNext;
                 this->unk_190 = 1.0f;
                 this->unk_194 = 2000.0f;
-            } else if (distToTarget < 10.0f) {
+            } else if ((distToTarget < 10.0f) || Fishing_RF3StrikesInPlace(this)) {
+                if (Fishing_RF3StrikesInPlace(this)) { // step 49c
+                    char line[200];
+
+                    snprintf(line, sizeof(line),
+                             "slot=%d rf3-strike-in-place dist=%.1f fish=(%.0f,%.0f,%.0f) lure=(%.0f,%.0f,%.0f)",
+                             (s32)(this->actor.params - EN_FISH_REGION),
+                             sqrtf(SQ(sLurePos.x - this->actor.world.pos.x) + SQ(sLurePos.y - this->actor.world.pos.y) +
+                                   SQ(sLurePos.z - this->actor.world.pos.z)),
+                             this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z, sLurePos.x,
+                             sLurePos.y, sLurePos.z);
+                    RF3FishMove_Log(line);
+                }
                 if (Fishing_SplashBySize(this, play, false)) {
                     Fishing_FishLeapSfx(this, false);
                 }
@@ -7581,7 +7605,8 @@ static s32 Fishing_RF3FreeSwim(Fishing* this, PlayState* play, Input* input) {
     f32 len;
 
     if (!RF3_IS_REGION_FISH(this) || (slot < 0) || (slot >= RF3_REGION_SLOTS) ||
-        (CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FreeSwim"), 1) == 0) || !RF3FishModel_PlaysMotions(slot) ||
+        (CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FreeSwim"), 1) == 0) ||
+        !RF3FishModel_WillPlayMotions(slot) || // step 49b: from the first update (was PlaysMotions: after the first draw)
         !RF3RegionFish_Get(slot, &info) || (info.mm <= 0.0f) ||
         !RF3FishSwim_Species(info.record, &in.species, &layerMin, &layerMax)) {
         return false;
@@ -7992,6 +8017,12 @@ static void Fishing_RF3SetMover(s32 slot, PlayState* play, f32 x, f32 y, f32 z, 
     sRF3MoverYaw[slot] = yaw;
     sRF3MoverPitch[slot] = pitch;
     sRF3MoverFrame[slot] = (u32)play->gameplayFrames + 1;
+}
+
+// Step 49c: an RF3 fish (RF3 on, a region fish whose model plays RF3's motions) strikes where it reached the lure.
+static s32 Fishing_RF3StrikesInPlace(Fishing* this) {
+    return RF3_IsEnabled() && RF3_IS_REGION_FISH(this) &&
+           RF3FishModel_WillPlayMotions(this->actor.params - EN_FISH_REGION);
 }
 
 static s32 Fishing_RF3MoverReady(Fishing* this, PlayState* play) {

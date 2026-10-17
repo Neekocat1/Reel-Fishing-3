@@ -1256,6 +1256,30 @@ extern "C" int32_t RF3FishModel_PlaysMotions(int32_t slot) {
     return (it != sAnims.end() && it->second.animated) ? 1 : 0;
 }
 
+extern "C" int32_t RF3FishModel_WillPlayMotions(int32_t slot) {
+    // RF3FishModel_DrawRegion's conditions for the motion path, without drawing
+    if (!RF3_IsEnabled() || !CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishModels"), 1) ||
+        !CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishMotions"), 1) ||
+        CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishModelBindPose"), 0)) {
+        return 0;
+    }
+    RF3RegionFishInfo info;
+    if (!RF3RegionFish_Get(slot, &info)) {
+        return 0;
+    }
+    int32_t record = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishModelPreview"), -1);
+    if (record < 0) {
+        record = info.record;
+    }
+    std::string why;
+    rf3model::SkinnedModel* m = GetForRecord(record, why);
+    if (m == nullptr || !m->ok) {
+        return 0;
+    }
+    MotionSet* s = GetMotions(*m);
+    return (s != nullptr && s->ok) ? 1 : 0;
+}
+
 extern "C" int32_t RF3FishModel_CodeTurn(int32_t code, float* yawDeg, float* seconds) {
     LoadIndex();
     auto it = sCodes.find(code);
