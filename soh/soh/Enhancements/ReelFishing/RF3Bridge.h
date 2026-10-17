@@ -155,6 +155,11 @@ typedef struct RF3RegionFishInfo {
 } RF3RegionFishInfo;
 // The fish in a slot of the current scene. Returns 0 if the slot is empty.
 int32_t RF3RegionFish_Get(int32_t slot, RF3RegionFishInfo* out);
+// Step 46b: the slot's region shape (an outline with holes). Clamp: a point inside the shape near (x, z) (moved
+// `margin` in from the edge when it was outside or in a hole); returns 1 if it moved, 0 if it was inside or the slot
+// has no region. OutsideOutline: distance outside the outline (0 inside; holes don't count).
+int32_t RF3RegionShape_Clamp(int32_t slot, float x, float z, float margin, float* outX, float* outZ);
+float RF3RegionShape_OutsideOutline(int32_t slot, float x, float z);
 
 // --- Size display (step 12b) ------------------------------------------------
 

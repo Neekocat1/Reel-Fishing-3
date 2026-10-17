@@ -7248,36 +7248,16 @@ static s32 Fishing_RF3LureInBiteArea(void) {
     return (SQ(sLurePos.x) + SQ(sLurePos.z)) < SQ(800.0f);
 }
 
-// Step 16i: a region box is turned by its angle about its centre. World <-> the box's own frame.
-static void Fishing_RF3ToBox(RF3RegionBox* box, f32 x, f32 z, f32* bx, f32* bz) {
-    f32 cx = (box->minX + box->maxX) * 0.5f;
-    f32 cz = (box->minZ + box->maxZ) * 0.5f;
-    f32 c = cosf(-box->angle);
-    f32 s = sinf(-box->angle);
-
-    *bx = cx + ((x - cx) * c) - ((z - cz) * s);
-    *bz = cz + ((x - cx) * s) + ((z - cz) * c);
+// Step 46b: the current region fish's slot (the region code knows its shape).
+static s32 Fishing_RF3CurSlot(void) {
+    return (s32)(sRF3CurRegion - sRF3RegionBoxes);
 }
 
-static void Fishing_RF3ToWorld(RF3RegionBox* box, f32 bx, f32 bz, f32* x, f32* z) {
-    f32 cx = (box->minX + box->maxX) * 0.5f;
-    f32 cz = (box->minZ + box->maxZ) * 0.5f;
-    f32 c = cosf(box->angle);
-    f32 s = sinf(box->angle);
-
-    *x = cx + ((bx - cx) * c) - ((bz - cz) * s);
-    *z = cz + ((bx - cx) * s) + ((bz - cz) * c);
-}
-
-// Beyond the fishing area: the pond's 800 from its centre, or 100 outside the region's box.
+// Beyond the fishing area: the pond's 800 from its centre, or 100 outside the region's outline (step 46b; was its
+// box).
 static s32 Fishing_RF3OutOfArea(f32 x, f32 z) {
     if (sRF3CurRegion != NULL) {
-        f32 bx;
-        f32 bz;
-
-        Fishing_RF3ToBox(sRF3CurRegion, x, z, &bx, &bz);
-        return (bx < (sRF3CurRegion->minX - 100.0f)) || (bx > (sRF3CurRegion->maxX + 100.0f)) ||
-               (bz < (sRF3CurRegion->minZ - 100.0f)) || (bz > (sRF3CurRegion->maxZ + 100.0f));
+        return RF3RegionShape_OutsideOutline(Fishing_RF3CurSlot(), x, z) > 100.0f;
     }
     return sqrtf(SQ(x) + SQ(z)) > 800.0f;
 }
@@ -7463,10 +7443,9 @@ static void Fishing_RF3RegionTarget(Fishing* this) {
     }
     centreX = (sRF3CurRegion->minX + sRF3CurRegion->maxX) * 0.5f;
     centreZ = (sRF3CurRegion->minZ + sRF3CurRegion->maxZ) * 0.5f;
-    // In the box's own frame, then turned into the world (step 16i).
-    centreX = CLAMP(centreX + this->fishTargetPos.x, sRF3CurRegion->minX + 10.0f, sRF3CurRegion->maxX - 10.0f);
-    centreZ = CLAMP(centreZ + this->fishTargetPos.z, sRF3CurRegion->minZ + 10.0f, sRF3CurRegion->maxZ - 10.0f);
-    Fishing_RF3ToWorld(sRF3CurRegion, centreX, centreZ, &this->fishTargetPos.x, &this->fishTargetPos.z);
+    // Step 46b: inside the region's shape (out of its holes), 10 units in from an edge it was moved to.
+    RF3RegionShape_Clamp(Fishing_RF3CurSlot(), centreX + this->fishTargetPos.x, centreZ + this->fishTargetPos.z, 10.0f,
+                         &this->fishTargetPos.x, &this->fishTargetPos.z);
     if (this->fishTargetPos.y < (this->actor.floorHeight + 10.0f)) {
         this->fishTargetPos.y = this->actor.floorHeight + 10.0f;
     }
@@ -7579,14 +7558,8 @@ static void Fishing_RF3ClampFightTarget(Vec3f* target) {
     f32 targetSq;
     f32 scale;
 
-    if (sRF3CurRegion != NULL) {
-        f32 bx;
-        f32 bz;
-
-        Fishing_RF3ToBox(sRF3CurRegion, target->x, target->z, &bx, &bz); // step 16i: clamp in the box's frame
-        bx = CLAMP(bx, sRF3CurRegion->minX, sRF3CurRegion->maxX);
-        bz = CLAMP(bz, sRF3CurRegion->minZ, sRF3CurRegion->maxZ);
-        Fishing_RF3ToWorld(sRF3CurRegion, bx, bz, &target->x, &target->z);
+    if (sRF3CurRegion != NULL) { // step 46b: into the region's shape (was its box)
+        RF3RegionShape_Clamp(Fishing_RF3CurSlot(), target->x, target->z, 0.0f, &target->x, &target->z);
         return;
     }
     targetSq = SQ(target->x) + SQ(target->z);

@@ -40,7 +40,7 @@ namespace {
 constexpr int kSlots = 64;         // matches RF3_REGION_SLOTS in z_fishing.c
 constexpr int kFishParamBase = 400; // EN_FISH_REGION in z_fishing.c
 constexpr float kMinDepth = 25.0f;  // water at least this deep under a spawn spot
-constexpr int kSpotTries = 30;
+constexpr int kSpotTries = 60; // step 46b: was 30; a shape fills less of its box
 // Step 45b: a live respawn waits until the water is back at the region's saved surface (the lake and the Water Temple
 // move their water over seconds after the flag flips), within this much [assumed], or this many frames at most.
 constexpr float kWaterTolerance = 30.0f;
@@ -114,6 +114,9 @@ bool FindSpot(PlayState* play, const rf3::FishRegion& r, Vec3f* pos) {
     for (int t = 0; t < kSpotTries; t++) {
         float x, z; // a random point of the box, turned into the world (step 16i)
         r.ToWorld(r.minX + Rand01() * (r.maxX - r.minX), r.minZ + Rand01() * (r.maxZ - r.minZ), &x, &z);
+        if (!r.Contains(x, z)) {
+            continue; // step 46b: outside the outline, or in a hole
+        }
         float surface;
         WaterBox* waterBox;
         if (!WaterBox_GetSurface1(play, &play->colCtx, x, z, &surface, &waterBox)) {
@@ -224,12 +227,15 @@ int SpawnRegion(PlayState* play, size_t ri, const rf3::FishRegion& r, bool* full
 // centre may be on land in an odd-shaped region). *y = the surface found, or -99999 if none.
 bool WaterReady(PlayState* play, const rf3::FishRegion& r, float* y) {
     *y = -99999.0f;
-    for (int t = 0; t < 8; t++) {
+    for (int t = 0; t < 16; t++) {
         float x, z;
         if (t == 0) {
             r.ToWorld(r.CentreX(), r.CentreZ(), &x, &z);
         } else {
             r.ToWorld(r.minX + Rand01() * (r.maxX - r.minX), r.minZ + Rand01() * (r.maxZ - r.minZ), &x, &z);
+        }
+        if (!r.Contains(x, z)) {
+            continue; // step 46b: only the shape's own water
         }
         float surface;
         WaterBox* waterBox;
@@ -423,6 +429,31 @@ extern "C" int32_t RF3RegionFish_Get(int32_t slot, RF3RegionFishInfo* out) {
     }
     *out = sSlots[slot].info;
     return 1;
+}
+
+// Step 46b: the shape of a slot's region, for z_fishing.c.
+static const rf3::FishRegion* SlotRegion(int32_t slot) {
+    if ((slot < 0) || (slot >= kSlots) || !sSlots[slot].used) {
+        return nullptr;
+    }
+    const std::vector<rf3::FishRegion>& regions = rf3::FishRegions();
+    const int ri = sSlots[slot].region;
+    return (ri >= 0 && ri < static_cast<int>(regions.size())) ? &regions[ri] : nullptr;
+}
+
+extern "C" int32_t RF3RegionShape_Clamp(int32_t slot, float x, float z, float margin, float* outX, float* outZ) {
+    *outX = x;
+    *outZ = z;
+    const rf3::FishRegion* r = SlotRegion(slot);
+    if ((r == nullptr) || !r->HasOutline()) {
+        return 0;
+    }
+    return rf3::shape::ClampInside(r->outline, r->holes, x, z, margin, outX, outZ) ? 1 : 0;
+}
+
+extern "C" float RF3RegionShape_OutsideOutline(int32_t slot, float x, float z) {
+    const rf3::FishRegion* r = SlotRegion(slot);
+    return (r == nullptr) ? 0.0f : r->DistanceOutside(x, z);
 }
 
 namespace rf3 {

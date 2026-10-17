@@ -4,6 +4,7 @@
 #include "RF3RegionWindow.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -41,15 +42,6 @@ constexpr float kNewHalfSize = 150.0f; // a new region: a 300 x 300 box around L
 bool WaterSurfaceAt(PlayState* play, float x, float z, float* surfaceY) {
     WaterBox* waterBox;
     return WaterBox_GetSurface1(play, &play->colCtx, x, z, surfaceY, &waterBox) != 0;
-}
-
-void NormalizeBox(rf3::FishRegion& r) {
-    if (r.minX > r.maxX) {
-        std::swap(r.minX, r.maxX);
-    }
-    if (r.minZ > r.maxZ) {
-        std::swap(r.minZ, r.maxZ);
-    }
 }
 
 // The species list: one row per species, a checkbox per allowed size class (s / n / b).
@@ -198,44 +190,86 @@ void DrawRegion(PlayState* play, rf3::FishRegion& r, int index, const Vec3f& lin
         rf3::RegionsDirty() = true;
     }
 
-    float xs[2] = { r.minX, r.maxX };
-    float zs[2] = { r.minZ, r.maxZ };
-    ImGui::TextDisabled("Box edges in the region's own frame (turned by the rotation below):");
-    if (ImGui::DragFloat2("X min / max", xs, 5.0f)) {
-        r.minX = xs[0];
-        r.maxX = xs[1];
-        rf3::RegionsDirty() = true;
+    // Step 46c: the shape, an outline of points with holes (drawn in edit mode, or edited here point by point).
+    std::string shapeWhy;
+    const bool shapeOk = rf3::shape::Valid(r.outline, r.holes, &shapeWhy);
+    ImGui::Text("Shape: %d points, %d hole(s); box %.0f x %.0f", (int)r.outline.size(), (int)r.holes.size(),
+                r.maxX - r.minX, r.maxZ - r.minZ);
+    if (!shapeOk) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "problem: the %s", shapeWhy.c_str());
     }
-    if (ImGui::DragFloat2("Z min / max", zs, 5.0f)) {
-        r.minZ = zs[0];
-        r.maxZ = zs[1];
-        rf3::RegionsDirty() = true;
-    }
-    if (ImGui::DragFloat("Rotation (degrees)", &r.angle, 0.5f, -180.0f, 180.0f, "%.1f")) { // step 16i
-        rf3::RegionsDirty() = true;
-    }
-    if (ImGui::Button("Corner 1 = Link")) {
-        float fx, fz;
-        r.Corner(2, &fx, &fz); // the opposite corner stays where it is in the world
-        r.SetFromCornersWorld(link.x, link.z, fx, fz);
-        rf3::RegionsDirty() = true;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Corner 2 = Link")) {
-        float fx, fz;
-        r.Corner(0, &fx, &fz);
-        r.SetFromCornersWorld(fx, fz, link.x, link.z);
-        rf3::RegionsDirty() = true;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Centre on Link")) { // step 16g: move the box, keep its size
+    if (ImGui::Button("Centre on Link")) { // step 16g: move the shape, keep it as it is
         r.MoveTo(link.x, link.z);
         rf3::RegionsDirty() = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Fix corners")) {
-        NormalizeBox(r); // corners set from Link can come out min > max
-        rf3::RegionsDirty() = true;
+    if (ImGui::Button("Add hole (draw it in edit mode)")) {
+        if (!rf3::RegionEditActive()) {
+            sStatus = "Start edit mode first, then press Add hole.";
+        } else {
+            rf3::SelectedRegion() = index;
+            rf3::RegionEditArmHole();
+            sStatus = "Next outline is a hole of this region: A in edit mode.";
+        }
+    }
+    // One ring's points: drag to move; Delete keeps 3 and a valid shape.
+    auto ringPoints = [&](rf3::shape::Ring& ring) {
+        for (int i = 0; i < (int)ring.size(); i++) {
+            ImGui::PushID(i);
+            float xz[2] = { ring[i].x, ring[i].z };
+            if (ImGui::DragFloat2("##point", xz, 2.0f, 0.0f, 0.0f, "%.0f")) {
+                ring[i] = { xz[0], xz[1] };
+                r.UpdateBounds();
+                rf3::RegionsDirty() = true;
+            }
+            ImGui::SameLine();
+            ImGui::Text("point %d", i);
+            if (ring.size() > 3) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Delete")) {
+                    rf3::shape::Point was = ring[i];
+                    ring.erase(ring.begin() + i);
+                    std::string why;
+                    if (!rf3::shape::Valid(r.outline, r.holes, &why)) {
+                        ring.insert(ring.begin() + i, was);
+                        sStatus = "Not deleted: the " + why + ".";
+                    }
+                    r.UpdateBounds();
+                    rf3::RegionsDirty() = true;
+                    ImGui::PopID();
+                    break;
+                }
+            }
+            ImGui::PopID();
+        }
+    };
+    ImGui::PushID("outline");
+    if (ImGui::TreeNode("Outline points (x, z)")) {
+        ringPoints(r.outline);
+        ImGui::TreePop();
+    }
+    ImGui::PopID();
+    for (int h = 0; h < (int)r.holes.size(); h++) {
+        ImGui::PushID(1000 + h);
+        char holeLabel[48];
+        std::snprintf(holeLabel, sizeof(holeLabel), "Hole %d (%d points)", h + 1, (int)r.holes[h].size());
+        bool holeOpen = ImGui::TreeNode(holeLabel);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Delete hole")) {
+            if (holeOpen) {
+                ImGui::TreePop();
+            }
+            r.holes.erase(r.holes.begin() + h);
+            rf3::RegionsDirty() = true;
+            ImGui::PopID();
+            break;
+        }
+        if (holeOpen) {
+            ringPoints(r.holes[h]);
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
     }
 
     if (ImGui::DragFloat("Water surface Y", &r.surfaceY, 1.0f)) {
@@ -261,13 +295,13 @@ void DrawRegion(PlayState* play, rf3::FishRegion& r, int index, const Vec3f& lin
     }
     if (!r.currentSet) {
         ImGui::SameLine();
-        ImGui::TextDisabled("(default: along the box)");
+        ImGui::TextDisabled("(default: along the shape's box)");
     }
     if (ImGui::DragFloat("Current reach outside (m)", &r.currentReachM, 0.1f, 0.0f, 50.0f, "%.1f")) { // step 20c-4
         rf3::RegionsDirty() = true;
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("(falls to 0 this far outside the box)");
+    ImGui::TextDisabled("(falls to 0 this far outside the outline)");
     ImGui::SameLine();
     if (ImGui::Button("Read under Link")) {
         float y;
@@ -388,17 +422,27 @@ void RF3RegionWindow::DrawElement() {
         }
         ImGui::SameLine();
         ImGui::Text("Cursor x %.0f  y %.0f  z %.0f  (%s)%s%s", ev.cursorX, ev.cursorY, ev.cursorZ,
-                    ev.cursorOnWater ? "water" : "ground", ev.hasCorner1 ? "  - corner 1 set" : "",
+                    ev.cursorOnWater ? "water" : "ground",
+                    ev.drawing ? (ev.drawHole ? "  - drawing a hole" : "  - drawing a region")
+                               : (ev.holeArmed ? "  - next outline: a hole" : ""),
                     ev.grab[0] ? "  - holding" : "");
+        if (ev.drawing) {
+            ImGui::SameLine();
+            ImGui::Text("(%d points)", (int)ev.drawPts.size());
+        }
         if (ev.grab[0]) {
             ImGui::SameLine();
             ImGui::Text("%s", ev.grab);
         }
         ImGui::TextWrapped("Stick: move cursor (hold Z: faster).  C-Left/Right or right stick: turn.  "
                            "C-Up/Down: zoom.  D-pad Left/Right: rotate the selected region (hold Z: fine).  "
-                           "A: corner 1, A again: corner 2 = new region.  R: select the "
-                           "region under the cursor.  B: grab the selected region's corner, edge or whole box; "
-                           "B again: drop.  START: leave.");
+                           "A: drop a point; A on the first point (3+) closes the outline = new region (or a hole "
+                           "after Add hole).  While drawing, B: undo the last point.  R: select the region under the "
+                           "cursor.  B: grab the selected region's nearest point, or a new point on an edge, or the "
+                           "whole region; B again: drop.  L: delete the held point.  START: leave.");
+        if (!ev.message.empty()) {
+            ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.4f, 1.0f), "%s", ev.message.c_str());
+        }
     }
     ImGui::Separator();
 
@@ -450,6 +494,7 @@ void RF3RegionWindow::DrawElement() {
         r.minZ = link.z - kNewHalfSize;
         r.maxZ = link.z + kNewHalfSize;
         r.surfaceY = water ? waterY : link.y;
+        r.OutlineFromBox(); // step 46c: a square outline
         regions.push_back(r);
         rf3::RegionsDirty() = true;
         if (!water) {
@@ -467,7 +512,8 @@ void RF3RegionWindow::DrawElement() {
 
 // --- Step 16g: regions drawn in the world ---------------------------------------------------------
 // Like SoH's collision viewer (colViewer.cpp): translucent quads in world coordinates, appended to the
-// frame at OnPlayDrawEnd. Each region is its water surface plus four sides reaching 150 units down.
+// frame at OnPlayDrawEnd. Step 46d: each region's outline and holes as walls from the water surface 150 units down,
+// with a thin strip on the surface (no filled surface: a concave shape with holes would need triangulation).
 
 namespace {
 
@@ -519,7 +565,18 @@ static void DrawRegionsInWorld() {
     Player* player = GET_PLAYER(play);
     sDrawDl.clear();
     sDrawVtx.clear();
-    sDrawVtx.reserve((here * 7 + 5) * 4); // exact: the vertex pointers in the display list must stay valid
+    // The vertex pointers in the display list must stay valid: reserve every quad up front (step 46d: 2 per edge, 2 for
+    // the arrow, per region; 4 for the cursor, 1 per drawn segment).
+    size_t quads = 4 + ev.drawPts.size() + 1;
+    for (const rf3::FishRegion& r : regions) {
+        if (r.scene == play->sceneNum) {
+            quads += 2 + 2 * r.outline.size();
+            for (const rf3::shape::Ring& h : r.holes) {
+                quads += 2 * h.size();
+            }
+        }
+    }
+    sDrawVtx.reserve(quads * 4);
 
     uint32_t rm = Z_CMP | IM_RD | CVG_DST_FULL | FORCE_BL | ZMODE_XLU;
     uint32_t blc1 = GBL_c1(G_BL_CLR_IN, G_BL_A_IN, G_BL_CLR_MEM, G_BL_1MA);
@@ -547,19 +604,30 @@ static void DrawRegionsInWorld() {
         }
         float top = r.surfaceY;
         float bottom = r.surfaceY - kDrawDepth;
-        float cx[4], cz[4]; // the turned corners (step 16i)
-        for (int k = 0; k < 4; k++) {
-            r.Corner(k, &cx[k], &cz[k]);
+        // Step 46d: a wall and a surface strip per edge; holes in red.
+        auto ringWalls = [&](const rf3::shape::Ring& ring) {
+            const size_t n = ring.size();
+            for (size_t k = 0; k < n && n >= 2; k++) {
+                const rf3::shape::Point& a = ring[k];
+                const rf3::shape::Point& c = ring[(k + 1) % n];
+                Vec3f ta = { a.x, top, a.z }, tc = { c.x, top, c.z };
+                Vec3f ba = { a.x, bottom, a.z }, bc = { c.x, bottom, c.z };
+                PushQuad(ta, tc, bc, ba);
+                float ex = c.x - a.x, ez = c.z - a.z;
+                float len = std::sqrt(ex * ex + ez * ez);
+                float nx = (len > 0.0f) ? -ez / len * 6.0f : 0.0f, nz = (len > 0.0f) ? ex / len * 6.0f : 0.0f;
+                Vec3f s0 = { a.x - nx, top + 1.0f, a.z - nz }, s1 = { c.x - nx, top + 1.0f, c.z - nz };
+                Vec3f s2 = { c.x + nx, top + 1.0f, c.z + nz }, s3 = { a.x + nx, top + 1.0f, a.z + nz };
+                PushQuad(s0, s1, s2, s3);
+            }
+        };
+        ringWalls(r.outline);
+        if (!r.holes.empty()) {
+            sDrawDl.push_back(gsDPSetPrimColor(0, 0, 255, 60, 60, 255));
+            for (const rf3::shape::Ring& h : r.holes) {
+                ringWalls(h);
+            }
         }
-        Vec3f t0 = { cx[0], top, cz[0] }, t1 = { cx[1], top, cz[1] };
-        Vec3f t2 = { cx[2], top, cz[2] }, t3 = { cx[3], top, cz[3] };
-        Vec3f b0 = { cx[0], bottom, cz[0] }, b1 = { cx[1], bottom, cz[1] };
-        Vec3f b2 = { cx[2], bottom, cz[2] }, b3 = { cx[3], bottom, cz[3] };
-        PushQuad(t0, t1, t2, t3); // the water surface
-        PushQuad(t0, t1, b1, b0);
-        PushQuad(t1, t2, b2, b1);
-        PushQuad(t2, t3, b3, b2);
-        PushQuad(t3, t0, b0, b3);
 
         // Step 20c-4: an arrow on the surface, at the box centre, in the current's direction.
         float yaw = r.CurrentYawDeg() * 3.14159265f / 180.0f;
@@ -595,10 +663,23 @@ static void DrawRegionsInWorld() {
               b3 = { x - 3, y + 1, z + 25 };
         PushQuad(a0, a1, a2, a3);
         PushQuad(b0, b1, b2, b3);
-        if (ev.hasCorner1) {
-            Vec3f c0 = { ev.corner1X, y + 2, ev.corner1Z }, c1 = { x, y + 2, ev.corner1Z }, c2 = { x, y + 2, z },
-                  c3 = { ev.corner1X, y + 2, z };
-            PushQuad(c0, c1, c2, c3);
+        // Step 46d: the outline being drawn: its points joined, and the last one to the cursor (red for a hole).
+        if (ev.drawing && !ev.drawPts.empty()) {
+            if (ev.drawHole) {
+                sDrawDl.push_back(gsDPSetPrimColor(0, 0, 255, 60, 60, 255));
+            }
+            auto segment = [&](float ax, float az, float bx, float bz) {
+                float ex = bx - ax, ez = bz - az;
+                float len = std::sqrt(ex * ex + ez * ez);
+                float nx = (len > 0.0f) ? -ez / len * 4.0f : 4.0f, nz = (len > 0.0f) ? ex / len * 4.0f : 0.0f;
+                Vec3f s0 = { ax - nx, y + 2, az - nz }, s1 = { bx - nx, y + 2, bz - nz };
+                Vec3f s2 = { bx + nx, y + 2, bz + nz }, s3 = { ax + nx, y + 2, az + nz };
+                PushQuad(s0, s1, s2, s3);
+            };
+            for (size_t k = 0; k + 1 < ev.drawPts.size(); k++) {
+                segment(ev.drawPts[k].x, ev.drawPts[k].z, ev.drawPts[k + 1].x, ev.drawPts[k + 1].z);
+            }
+            segment(ev.drawPts.back().x, ev.drawPts.back().z, x, z);
         }
     }
 

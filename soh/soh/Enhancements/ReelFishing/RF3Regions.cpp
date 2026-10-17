@@ -115,6 +115,24 @@ bool LoadFishRegions(std::string* error) {
                 cond.age = RegionAgeFromName(c.value("age", std::string("both")));
                 r.conditions.push_back(cond);
             }
+            // Step 46a: the outline and holes; a file without them (older regions): the turned box as a 4-point outline.
+            auto readRing = [](const nlohmann::json& a) {
+                shape::Ring ring;
+                for (const nlohmann::json& p : a) {
+                    ring.push_back({ p.at(0).get<float>(), p.at(1).get<float>() });
+                }
+                return ring;
+            };
+            if (j.contains("outline")) {
+                r.outline = readRing(j.at("outline"));
+                for (const nlohmann::json& h : j.value("holes", nlohmann::json::array())) {
+                    r.holes.push_back(readRing(h));
+                }
+            }
+            if (std::string why; !r.HasOutline() || !shape::Valid(r.outline, r.holes, &why)) {
+                r.OutlineFromBox(); // no outline, or a broken one: the box
+            }
+            r.UpdateBounds();
             for (const nlohmann::json& rec : j.value("records", nlohmann::json::array())) {
                 int index = rec.is_object() ? rec.at("record").get<int>() : rec.get<int>();
                 if (IsRegionRecord(index) && (std::find(r.records.begin(), r.records.end(), index) == r.records.end())) {
@@ -146,7 +164,21 @@ bool SaveFishRegions(std::string* error) {
         j["minZ"] = std::min(r.minZ, r.maxZ);
         j["maxZ"] = std::max(r.minZ, r.maxZ);
         j["surfaceY"] = r.surfaceY;
-        j["angle"] = r.angle; // step 16i
+        j["angle"] = r.angle; // step 16i (0 with an outline, step 46a)
+        if (r.HasOutline()) { // step 46a: [x, z] points; the box above is their bounding box
+            auto ringJson = [](const shape::Ring& ring) {
+                nlohmann::json a = nlohmann::json::array();
+                for (const shape::Point& p : ring) {
+                    a.push_back({ std::round(p.x * 10.0f) / 10.0f, std::round(p.z * 10.0f) / 10.0f });
+                }
+                return a;
+            };
+            j["outline"] = ringJson(r.outline);
+            j["holes"] = nlohmann::json::array();
+            for (const shape::Ring& h : r.holes) {
+                j["holes"].push_back(ringJson(h));
+            }
+        }
         j["fishCount"] = r.fishCount;
         if (r.currentSet) { // step 20c-3a
             j["currentYaw"] = r.currentYaw;

@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "RF3Shape.h" // step 46a
+
 namespace rf3 {
 
 // Step 24a (RF3RandoAreas.cpp): the randomizer's areas of a scene, as (enum name, display name).
@@ -33,8 +35,10 @@ struct RegionCondition {
     RegionAge age = RegionAge::Both;
 };
 
-// A box on the water. minX..maxX / minZ..maxZ are the box in its own frame, turned by `angle` (degrees,
-// seen from above) about its centre (step 16i). With angle 0 it is a plain world box.
+// Step 46a: a region's shape is an outline of world points with holes (RF3Shape.h). minX..maxZ are then the outline's
+// bounding box and angle is 0. (Before: a box on the water, minX..maxX / minZ..maxZ in its own frame, turned by
+// `angle` (degrees, seen from above) about its centre (step 16i); older files are turned into 4-point outlines on
+// load.)
 //   world     = centre + R(angle)  * (box point - centre)
 //   box point = centre + R(-angle) * (world - centre)
 struct FishRegion {
@@ -62,6 +66,62 @@ struct FishRegion {
     // Step 36c: the age it is for, and the flags that must hold (older files: both, none).
     RegionAge age = RegionAge::Both;
     std::vector<RegionCondition> conditions;
+    // Step 46a: the shape (world points, seen from above). Fewer than 3 outline points: the box is the shape.
+    shape::Ring outline;
+    std::vector<shape::Ring> holes;
+
+    bool HasOutline() const { return outline.size() >= 3; }
+    // The bounding box from the outline (angle 0).
+    void UpdateBounds() {
+        if (HasOutline()) {
+            shape::Bounds(outline, &minX, &maxX, &minZ, &maxZ);
+            angle = 0.0f;
+        }
+    }
+    // Make the box (and its angle) the outline, with no holes.
+    void OutlineFromBox() {
+        outline = shape::BoxRing(minX, maxX, minZ, maxZ, Radians());
+        holes.clear();
+        UpdateBounds();
+    }
+    // In the outline, holes ignored (selecting a region by pointing at it).
+    bool InOutline(float x, float z) const { return HasOutline() ? shape::InRing(outline, x, z) : Contains(x, z); }
+    // Move every point by (dx, dz).
+    void Translate(float dx, float dz) {
+        for (shape::Point& p : outline) {
+            p.x += dx;
+            p.z += dz;
+        }
+        for (shape::Ring& h : holes) {
+            for (shape::Point& p : h) {
+                p.x += dx;
+                p.z += dz;
+            }
+        }
+        minX += dx;
+        maxX += dx;
+        minZ += dz;
+        maxZ += dz;
+    }
+    // Turn every point by `degrees` about the bounding box centre.
+    void RotateShape(float degrees) {
+        const float cx = CentreX(), cz = CentreZ(), rad = degrees * 3.14159265f / 180.0f;
+        auto turn = [&](shape::Point& p) {
+            float x, z;
+            Turn(rad, p.x - cx, p.z - cz, &x, &z);
+            p.x = cx + x;
+            p.z = cz + z;
+        };
+        for (shape::Point& p : outline) {
+            turn(p);
+        }
+        for (shape::Ring& h : holes) {
+            for (shape::Point& p : h) {
+                turn(p);
+            }
+        }
+        UpdateBounds();
+    }
 
     float CentreX() const { return (minX + maxX) * 0.5f; }
     float CentreZ() const { return (minZ + maxZ) * 0.5f; }
@@ -84,12 +144,18 @@ struct FishRegion {
         *z += CentreZ();
     }
     bool Contains(float x, float z) const {
+        if (HasOutline()) {
+            return shape::Inside(outline, holes, x, z); // step 46a
+        }
         float bx, bz;
         ToBox(x, z, &bx, &bz);
         return (bx >= minX) && (bx <= maxX) && (bz >= minZ) && (bz <= maxZ);
     }
     // Step 20c-4: distance from (x, z) to the box's edge, OoT units (0 inside).
     float DistanceOutside(float x, float z) const {
+        if (HasOutline()) {
+            return shape::OutsideOutline(outline, x, z); // step 46a: holes don't count
+        }
         float bx, bz;
         ToBox(x, z, &bx, &bz);
         float dx = std::fmax(std::fmax(minX - bx, bx - maxX), 0.0f);
@@ -112,8 +178,12 @@ struct FishRegion {
         float bz = (i == 0 || i == 1) ? minZ : maxZ;
         ToWorld(bx, bz, x, z);
     }
-    // Move the box (same size and angle) so its centre is (x, z).
+    // Move the box (same size and angle) so its centre is (x, z). Step 46a: the outline and holes move with it.
     void MoveTo(float x, float z) {
+        if (HasOutline()) {
+            Translate(x - CentreX(), z - CentreZ());
+            return;
+        }
         float hx = (maxX - minX) * 0.5f, hz = (maxZ - minZ) * 0.5f;
         minX = x - hx;
         maxX = x + hx;
@@ -157,13 +227,18 @@ bool RegionEditActive();
 // Returns false and sets status if edit mode can't start now (no scene, a cast is out).
 bool RegionEditStart(std::string* status);
 void RegionEditStop();
+// Step 46c: the next outline drawn in edit mode becomes a hole of the selected region.
+void RegionEditArmHole();
 struct RegionEditView {
     bool active = false;
     float cursorX = 0, cursorY = 0, cursorZ = 0;
     bool cursorOnWater = false;
-    bool hasCorner1 = false;
-    float corner1X = 0, corner1Z = 0;
-    const char* grab = ""; // what B is holding: "", "corner", "edge", "box"
+    bool drawing = false;          // step 46c: an outline is being drawn (drawPts so far)
+    bool drawHole = false;         // ... as a hole of the selected region
+    bool holeArmed = false;        // the next outline will be a hole
+    shape::Ring drawPts;
+    const char* grab = "";         // what B is holding: "", "point", "region"
+    std::string message;           // the editor's last message
 };
 RegionEditView GetRegionEditView();
 
