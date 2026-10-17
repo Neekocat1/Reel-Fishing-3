@@ -84,6 +84,13 @@ int32_t RF3FishSwim_Species(int32_t record, RF3FishSwimSpecies* out, int32_t* la
 // Step 47d: the motion the slot's free swim asks for: RF3's request code and the raw animation set over it (-1 none)
 // and the blend (s). Returns 0 if the slot didn't free-swim on `frame` (or the frame before).
 int32_t RF3FishSwim_Motion(int32_t slot, uint32_t frame, int32_t* code, int32_t* rawAnim, float* blend);
+// Step 47e: a region fish's body this frame (every region fish, hooked or chasing too), for the push-off test:
+// position (world), heading (yaw, pitch + = up) and length (m)
+void RF3FishSwim_Body(int32_t slot, const float pos[3], float yaw, float pitch, float lengthM, uint32_t frame);
+// Step 47e: push-off on or off (CVar ReelFishing3.FishPushOff; the harness compares both)
+void RF3FishSwim_SetPushOff(int32_t on);
+// Step 47e: do these two slots' bodies overlap now (RF3's two-sphere test, as seen by slot a)?
+int32_t RF3FishSwim_BodiesOverlap(int32_t a, int32_t b);
 // RF3's random generator is seeded per run (the harness sets it for repeatable runs)
 void RF3FishSwim_Seed(uint32_t seed);
 // The depth band (spawner 0x0018CA10, OoT y up). The water column under the spot's centre (surface down to

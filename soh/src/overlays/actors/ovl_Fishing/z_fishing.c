@@ -5221,6 +5221,16 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play) {
             this->actor.world.rot.x = sRF3SwimPitch[slot];
             this->actor.shape.rot.x = -sRF3SwimPitch[slot];
         }
+        {
+            // Step 47e: every region fish's body (hooked and chasing fish too), for the free swim's push-off
+            RF3RegionFishInfo bodyInfo;
+            if (RF3RegionFish_Get(slot, &bodyInfo) && (bodyInfo.mm > 0.0f)) {
+                f32 bodyPos[3] = { this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z };
+                RF3FishSwim_Body(slot, bodyPos, this->actor.shape.rot.y * (M_PI / 32768.0f),
+                                 -this->actor.shape.rot.x * (M_PI / 32768.0f), bodyInfo.mm * 0.001f,
+                                 play->gameplayFrames);
+            }
+        }
         sRF3WallPrev[this->actor.params - EN_FISH_REGION] = this->actor.world.pos; // step 26e-8: where the next test starts
         sRF3WallPrevFrame[this->actor.params - EN_FISH_REGION] = play->gameplayFrames;
     }
@@ -7533,6 +7543,7 @@ static s32 Fishing_RF3FreeSwim(Fishing* this, PlayState* play, Input* input) {
     sRF3MovePlay = play;
     sRF3MoveFish = this;
     sRF3SwimSlot = slot;
+    RF3FishSwim_SetPushOff(CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishPushOff"), 1)); // step 47e
     RF3FishSwim_Step(&in, &out);
     sRF3SwimFrame[slot] = play->gameplayFrames + 1;
     sRF3SwimYaw[slot] = (s16)(out.yaw * (32768.0f / M_PI));
@@ -7721,6 +7732,7 @@ static void Fishing_RF3InitRegionFish(Fishing* this, PlayState* play) {
     // before kept that fish's swim, band and current)
     sRF3SwimFrame[slot] = 0;
     sRF3SwimDrawFrame[slot] = 0;
+    RF3FishSwim_Forget(slot); // step 47e: and its body
 
     this->fishState = 10;
     this->fishStateNext = 10;

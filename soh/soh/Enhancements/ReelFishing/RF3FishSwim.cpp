@@ -14,7 +14,11 @@
 // Glide (3): coasts on along its heading, the speed falling from the cap to 0 over the slow-down time. Motion 3.
 // Targets: a target out of the depth band is levelled; one farther than the home radius from home is replaced by a
 //   point toward home at 0.2-0.8 x the radius; then the region's shape clamps it (user's choice 1a, 2026-10-17).
-// Not here: fish pushing off each other (step 47e); RF3's map flow field (the region's one current stands in).
+// Push-off (step 47e, 0x0018F950): when the scenery probe is clear, a fish whose two body spheres (L/4 ahead and
+//   behind its centre, radius L/2, or 3L/8 for rank 4+) overlap another fish's (radius 3L/8) treats it as in the way:
+//   hover retargets 10 L away from it; a swim slides off it (head-on: retargets 5 L away) and then skips fish for 1 s,
+//   unseen by the others too (+0xDE0 bit 2); a glide slides (head-on: stops).
+// Not here: RF3's map flow field (the region's one current stands in).
 
 #include "RF3FishSwim.h"
 #include "RF3FishTable.h" // step 47c: kFishSwim (generated, pure data)
@@ -105,9 +109,24 @@ struct SwimState {
     int32_t raw = -1;
     float blend = 0.0f;
     uint32_t frame = 0; // step 47d: the game frame it last ran
+    int32_t rank = 0;   // step 47e: its species rank (its own body radius)
+    float ghostT = 0.0f;       // step 47e: s left skipping fish (+0xDE4)
+    float sincePushLog = 99.0f;
 };
 
 std::map<int32_t, SwimState> sStates;
+
+// Step 47e: every region fish's body, registered each frame (RF3FishSwim_Body, and each free swim's own step)
+struct Body {
+    float pos[3] = { 0, 0, 0 };
+    float yaw = 0.0f;
+    float pitch = 0.0f;
+    float lengthUnits = 0.0f;
+    uint32_t frame = 0;
+};
+std::map<int32_t, Body> sBodies;
+bool sPushOff = true;
+constexpr float kPushGhostSeconds = 1.0f; // 0x00198860(1.0)
 
 struct Ctx {
     const RF3FishSwimInput& in;
@@ -280,6 +299,90 @@ int Probe(Ctx& c, const float d[3], float len, float n[3]) {
     return c.in.probe(from, to, n);
 }
 
+// Step 47e: the two spheres of a body (0x0018F950): centre +- heading x L/4
+void Spheres(const float pos[3], float yaw, float pitch, float lengthUnits, float out[2][3]) {
+    float d[3];
+    Dir(yaw, pitch, d);
+    for (int k = 0; k < 3; k++) {
+        out[0][k] = pos[k] - d[k] * lengthUnits * 0.25f;
+        out[1][k] = pos[k] + d[k] * lengthUnits * 0.25f;
+    }
+}
+
+bool Overlap(const float a[2][3], float ra, const float b[2][3], float rb) {
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            float d[3] = { a[i][0] - b[j][0], a[i][1] - b[j][1], a[i][2] - b[j][2] };
+            if (Length3(d) < ra + rb) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+float OwnRadius(float lengthUnits, int32_t rank) {
+    return lengthUnits * 0.25f * (rank < 4 ? 2.0f : 1.5f);
+}
+
+bool Ghost(int32_t slot) {
+    auto it = sStates.find(slot);
+    return it != sStates.end() && it->second.ghostT > 0.0f;
+}
+
+// Another fish in the way (0x0018F950)? n = the unit direction from it to this fish.
+bool FishHit(Ctx& c, float n[3], int32_t* other) {
+    if (!sPushOff || c.s.ghostT > 0.0f) {
+        return false;
+    }
+    float mine[2][3];
+    Spheres(c.pos, c.s.yaw, c.s.pitch, c.L, mine);
+    const float rMine = OwnRadius(c.L, c.in.species.rank);
+    for (const auto& [slot, b] : sBodies) {
+        if (slot == c.in.slot || (c.in.frame - b.frame) > 1u || Ghost(slot)) {
+            continue;
+        }
+        float theirs[2][3];
+        Spheres(b.pos, b.yaw, b.pitch, b.lengthUnits, theirs);
+        if (!Overlap(mine, rMine, theirs, b.lengthUnits * 0.25f * 1.5f)) {
+            continue;
+        }
+        float away[3] = { c.pos[0] - b.pos[0], c.pos[1] - b.pos[1], c.pos[2] - b.pos[2] };
+        float len = Length3(away);
+        if (len < 0.001f) {
+            Dir(c.s.yaw + kPi, 0.0f, away); // on top of it: back off
+            len = 1.0f;
+        }
+        for (int k = 0; k < 3; k++) {
+            n[k] = away[k] / len;
+        }
+        *other = slot;
+        return true;
+    }
+    return false;
+}
+
+void LogPush(Ctx& c, int32_t other, const char* response) {
+    if (c.in.log == nullptr || c.s.sincePushLog < 1.0f) {
+        return;
+    }
+    c.s.sincePushLog = 0.0f;
+    char line[200];
+    std::snprintf(line, sizeof(line), "slot=%d rf3-swim-push other=%d mode=%d response=%s fish=(%.0f,%.0f,%.0f)",
+                  c.in.slot, other, c.s.mode, response, c.pos[0], c.pos[1], c.pos[2]);
+    c.in.log(line);
+}
+
+// The probe with the fish test after it (0x0019A6A0): 0 clear, 1 scenery (normal), 2 blocked, 3 another fish (n =
+// away from it, *other = its slot).
+int ProbeAll(Ctx& c, const float d[3], float len, float n[3], int32_t* other) {
+    int hit = Probe(c, d, len, n);
+    if (hit == 0 && FishHit(c, n, other)) {
+        return 3;
+    }
+    return hit;
+}
+
 // d projected onto the plane of n (0x001AE1B0); false when head-on
 bool Slide(float d[3], const float n[3]) {
     float dn = d[0] * n[0] + d[1] * n[1] + d[2] * n[2];
@@ -319,7 +422,17 @@ bool HoverTick(Ctx& c) {
     if (Length3(d) > step) {
         float n[3];
         // the probe reaches the drift step + L/2, from behind
-        if (Probe(c, s.moveDir, step + 0.5f * c.L, n) == 0) {
+        int32_t other = -1;
+        int hit = ProbeAll(c, s.moveDir, step + 0.5f * c.L, n, &other);
+        if (hit == 0) {
+            Move(c, s.moveDir, step);
+        } else if (hit == 3) {
+            // step 47e: another fish: retarget 10 L straight away from it and drift that way (0x0019FD10)
+            for (int k = 0; k < 3; k++) {
+                s.moveDir[k] = n[k];
+                s.target[k] = c.pos[k] + n[k] * 10.0f * c.L;
+            }
+            LogPush(c, other, "hover-away");
             Move(c, s.moveDir, step);
         } else {
             s.turnDone = true; // RF3: a probe hit stops the turn too
@@ -417,11 +530,24 @@ int SwimTick(Ctx& c) {
     // probe: up to two slides along what it hits; blocked ends the swim
     for (int i = 0; i < 2; i++) {
         float n[3];
-        int hit = Probe(c, d, s.speed + 0.05f * c.U, n);
+        int32_t other = -1;
+        int hit = ProbeAll(c, d, s.speed + 0.05f * c.U, n, &other);
         if (hit == 0) {
             break;
         }
-        if (hit == 2 || !Slide(d, n)) {
+        if (hit == 3) {
+            // step 47e: another fish (0x0019B7A0): skip fish for 1 s, slide off it; head-on, retarget 5 L away from
+            // it and don't move this tick (0x001A0400)
+            s.ghostT = kPushGhostSeconds;
+            if (!Slide(d, n)) {
+                for (int k = 0; k < 3; k++) {
+                    s.target[k] = c.pos[k] + n[k] * 5.0f * c.L;
+                }
+                LogPush(c, other, "swim-away");
+                return 0;
+            }
+            LogPush(c, other, "swim-slide");
+        } else if (hit == 2 || !Slide(d, n)) {
             return RF3_SWIM_END_BLOCKED;
         }
         for (int k = 0; k < 3; k++) {
@@ -452,11 +578,15 @@ int GlideTick(Ctx& c) {
     s.speed = (s.rampT >= down - 1e-4f) ? 0.0f : cap * (1.0f - s.rampT / down); // 60 x 1/60 falls short of 1
     s.rampT = std::min(down, s.rampT + kTick);
     float n[3];
-    int hit = Probe(c, s.moveDir, s.speed, n);
+    int32_t other = -1;
+    int hit = ProbeAll(c, s.moveDir, s.speed, n, &other);
     if (hit == 2) {
         return RF3_SWIM_END_BLOCKED;
     }
-    if (hit == 1 && !Slide(s.moveDir, n)) {
+    if (hit == 3) {
+        LogPush(c, other, "glide-slide"); // step 47e: slides off another fish (0x0019B480); head-on stops
+    }
+    if ((hit == 1 || hit == 3) && !Slide(s.moveDir, n)) {
         s.speed = 0.0f;
         return RF3_SWIM_END_BLOCKED;
     }
@@ -507,6 +637,37 @@ extern "C" int32_t RF3FishSwim_Motion(int32_t slot, uint32_t frame, int32_t* cod
 
 extern "C" void RF3FishSwim_Forget(int32_t slot) {
     sStates.erase(slot);
+    sBodies.erase(slot);
+}
+
+extern "C" void RF3FishSwim_Body(int32_t slot, const float pos[3], float yaw, float pitch, float lengthM,
+                                 uint32_t frame) {
+    Body& b = sBodies[slot];
+    for (int k = 0; k < 3; k++) {
+        b.pos[k] = pos[k];
+    }
+    b.yaw = yaw;
+    b.pitch = pitch;
+    b.lengthUnits = lengthM * 68.0f; // RF3_UNITS_PER_METRE
+    b.frame = frame;
+}
+
+extern "C" void RF3FishSwim_SetPushOff(int32_t on) {
+    sPushOff = on != 0;
+}
+
+extern "C" int32_t RF3FishSwim_BodiesOverlap(int32_t a, int32_t b) {
+    auto ia = sBodies.find(a);
+    auto ib = sBodies.find(b);
+    if (ia == sBodies.end() || ib == sBodies.end()) {
+        return 0;
+    }
+    auto sa = sStates.find(a);
+    const int32_t rank = (sa != sStates.end()) ? sa->second.rank : 0;
+    float sphA[2][3], sphB[2][3];
+    Spheres(ia->second.pos, ia->second.yaw, ia->second.pitch, ia->second.lengthUnits, sphA);
+    Spheres(ib->second.pos, ib->second.yaw, ib->second.pitch, ib->second.lengthUnits, sphB);
+    return Overlap(sphA, OwnRadius(ia->second.lengthUnits, rank), sphB, ib->second.lengthUnits * 0.25f * 1.5f) ? 1 : 0;
 }
 
 extern "C" void RF3FishSwim_DepthBand(float waterY, float centreFloorY, float spotFloorY, int32_t layerMin,
@@ -547,9 +708,12 @@ extern "C" void RF3FishSwim_Step(const RF3FishSwimInput* inp, RF3FishSwimOutput*
         Enter(c, RF3_SWIM_HOVER, out, RF3_SWIM_END_NONE);
     }
     s.frame = in.frame;
+    s.rank = in.species.rank;
     const int ticks = std::max(1, in.substeps);
     for (int i = 0; i < ticks; i++) {
         s.t += kTick;
+        s.ghostT = std::max(0.0f, s.ghostT - kTick); // 0x00198910
+        s.sincePushLog += kTick;
         if (s.mode == RF3_SWIM_HOVER) {
             if (HoverTick(c)) {
                 int32_t next = RF3_SWIM_HOVER;
@@ -574,6 +738,7 @@ extern "C" void RF3FishSwim_Step(const RF3FishSwimInput* inp, RF3FishSwimOutput*
         out->step[k] = c.pos[k] - in.pos[k];
         out->target[k] = s.target[k];
     }
+    RF3FishSwim_Body(in.slot, c.pos, s.yaw, s.pitch, in.lengthM, in.frame); // step 47e: where it is now
     out->yaw = s.yaw;
     out->pitch = s.pitch;
     out->mode = s.mode;

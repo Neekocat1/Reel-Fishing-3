@@ -20,12 +20,12 @@
       "currentReach": 5.0,
       "currentSpeed": 0.20000000298023224,
       "currentYaw": 58.0,
-      "fishCount": 6,
+      "fishCount": 15,
       "holes": [],
-      "maxX": 1965.6671142578125,
-      "maxZ": 4776.41943359375,
-      "minX": 585.9400634765625,
-      "minZ": 2827.196533203125,
+      "maxX": 1965.699951171875,
+      "maxZ": 4776.39990234375,
+      "minX": 585.9000244140625,
+      "minZ": 2827.199951171875,
       "name": "Scene 87 region 1",
       "outline": [
         [
@@ -70,6 +70,26 @@
         {
           "name": "Bluegill n",
           "record": 20
+        },
+        {
+          "name": "Char n",
+          "record": 1
+        },
+        {
+          "name": "Yamame Trout n",
+          "record": 5
+        },
+        {
+          "name": "Largemouth Bass n",
+          "record": 15
+        },
+        {
+          "name": "Florida Bass n",
+          "record": 17
+        },
+        {
+          "name": "Rainbow Trout n",
+          "record": 22
         }
       ],
       "scene": 87,
