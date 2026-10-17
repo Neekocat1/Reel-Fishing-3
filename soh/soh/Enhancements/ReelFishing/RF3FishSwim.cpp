@@ -104,6 +104,7 @@ struct SwimState {
     int32_t code = -1;
     int32_t raw = -1;
     float blend = 0.0f;
+    uint32_t frame = 0; // step 47d: the game frame it last ran
 };
 
 std::map<int32_t, SwimState> sStates;
@@ -493,6 +494,17 @@ extern "C" int32_t RF3FishSwim_Species(int32_t record, RF3FishSwimSpecies* out, 
     return 1;
 }
 
+extern "C" int32_t RF3FishSwim_Motion(int32_t slot, uint32_t frame, int32_t* code, int32_t* rawAnim, float* blend) {
+    auto it = sStates.find(slot);
+    if (it == sStates.end() || !it->second.started || (frame - it->second.frame) > 1u) {
+        return 0;
+    }
+    *code = it->second.code;
+    *rawAnim = it->second.raw;
+    *blend = it->second.blend;
+    return 1;
+}
+
 extern "C" void RF3FishSwim_Forget(int32_t slot) {
     sStates.erase(slot);
 }
@@ -534,6 +546,7 @@ extern "C" void RF3FishSwim_Step(const RF3FishSwimInput* inp, RF3FishSwimOutput*
         s.mode = -1;
         Enter(c, RF3_SWIM_HOVER, out, RF3_SWIM_END_NONE);
     }
+    s.frame = in.frame;
     const int ticks = std::max(1, in.substeps);
     for (int i = 0; i < ticks; i++) {
         s.t += kTick;

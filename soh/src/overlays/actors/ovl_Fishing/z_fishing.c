@@ -7525,6 +7525,7 @@ static s32 Fishing_RF3FreeSwim(Fishing* this, PlayState* play, Input* input) {
     in.currentSpeedMps = sRF3SwimCurrent[slot][1];
     in.hp = 100.0f;
     in.substeps = RF3_SUBSTEPS;
+    in.frame = play->gameplayFrames; // step 47d
     in.probe = Fishing_RF3Probe;
     in.clampXZ = Fishing_RF3SwimClamp;
     in.codeTurn = RF3FishModel_CodeTurn;

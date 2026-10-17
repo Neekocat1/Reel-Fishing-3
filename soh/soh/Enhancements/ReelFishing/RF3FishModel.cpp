@@ -38,6 +38,7 @@
 #include "soh/cvar_prefixes.h"
 #include "RF3Bridge.h"
 #include "RF3FishMove.h"
+#include "RF3FishSwim.h" // step 47d
 #include "RF3SkinnedModel.h"
 
 extern "C" {
@@ -63,6 +64,9 @@ constexpr int32_t kCodeThrash = 15;
 constexpr int32_t kCodeThrashBig = 16;
 constexpr int32_t kCodeKuh = 28;
 constexpr int32_t kRawSwimFast = 20;  // AWAY's first second (0x0019B7A0)
+// Step 47d: a raw animation asked for by number (RF3 sets it straight on the model): kRawBase + the animation. Raw 2
+// (the towed swim) is not code 2 (pattern 1, which plays animation 3).
+constexpr int32_t kRawBase = 1000;
 constexpr int32_t kRawTurnLeft = 25;  // held turns (25g)
 constexpr int32_t kRawTurnRight = 26;
 // Step 26g-2: RF3's part controllers (RF3-MECHANICS 6.5).
@@ -162,6 +166,7 @@ struct SlotAnim {
     float stepLeft = 0.0f;
     bool patternDone = false;
     bool movementTurns = false; // step 30b-2: a hooked fish's turn on the spot (63-66): RF3FishMove turns the heading
+    bool freeSwim = false;      // step 47d: this frame's motion came from RF3FishSwim (its turns on the spot too)
     // course/bank offsets, degrees: yaw (+ = RF3's right), pitch (+ = down), roll (bank)
     float off[3] = { 0, 0, 0 };
     float target[3] = { 0, 0, 0 };
@@ -833,7 +838,7 @@ void Request(SlotAnim& a, const MotionSet& s, int32_t slot, int32_t code, float 
     a.code = code;
     a.why = why;
     ClearOffsets(a);
-    auto it = sCodes.find(code);
+    auto it = (code < kRawBase) ? sCodes.find(code) : sCodes.end();
     if (it != sCodes.end()) {
         a.pattern = it->second.pattern;
         a.flags = it->second.flags;
@@ -843,7 +848,7 @@ void Request(SlotAnim& a, const MotionSet& s, int32_t slot, int32_t code, float 
     } else {
         a.pattern = -1;
         a.flags = 0;
-        StartAnim(a, s, code, blendSeconds);
+        StartAnim(a, s, code >= kRawBase ? code - kRawBase : code, blendSeconds);
         a.animRate = rawRate;
     }
     char line[220];
@@ -884,6 +889,7 @@ void AdvancePattern(SlotAnim& a, const MotionSet& s, int32_t slot, float dt, boo
 
 // The request and why [RF3 codes per fight state, RF3-MECHANICS 6.3; free swimming: 25g's speed rule as codes].
 int32_t ChooseRequest(const RF3FishDrawInput& in, SlotAnim& a, int32_t yawRate, float& blend, std::string& why) {
+    a.freeSwim = false; // step 47d: set below for a free-swimming fish
     int32_t forced = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishMotionForce"), -1);
     if (forced >= 0) {
         why = "forced";
@@ -931,6 +937,21 @@ int32_t ChooseRequest(const RF3FishDrawInput& in, SlotAnim& a, int32_t yawRate, 
             default:
                 return kCodeTowed;
         }
+    }
+    // Step 47d: a fish that free-swam this frame plays what RF3FishSwim asks for (RF3-MECHANICS 6.9): its code, or the
+    // raw animation RF3 set over it (hover turns 26/25 and 6/5, raw 2 when the turn is done)
+    int32_t swimCode = -1;
+    int32_t swimRaw = -1;
+    float swimBlend = 0.2f;
+    a.freeSwim = RF3FishSwim_Motion(in.slot, in.frame, &swimCode, &swimRaw, &swimBlend) && (swimCode >= 0);
+    if (a.freeSwim) {
+        blend = swimBlend;
+        why = "free-swim code=" + std::to_string(swimCode);
+        if (swimRaw >= 0) {
+            why += " raw=" + std::to_string(swimRaw);
+            return kRawBase + swimRaw;
+        }
+        return swimCode;
     }
     blend = 1.0f; // the free swim asks with 1.0 s (0x0019FD10)
     int32_t turn = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishMotionTurnRate"), 0x300);
@@ -1024,11 +1045,11 @@ bool MotionPose(const rf3model::SkinnedModel& m, int32_t record, const RF3FishDr
     float blend = 0.2f;
     std::string why;
     int32_t want = ChooseRequest(in, a, yawRate, blend, why);
-    if (sCodes.find(want) == sCodes.end() && !Playable(*s, want)) {
+    if (sCodes.find(want) == sCodes.end() && !Playable(*s, want >= kRawBase ? want - kRawBase : want)) {
         why += " (code " + std::to_string(want) + " not playable)";
         want = kCodeSwimSmall;
     }
-    a.movementTurns = in.hooked != 0; // step 30b-2
+    a.movementTurns = (in.hooked != 0) || a.freeSwim; // step 30b-2; step 47d: RF3FishSwim turns a free fish's heading
     Request(a, *s, in.slot, want, blend, rawRate, why, in.hooked != 0);
     if (a.pattern < 0) {
         a.animRate = rawRate; // raw animations follow the fish's speed class (and the fight's 1.5x)

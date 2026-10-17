@@ -47,6 +47,7 @@ typedef struct RF3FishSwimInput {
     float currentSpeedMps;
     float hp; // 0..100 (100 for a fish that wasn't fought)
     int32_t substeps;
+    uint32_t frame; // step 47d: play->gameplayFrames (RF3FishSwim_Motion tells the model whether the fish swam now)
     // RF3's obstacle probe (RF3-MECHANICS 6.4), a line from `from` to `to`: 0 clear, 1 hit with its unit normal,
     // 2 blocked (no normal). May be null (open water).
     int32_t (*probe)(const float from[3], const float to[3], float normal[3]);
@@ -80,6 +81,9 @@ void RF3FishSwim_Step(const RF3FishSwimInput* in, RF3FishSwimOutput* out);
 void RF3FishSwim_Forget(int32_t slot);
 // Step 47c: the record's species values (RF3FishTable.h kFishSwim) and depth layers. Returns 0 for an unknown record.
 int32_t RF3FishSwim_Species(int32_t record, RF3FishSwimSpecies* out, int32_t* layerMin, int32_t* layerMax);
+// Step 47d: the motion the slot's free swim asks for: RF3's request code and the raw animation set over it (-1 none)
+// and the blend (s). Returns 0 if the slot didn't free-swim on `frame` (or the frame before).
+int32_t RF3FishSwim_Motion(int32_t slot, uint32_t frame, int32_t* code, int32_t* rawAnim, float* blend);
 // RF3's random generator is seeded per run (the harness sets it for repeatable runs)
 void RF3FishSwim_Seed(uint32_t seed);
 // The depth band (spawner 0x0018CA10, OoT y up). The water column under the spot's centre (surface down to
