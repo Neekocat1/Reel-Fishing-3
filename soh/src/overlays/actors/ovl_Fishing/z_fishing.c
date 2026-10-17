@@ -73,6 +73,17 @@ static s32 sRF3WallContact[RF3_REGION_SLOTS];   // frames in a row with a hit (0
 // island's +43; a lower bridge deck would count as land]
 #define RF3_SHORE_PROBE_HEIGHT 60.0f
 static s32 sRF3ShoreBack[RF3_REGION_SLOTS]; // step 26e-9: frames in a row the shore rule sent the fish back
+// Step 48a: rf3-jump, a region fish moving more than it should in one frame (log only, Fishing_RF3JumpLog)
+static Vec3f sRF3JumpPreWall;                 // just before OoT's wall/floor check in Fishing_UpdateFishImpl
+static Vec3f sRF3JumpPostWall;                // just after it
+static s32 sRF3JumpWallRan = false;           // the check ran this update
+static f32 sRF3JumpSpeed = 0.0f;              // speedXZ at the check (a free fish's speed is its RF3 step)
+static f32 sRF3JumpShoreFloor = -32000.0f;    // Fishing_RF3KeepInWater's floor this update
+static u32 sRF3JumpSecond[RF3_REGION_SLOTS];  // the second (gameplayFrames / 20) of the last lines
+static s32 sRF3JumpLines[RF3_REGION_SLOTS];   // lines written in that second
+static s32 sRF3JumpSkipped[RF3_REGION_SLOTS]; // lines not written since the last one
+#define RF3_JUMP_STAGE_UNITS 10.0f            // [assumed] a stage other than the move moving the fish this far is logged
+#define RF3_JUMP_LINES_PER_SECOND 5
 
 #define WATER_SURFACE_Y(play)                         \
     ((sRF3CurRegion != NULL) ? sRF3CurRegion->surfaceY \
@@ -110,6 +121,7 @@ static void Fishing_UpdateCinematics(Fishing* this, PlayState* play);
 static s32 Fishing_RF3LureInBiteArea(void);
 static void Fishing_RF3KeepInWater(Fishing* this, PlayState* play);
 static void Fishing_RF3WallTest(Fishing* this, PlayState* play);
+static void Fishing_RF3JumpLog(Fishing* this, PlayState* play, s32 slot, Vec3f* start, Vec3f* impl, Vec3f* wall);
 static f32 Fishing_RF3ShoreDistance(Fishing* this, PlayState* play);
 static s32 Fishing_RF3OutOfArea(f32 x, f32 z);
 static s32 Fishing_RF3FishIndex(Fishing* this);
@@ -142,6 +154,14 @@ static s16 sRF3SwimYaw[RF3_REGION_SLOTS];       // RF3's heading this frame, dra
 static s16 sRF3SwimPitch[RF3_REGION_SLOTS];
 static u32 sRF3SwimDrawFrame[RF3_REGION_SLOTS];
 static s32 sRF3SwimSlot = 0;                    // the slot RF3FishSwim's shape clamp is for
+
+// Step 48c: did Fishing_RF3FreeSwim run for this region fish in this update?
+static s32 Fishing_RF3SwamThisFrame(Fishing* this, PlayState* play) {
+    s32 slot = this->actor.params - EN_FISH_REGION;
+
+    return RF3_IS_REGION_FISH(this) && (slot >= 0) && (slot < RF3_REGION_SLOTS) &&
+           (sRF3SwimDrawFrame[slot] == (u32)play->gameplayFrames + 1);
+}
 
 typedef struct {
     /* 0x00 */ u8 isLoach;
@@ -5131,14 +5151,32 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
         if ((this->actor.speedXZ > 0.0f) || (this->fishState == 5)) {
             f32 velocityY = this->actor.velocity.y;
 
+            if (sRF3CurRegion != NULL) { // step 48a: where the fish is before OoT's wall/floor check
+                sRF3JumpPreWall = this->actor.world.pos;
+                sRF3JumpSpeed = this->actor.speedXZ;
+                sRF3JumpWallRan = true;
+            }
+
             spD8 = this->fishLength * 0.1f;
 
             this->actor.world.pos.y -= spD8;
             this->actor.prevPos.y -= spD8;
             this->actor.velocity.y = -1.0f;
-            Actor_UpdateBgCheckInfo(play, &this->actor, 30.0f, 30.0f, 100.0f, 0x45);
+            if (Fishing_RF3SwamThisFrame(this, play)) {
+                // Step 48c (option A): no OoT wall push for a free-swimming region fish. Its 30-unit push, checked above
+                // the water, popped fish 10-20 units sideways in narrow channels (48a log). RF3's probe steers it and
+                // Fishing_RF3WallTest catches what the probe missed; the floor and water checks still run. The wall
+                // flag is cleared so an old one doesn't start OoT's bump timer.
+                this->actor.bgCheckFlags &= ~BGCHECKFLAG_WALL;
+                Actor_UpdateBgCheckInfo(play, &this->actor, 30.0f, 30.0f, 100.0f, 0x44);
+            } else {
+                Actor_UpdateBgCheckInfo(play, &this->actor, 30.0f, 30.0f, 100.0f, 0x45);
+            }
             this->actor.world.pos.y += spD8;
             this->actor.prevPos.y += spD8;
+            if (sRF3CurRegion != NULL) { // step 48a: and after it
+                sRF3JumpPostWall = this->actor.world.pos;
+            }
 
             this->actor.velocity.y = velocityY;
 
@@ -5208,13 +5246,23 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
 // Reel Fishing III mod (step 16d): a region fish updates with its region standing in for the pond.
 void Fishing_UpdateFish(Actor* thisx, PlayState* play) {
     Fishing* this = (Fishing*)thisx;
+    Vec3f jumpStart = this->actor.world.pos; // step 48a: the positions between the stages, for rf3-jump
+    Vec3f jumpImpl;
+    Vec3f jumpWall;
 
     sRF3CurRegion = RF3_IS_REGION_FISH(this) ? &sRF3RegionBoxes[this->actor.params - EN_FISH_REGION] : NULL;
+    sRF3JumpWallRan = false;
+    sRF3JumpShoreFloor = -32000.0f;
     Fishing_UpdateFishImpl(thisx, play);
+    jumpImpl = this->actor.world.pos;
     Fishing_RF3WallTest(this, play);    // step 26e-8
+    jumpWall = this->actor.world.pos;
     Fishing_RF3KeepInWater(this, play); // step 16f
     if (sRF3CurRegion != NULL) {
         s32 slot = this->actor.params - EN_FISH_REGION;
+        if (this->actor.update != NULL) {
+            Fishing_RF3JumpLog(this, play, slot, &jumpStart, &jumpImpl, &jumpWall); // step 48a (before sRF3WallPrev moves on)
+        }
         // Step 47c: a free-swimming fish faces RF3's heading (its step was made along the direction to its target)
         if (sRF3SwimDrawFrame[slot] == play->gameplayFrames + 1) {
             this->actor.world.rot.y = this->actor.shape.rot.y = sRF3SwimYaw[slot];
@@ -7733,6 +7781,13 @@ static void Fishing_RF3InitRegionFish(Fishing* this, PlayState* play) {
     sRF3SwimFrame[slot] = 0;
     sRF3SwimDrawFrame[slot] = 0;
     RF3FishSwim_Forget(slot); // step 47e: and its body
+    // Step 48c-2: and its wall-test history. Fishing_RF3WallTest traces from the slot's last spot; for a new fish that
+    // was the previous fish's, and since 48c a free fish's first frame slid or stopped it there (47-606 units, 48c log).
+    // The spot is now the spawn point; the frame is now, so a first update this frame skips the test and one next
+    // frame traces from the spawn point.
+    sRF3WallPrev[slot] = this->actor.world.pos;
+    sRF3WallPrevFrame[slot] = (u32)play->gameplayFrames;
+    sRF3WallContact[slot] = 0;
 
     this->fishState = 10;
     this->fishStateNext = 10;
@@ -7740,6 +7795,22 @@ static void Fishing_RF3InitRegionFish(Fishing* this, PlayState* play) {
     this->perception = 0.1f;
     this->fishLength = info.ootLength;
     this->actor.home.pos = this->actor.world.pos;
+
+    // Step 48b: a real floor before OoT's first floor check. floorHeight was 0 until that check (which runs only once
+    // the fish has speed), so RF3's first swim step saw ground at y 0, above Kokiri's water, and put the fish halfway
+    // up to it: it crossed the surface and OoT's leap code splashed (48a log). Down from the fish, like OoT's check;
+    // no floor = BGCHECK_Y_MIN, which RF3's move ignores.
+    {
+        CollisionPoly* floorPoly;
+        Vec3f floorProbe = this->actor.world.pos;
+        char line[200];
+
+        this->actor.floorHeight = BgCheck_EntityRaycastFloor1(&play->colCtx, &floorPoly, &floorProbe);
+        snprintf(line, sizeof(line), "slot=%d rf3-floor-init floor=%.0f pos=(%.0f,%.0f,%.0f) surface=%.0f", slot,
+                 this->actor.floorHeight, this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z,
+                 info.surfaceY);
+        RF3FishMove_Log(line);
+    }
 }
 
 // Called from RF3RegionFish.cpp: remove this scene's region fish (editor "respawn"). Not while one is
@@ -7818,6 +7889,7 @@ static void Fishing_RF3WallTest(Fishing* this, PlayState* play) {
     f32 into;
     f32 planeDist;
     s32 stopped = false;
+    s32 freeSwim; // step 48c
     char line[320];
 
     if ((sRF3CurRegion == NULL) || (this->actor.update == NULL)) {
@@ -7825,10 +7897,11 @@ static void Fishing_RF3WallTest(Fishing* this, PlayState* play) {
     }
     slot = this->actor.params - EN_FISH_REGION;
     next = this->actor.world.pos;
-    if ((this->fishState != 5) || ((u32)(sRF3WallPrevFrame[slot] + 1) != play->gameplayFrames) ||
+    freeSwim = Fishing_RF3SwamThisFrame(this, play); // step 48c: free fish too (no OoT wall push for them)
+    if (((this->fishState != 5) && !freeSwim) || ((u32)(sRF3WallPrevFrame[slot] + 1) != play->gameplayFrames) ||
         !BgCheck_EntityLineTest1(&play->colCtx, &sRF3WallPrev[slot], &next, &hit, &poly, true, true, true, true,
                                  &bgId)) {
-        // not hooked, no update last frame (nothing to test from), or a clear move
+        // not hooked or free-swimming, no update last frame (nothing to test from), or a clear move
         if (sRF3WallContact[slot] != 0) {
             snprintf(line, sizeof(line), "slot=%d rf3-wall-clear after=%d frames fish=(%.0f,%.0f,%.0f)", slot,
                      sRF3WallContact[slot], next.x, next.y, next.z);
@@ -7858,14 +7931,67 @@ static void Fishing_RF3WallTest(Fishing* this, PlayState* play) {
     if (sRF3WallContact[slot] == 0) {
         snprintf(line, sizeof(line),
                  "slot=%d rf3-wall-cross from=(%.0f,%.0f,%.0f) to=(%.0f,%.0f,%.0f) hit=(%.0f,%.0f,%.0f) "
-                 "normal=(%.2f,%.2f,%.2f) ootWall=%d result=%s at=(%.0f,%.0f,%.0f)",
+                 "normal=(%.2f,%.2f,%.2f) ootWall=%d result=%s at=(%.0f,%.0f,%.0f) state=%d free=%d",
                  slot, prev.x, prev.y, prev.z, next.x, next.y, next.z, hit.x, hit.y, hit.z, nx, ny, nz,
                  (this->actor.bgCheckFlags & BGCHECKFLAG_WALL) ? 1 : 0, stopped ? "stop" : "slide", slid.x, slid.y,
-                 slid.z);
+                 slid.z, this->fishState, freeSwim ? 1 : 0);
         RF3FishMove_Log(line);
     }
     sRF3WallContact[slot]++;
     this->actor.world.pos = slid;
+}
+
+// Step 48a: log a region fish that moved more than it should in one frame (DESIGN "Step 48 design"), with the move
+// split by stage: gap (last update's end -> this one's start: something outside the fish's update, or a new fish in
+// the slot), move (Fishing_UpdateFishImpl up to OoT's wall/floor check: RF3's step through OoT's mover), ootWall (that
+// check), rest (the rest of Fishing_UpdateFishImpl), wallTest (Fishing_RF3WallTest), shore (Fishing_RF3KeepInWater).
+// Log only: nothing here changes the fish.
+static void Fishing_RF3JumpLog(Fishing* this, PlayState* play, s32 slot, Vec3f* start, Vec3f* impl, Vec3f* wall) {
+    Vec3f end = this->actor.world.pos;
+    Vec3f preWall = sRF3JumpWallRan ? sRF3JumpPreWall : *impl;
+    Vec3f postWall = sRF3JumpWallRan ? sRF3JumpPostWall : *impl;
+    s32 hasPrev = ((u32)(sRF3WallPrevFrame[slot] + 1) == (u32)play->gameplayFrames);
+    Vec3f prev = hasPrev ? sRF3WallPrev[slot] : *start;
+    f32 speed = sRF3JumpWallRan ? sRF3JumpSpeed : this->actor.speedXZ;
+    f32 limit = (2.0f * speed) + RF3_JUMP_STAGE_UNITS;
+    f32 gap = Math_Vec3f_DistXYZ(&prev, start);
+    f32 move = Math_Vec3f_DistXYZ(start, &preWall);
+    f32 ootWall = Math_Vec3f_DistXYZ(&preWall, &postWall);
+    f32 rest = Math_Vec3f_DistXYZ(&postWall, impl);
+    f32 wallTest = Math_Vec3f_DistXYZ(impl, wall);
+    f32 shore = Math_Vec3f_DistXYZ(wall, &end);
+    f32 total = Math_Vec3f_DistXYZ(start, &end);
+    u32 second = (u32)play->gameplayFrames / 20;
+    s32 freeSwim = (sRF3SwimDrawFrame[slot] == play->gameplayFrames + 1);
+    char line[700];
+
+    if ((total <= limit) && (gap <= limit) && (ootWall <= RF3_JUMP_STAGE_UNITS) && (rest <= RF3_JUMP_STAGE_UNITS) &&
+        (wallTest <= RF3_JUMP_STAGE_UNITS) && (shore <= RF3_JUMP_STAGE_UNITS)) {
+        return;
+    }
+    if (sRF3JumpSecond[slot] != second) {
+        sRF3JumpSecond[slot] = second;
+        sRF3JumpLines[slot] = 0;
+    }
+    if (sRF3JumpLines[slot] >= RF3_JUMP_LINES_PER_SECOND) {
+        sRF3JumpSkipped[slot]++;
+        return;
+    }
+    sRF3JumpLines[slot]++;
+    snprintf(line, sizeof(line),
+             "slot=%d rf3-jump frame=%u state=%d free=%d speed=%.1f total=%.1f gap=%.1f move=%.1f ootWall=%.1f "
+             "rest=%.1f wallTest=%.1f shore=%.1f prev=(%.0f,%.0f,%.0f)%s start=(%.0f,%.0f,%.0f) "
+             "preWall=(%.0f,%.0f,%.0f) postWall=(%.0f,%.0f,%.0f) impl=(%.0f,%.0f,%.0f) wall=(%.0f,%.0f,%.0f) "
+             "end=(%.0f,%.0f,%.0f) wallCheck=%d ootWallFlag=%d wallYaw=%.0fdeg floor=%.0f shoreFloor=%.0f "
+             "surface=%.0f skipped=%d",
+             slot, (u32)play->gameplayFrames, this->fishState, freeSwim ? 1 : 0, speed, total, gap, move, ootWall, rest,
+             wallTest, shore, prev.x, prev.y, prev.z, hasPrev ? "" : "(none)", start->x, start->y, start->z,
+             preWall.x, preWall.y, preWall.z, postWall.x, postWall.y, postWall.z, impl->x, impl->y, impl->z, wall->x,
+             wall->y, wall->z, end.x, end.y, end.z, sRF3JumpWallRan ? 1 : 0,
+             (this->actor.bgCheckFlags & BGCHECKFLAG_WALL) ? 1 : 0, this->actor.wallYaw * (180.0f / 32768.0f),
+             this->actor.floorHeight, sRF3JumpShoreFloor, sRF3CurRegion->surfaceY, sRF3JumpSkipped[slot]);
+    sRF3JumpSkipped[slot] = 0;
+    RF3FishMove_Log(line);
 }
 
 // A region box can take in the shore. Over ground shallower than RF3_REGION_MIN_DEPTH the fish goes
@@ -7880,6 +8006,7 @@ static void Fishing_RF3KeepInWater(Fishing* this, PlayState* play) {
     }
     slot = this->actor.params - EN_FISH_REGION;
     floorY = Fishing_RF3FloorAt(play, this->actor.world.pos.x, this->actor.world.pos.z);
+    sRF3JumpShoreFloor = floorY; // step 48a
     if (floorY > (sRF3CurRegion->surfaceY - RF3_REGION_MIN_DEPTH)) {
         if ((sRF3ShoreBack[slot] == 0) && (this->fishState == 5)) { // step 26e-9: log a hooked fish's first frame back
             char line[200];
