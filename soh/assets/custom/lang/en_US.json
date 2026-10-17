@@ -1491,6 +1491,16 @@
                 "name": "RF3 Catch Checks",
                 "description": "Reel Fishing III mod: how many catches (the 1st, 2nd, ...) are checks when RF3 tackle is shuffled."
             },
+            "rf3_check_mode": {
+                "name": "RF3 Check Mode",
+                "description": [
+                    "Reel Fishing III mod: which catches are checks when RF3 tackle is shuffled.\n",
+                    "\n",
+                    "Simple - the first catches are checks (as many as RF3 Catch Checks).\n",
+                    "\n",
+                    "Advanced - each lure, fly, bait and float unlock condition is a check (a size, a species, a streak, ...); RF3 Catch Checks is not used and is hidden."
+                ]
+            },
             "rocs_feather": {
                 "name": "Roc's Feather",
                 "description": [

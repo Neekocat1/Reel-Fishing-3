@@ -1,9 +1,22 @@
 {
   "regions": [
     {
-      "age": "child",
+      "age": "both",
       "angle": -16.60000228881836,
-      "conditions": [],
+      "conditions": [
+        {
+          "age": "both",
+          "flag": 62,
+          "kind": "switch",
+          "set": false
+        },
+        {
+          "age": "adult",
+          "flag": 105,
+          "kind": "event",
+          "set": true
+        }
+      ],
       "currentReach": 5.0,
       "currentSpeed": 0.20000000298023224,
       "currentYaw": 58.0,
@@ -228,6 +241,32 @@
       ],
       "scene": 87,
       "surfaceY": -1313.0
+    },
+    {
+      "age": "both",
+      "angle": 20.5,
+      "conditions": [],
+      "currentReach": 5.0,
+      "currentSpeed": 0.05000000074505806,
+      "currentYaw": 53.0,
+      "fishCount": 3,
+      "maxX": 1338.9085693359375,
+      "maxZ": -59.28399658203125,
+      "minX": 1195.2174072265625,
+      "minZ": -259.258544921875,
+      "name": "Scene 85 region 1",
+      "records": [
+        {
+          "name": "Bluegill s",
+          "record": 19
+        },
+        {
+          "name": "Pale Chub n",
+          "record": 12
+        }
+      ],
+      "scene": 85,
+      "surfaceY": -12.0
     }
   ],
   "version": 1

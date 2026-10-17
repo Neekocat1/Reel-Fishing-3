@@ -21,10 +21,13 @@
 #include "RF3Sim.h"
 #include "RF3SizeMap.h" // step 23d: kSpeciesHylianLoach
 #include "RF3TackleAssets.h"
+#include "RF3FishTable.h" // step 43a: size classes
 
 extern "C" {
 #include "z64.h"
 #include "functions.h"
+#include "variables.h" // step 43a: gSaveContext.dayTime
+extern PlayState* gPlayState; // step 43a: the scene and the frame at a catch
 }
 
 namespace {
@@ -40,7 +43,20 @@ constexpr uint8_t kBaitCount = 9; // RF3 refills collected baits to 9
 // Vibration G; Lure Rod/Bass is now earned by any 5 fish.)
 constexpr int32_t kStarterRod = 10;  // OoT's fishing pole
 constexpr int32_t kStarterLure = 91; // OoT's normal lure ("Fishing Lure")
-constexpr int32_t kSinkingLure = 92; // OoT's sinking lure: caught a Hylian Loach
+constexpr int32_t kSinkingLure = 92; // OoT's sinking lure: step 43a, its own condition (a Hylian Bass of 655 mm+)
+// Step 43a (docs/LURE-UNLOCK-CHOICES.md, user): rods 0-2 bring their first lure. Step 44b
+// (docs/FLY-BAIT-FLOAT-UNLOCK-CHOICES.md, user): the Fly Rod its first fly, the bait rods a bait and a float (the
+// Big Game Fly Rod and Stream Pole L use what Link has).
+struct RodStarter {
+    int32_t rod;
+    int32_t kind;
+    int32_t index;
+};
+constexpr RodStarter kRodStarters[] = {
+    { 0, RF3_STOCK_LURE, 48 },  { 1, RF3_STOCK_LURE, 0 },   { 2, RF3_STOCK_LURE, 11 }, { 3, RF3_STOCK_FLY, 0 },
+    { 5, RF3_STOCK_BAIT, 0 },   { 5, RF3_STOCK_FLOAT, 2 },  { 7, RF3_STOCK_BAIT, 6 },  { 7, RF3_STOCK_FLOAT, 0 },
+    { 8, RF3_STOCK_BAIT, 8 },   { 8, RF3_STOCK_FLOAT, 4 },  { 9, RF3_STOCK_BAIT, 7 },  { 9, RF3_STOCK_FLOAT, 2 },
+};
 
 struct Entry {
     uint8_t collected = 0;
@@ -54,6 +70,15 @@ Entry sStock[RF3_STOCK_KINDS][kMaxSize];
 bool SingleCopy(int32_t kind) {
     return (kind == RF3_STOCK_LURE) || (kind == RF3_STOCK_FLY);
 }
+
+// Step 43a: the lure conditions' progress (saved), and the lure's landing and the bite of the fight in progress.
+rf3::UnlockProgress sUnlock;
+bool sLandValid = false;
+uint32_t sLandFrame = 0;
+bool sBiteValid = false;
+uint32_t sBiteFrame = 0;
+float sBiteSeconds = -1.0f;
+int32_t sHookedBait = -1; // step 44b: the bait the fish took (the set shows "---" after the strike)
 
 // Step 21b: fish caught (counted when the catch is submitted) since the rod was bought, and what the
 // latest catch unlocked (-1 = nothing), for the catch message.
@@ -170,6 +195,10 @@ void Clear() {
     sLastRodCount = 0;
     sLastLostKind = -1;
     sLastLostIndex = -1;
+    sUnlock = {}; // step 43a
+    sLandValid = false;
+    sBiteValid = false;
+    sBiteSeconds = -1.0f;
 }
 
 // One line in logs/rf3_records.txt per change, with the totals, so a session can be checked from numbers.
@@ -201,6 +230,7 @@ void Log(const char* what, int32_t kind, int32_t index, const char* why) {
 // --- Step 21e: loss and restore -------------------------------------------------------------------
 
 void RestoreForScene(int16_t sceneNum) {
+    rf3::UnlockNewVisit(sUnlock); // step 43a: "in one visit" starts over
     int32_t restored = 0;
     int32_t refilled = 0;
     for (int32_t k = 0; k < RF3_STOCK_KINDS; k++) {
@@ -258,6 +288,20 @@ void SaveSection(const SaveContext& saveContext, int sectionID, bool fullSave) {
         SaveManager::Instance->SaveData("bitterlingOver3in", p.bitterlingOver3in);
         SaveManager::Instance->SaveData("bitterling", p.bitterling);
     });
+    SaveManager::Instance->SaveStruct("unlocks", [&]() { // step 43a: per lure; step 44a: per slot (lures, flies, baits, floats)
+        SaveManager::Instance->SaveArray("count", rf3::kUnlockSlots, [](size_t i) {
+            SaveManager::Instance->SaveData("", sUnlock.count[i]);
+        });
+        SaveManager::Instance->SaveArray("setLo", rf3::kUnlockSlots, [](size_t i) {
+            SaveManager::Instance->SaveData("", sUnlock.setLo[i]);
+        });
+        SaveManager::Instance->SaveArray("setHi", rf3::kUnlockSlots, [](size_t i) {
+            SaveManager::Instance->SaveData("", sUnlock.setHi[i]);
+        });
+        SaveManager::Instance->SaveArray("sumG", rf3::kUnlockSlots, [](size_t i) {
+            SaveManager::Instance->SaveData("", sUnlock.sumG[i]);
+        });
+    });
 }
 
 void LoadSection() {
@@ -307,6 +351,22 @@ void LoadSection() {
         SaveManager::Instance->LoadData("paleChub", p.paleChub, false);
         SaveManager::Instance->LoadData("bitterlingOver3in", p.bitterlingOver3in, false);
         SaveManager::Instance->LoadData("bitterling", p.bitterling, false);
+    });
+    sUnlock = {};
+    SaveManager::Instance->LoadStruct("unlocks", [&]() { // step 43a; absent before it: all 0; step 44a: a save with
+                                                         // only the 93 lure slots defaults the rest to 0
+        SaveManager::Instance->LoadArray("count", rf3::kUnlockSlots, [](size_t i) {
+            SaveManager::Instance->LoadData("", sUnlock.count[i], static_cast<uint16_t>(0));
+        });
+        SaveManager::Instance->LoadArray("setLo", rf3::kUnlockSlots, [](size_t i) {
+            SaveManager::Instance->LoadData("", sUnlock.setLo[i], static_cast<uint64_t>(0));
+        });
+        SaveManager::Instance->LoadArray("setHi", rf3::kUnlockSlots, [](size_t i) {
+            SaveManager::Instance->LoadData("", sUnlock.setHi[i], static_cast<uint64_t>(0));
+        });
+        SaveManager::Instance->LoadArray("sumG", rf3::kUnlockSlots, [](size_t i) {
+            SaveManager::Instance->LoadData("", sUnlock.sumG[i], static_cast<uint32_t>(0));
+        });
     });
     Log("stock-load", -1, -1, fixed ? "out-of-range-fixed" : "save");
 }
@@ -422,11 +482,158 @@ extern "C" void RF3Stock_GiveStarter(const char* why) {
     RF3Stock_Give(RF3_STOCK_LURE, kStarterLure, why);
 }
 
+// --- Step 43a: lure unlock conditions ------------------------------------------------------------------------------
+
+namespace {
+
+// The lure's or fly's type (tackle.json "type"), from a box of that kind (lure and fly numbers overlap).
+int32_t TypeOf(const char* boxKind, int32_t index) {
+    for (const rf3tackle::Box& box : rf3tackle::Get().boxes) {
+        if (box.kind != boxKind) {
+            continue;
+        }
+        for (const rf3tackle::Item& it : box.lures) {
+            if (it.index == index) {
+                return it.type;
+            }
+        }
+    }
+    return -1;
+}
+
+char SizeClassOf(int32_t record) {
+    for (const rf3::FishRecord& r : rf3::kFishRecords) {
+        if (r.record == record) {
+            return r.sizeClass;
+        }
+    }
+    return 'n';
+}
+
+// The chosen line's place among the box's lines (0 = thinnest), or -1.
+int32_t LineCellOf(const RF3TackleChoice& c) {
+    const rf3tackle::Assets& a = rf3tackle::Get();
+    if (!a.loaded || c.box < 0 || c.box >= static_cast<int32_t>(a.boxes.size())) {
+        return -1;
+    }
+    const auto& lines = a.boxes[c.box].lines;
+    for (size_t i = 0; i < lines.size(); i++) {
+        if (lines[i].index == c.line) {
+            return static_cast<int32_t>(i);
+        }
+    }
+    return -1;
+}
+
+// Step 44a: a condition slot's stock kind and index (rf3::kFlySlot0 etc.).
+int32_t SlotKind(int32_t slot) {
+    return slot < rf3::kFlySlot0    ? RF3_STOCK_LURE
+           : slot < rf3::kBaitSlot0 ? RF3_STOCK_FLY
+           : slot < rf3::kFloatSlot0 ? RF3_STOCK_BAIT
+                                    : RF3_STOCK_FLOAT;
+}
+int32_t SlotIndex(int32_t slot) {
+    return slot < rf3::kFlySlot0    ? slot
+           : slot < rf3::kBaitSlot0 ? slot - rf3::kFlySlot0
+           : slot < rf3::kFloatSlot0 ? slot - rf3::kBaitSlot0
+                                    : slot - rf3::kFloatSlot0;
+}
+
+// Is the slot's item still to be earned? Normal play: not collected. An advanced seed: its check not done (check and
+// flag = RAND_INF_RF3_LURE_0 + slot, step 44c).
+bool SlotOpen(int32_t slot, bool rando) {
+    if (rando) {
+        return RF3Rando_Advanced() && !Flags_GetRandomizerInf(static_cast<RandomizerInf>(RAND_INF_RF3_LURE_0 + slot));
+    }
+    return !sStock[SlotKind(slot)][SlotIndex(slot)].collected;
+}
+
+} // namespace
+
+// Counts the catch toward every unlock condition (lures; step 44a: flies, baits, floats), then gives (normal play) or
+// checks (an advanced seed) each met one.
+static void UnlockConditionsForCatch(int32_t record, int32_t species, float lengthMm, int32_t weightG,
+                                   const RF3TackleChoice& tackle, bool rando) {
+    rf3::UnlockCatch k;
+    k.species = species;
+    k.sizeClass = SizeClassOf(record);
+    k.lengthMm = lengthMm;
+    k.weightG = weightG;
+    k.rod = tackle.rod;
+    const rf3tackle::Assets& a = rf3tackle::Get();
+    const rf3tackle::Box* box =
+        (a.loaded && tackle.box >= 0 && tackle.box < static_cast<int32_t>(a.boxes.size())) ? &a.boxes[tackle.box] : nullptr;
+    const std::string boxKind = box != nullptr ? box->kind : "";
+    k.lure = boxKind == "lure" ? tackle.lure : -1;
+    k.lureType = k.lure >= 0 ? TypeOf("lure", k.lure) : -1;
+    k.fly = boxKind == "fly" ? tackle.lure : -1; // a fly box's choice is in the lure field
+    k.flyType = k.fly >= 0 ? TypeOf("fly", k.fly) : -1;
+    k.bait = boxKind == "bait" ? (sHookedBait >= 0 ? sHookedBait : tackle.bait) : -1;
+    k.floatIdx = boxKind == "bait" ? tackle.floatIdx : -1;
+    k.scene = gPlayState != nullptr ? gPlayState->sceneNum : -1;
+    k.pond = k.scene == SCENE_FISHING_POND;
+    k.dayHours = gSaveContext.dayTime * 24.0f / 65536.0f;
+    k.lineCell = LineCellOf(tackle);
+    k.biteSeconds = sBiteSeconds;
+    if (sBiteValid && gPlayState != nullptr) {
+        k.landSeconds = static_cast<float>(gPlayState->gameplayFrames - sBiteFrame) / 20.0f; // 20 Hz game frames
+    }
+    rf3::UnlockAddCatch(sUnlock, k);
+    sBiteValid = false;
+    sBiteSeconds = -1.0f;
+    sHookedBait = -1;
+    char why[240];
+    std::snprintf(why, sizeof(why),
+                  "species=%d class=%c mm=%.1f g=%d rod=%d lure=%d type=%d fly=%d flytype=%d bait=%d float=%d scene=%d "
+                  "pond=%d hours=%.2f line=%d bite_s=%.2f land_s=%.2f",
+                  k.species, k.sizeClass, k.lengthMm, k.weightG, k.rod, k.lure, k.lureType, k.fly, k.flyType, k.bait,
+                  k.floatIdx, k.scene, k.pond ? 1 : 0, k.dayHours, k.lineCell, k.biteSeconds, k.landSeconds);
+    Log("unlock-progress", -1, -1, why);
+    for (int32_t slot = 0; slot < rf3::kUnlockSlots; slot++) {
+        if (rf3::UnlockConditionFor(slot) == nullptr || !SlotOpen(slot, rando) || !rf3::UnlockMet(sUnlock, slot)) {
+            continue;
+        }
+        const int32_t kind = SlotKind(slot);
+        const int32_t index = SlotIndex(slot);
+        char met[80];
+        std::snprintf(met, sizeof(met), "unlock-condition slot=%d count=%u", slot, sUnlock.count[slot]);
+        if (rando) {
+            RF3Rando_SetCheck(static_cast<RandomizerInf>(RAND_INF_RF3_LURE_0 + slot), "rando-unlock-condition");
+            Log("unlock-condition-check", kind, index, met);
+        } else {
+            GiveAndShow(kind, index, met);
+        }
+    }
+}
+
+extern "C" void RF3Stock_FishLost(const char* why) {
+    if (!RF3_IsEnabled()) {
+        return;
+    }
+    rf3::UnlockFishLost(sUnlock);
+    sBiteValid = false;
+    sBiteSeconds = -1.0f;
+    sHookedBait = -1;
+    Log("lure-streak-reset", -1, -1, why);
+}
+
+extern "C" void RF3Stock_NoteLureLanded(uint32_t frame) {
+    sLandValid = true;
+    sLandFrame = frame;
+}
+
+extern "C" void RF3Stock_NoteBite(uint32_t frame) {
+    sBiteValid = true;
+    sBiteFrame = frame;
+    sBiteSeconds = (sLandValid && frame >= sLandFrame) ? static_cast<float>(frame - sLandFrame) / 20.0f : -1.0f;
+    sLandValid = false;
+}
+
 // Step 21b: one item per fish caught (docs/DESIGN.md step 21). The category is the catch count mod the
 // categories that still have items; the item is a random uncollected one a rod Link owns can use, else
 // any uncollected one. Step 21c: first the catch counts toward the rod conditions, and any rod it earns
 // is given (so the item pick already sees the new rod as usable).
-extern "C" int32_t RF3Stock_UnlockForCatch(int32_t species, float lengthMm) {
+extern "C" int32_t RF3Stock_UnlockForCatch(int32_t record, int32_t species, float lengthMm, int32_t weightG) {
     sLastUnlockKind = -1;
     sLastUnlockIndex = -1;
     sLastRodCount = 0;
@@ -454,22 +661,34 @@ extern "C" int32_t RF3Stock_UnlockForCatch(int32_t species, float lengthMm) {
         if (!sStock[RF3_STOCK_ROD][r].collected && rf3::RodConditionMet(p, r) &&
             GiveAndShow(RF3_STOCK_ROD, r, rodWhy)) {
             sLastRods[sLastRodCount++] = r;
+            for (const RodStarter& st : kRodStarters) { // steps 43a/44b: what the rod needs to cast
+                if (st.rod == r && !sStock[st.kind][st.index].collected) {
+                    GiveAndShow(st.kind, st.index, "rod-starter");
+                }
+            }
         }
     }
     if (sLastRodCount == 0) {
         Log("rod-progress", -1, -1, rodWhy); // one line per catch, so the counters can be followed
     }
-    // Step 23d (user, 2026-10-08): a Hylian Loach brings OoT's sinking lure, once.
+    // Step 24d: in a seed the first Hylian Loach is a check. (Step 23d's "a loach brings the sinking lure" is replaced
+    // by lure 92's own condition, step 43a.)
     if (species == rf3::kSpeciesHylianLoach && rando) {
         RF3Rando_SetCheck(RAND_INF_RF3_FIRST_LOACH, "rando-first-loach");
-    } else if ((species == rf3::kSpeciesHylianLoach) && !sStock[RF3_STOCK_LURE][kSinkingLure].collected) {
-        GiveAndShow(RF3_STOCK_LURE, kSinkingLure, "caught-loach");
     }
+    UnlockConditionsForCatch(record, species, lengthMm, weightG, tackle, rando); // steps 43a, 44a
     // Catch #1..#N are checks; later catches unlock leftover tackle below.
-    if (rando && static_cast<int32_t>(sCatchCount) < RF3Rando_CatchChecks()) {
+    if (rando && !RF3Rando_Advanced() && static_cast<int32_t>(sCatchCount) < RF3Rando_CatchChecks()) {
         uint32_t number = sCatchCount + 1;
         sCatchCount++;
         RF3Rando_SetCheck(static_cast<RandomizerInf>(RAND_INF_RF3_CATCH_1 + number - 1), "rando-catch-check");
+        return 0;
+    }
+    // Step 44b (user): the stand-in "one item per catch" rule is only for a simple seed's catches after #N. Normal
+    // play and advanced seeds give every item by its condition.
+    if (!rando || RF3Rando_Advanced()) {
+        sCatchCount++;
+        Log("catch-unlock-off", -1, -1, rando ? "mode=advanced" : "mode=normal");
         return 0;
     }
     bool remaining[rf3::kUnlockCategories] = {};
@@ -624,6 +843,9 @@ extern "C" int32_t RF3Stock_UseBait(const char* why) {
     if (!a.loaded || (c.box < 0) || (c.box >= static_cast<int32_t>(a.boxes.size())) ||
         (a.boxes[c.box].kind != "bait")) {
         return 0; // not a bait set
+    }
+    if (std::string(why) == "strike") {
+        sHookedBait = Valid(RF3_STOCK_BAIT, c.bait) ? c.bait : -1; // step 44b: for "with <bait>" conditions
     }
     if (!Valid(RF3_STOCK_BAIT, c.bait) || (sStock[RF3_STOCK_BAIT][c.bait].count == 0)) {
         Log("stock-bait-none", RF3_STOCK_BAIT, Valid(RF3_STOCK_BAIT, c.bait) ? c.bait : -1, why);

@@ -287,7 +287,7 @@ extern "C" int32_t RF3Records_SubmitCatch(int32_t record, int32_t species, float
                   stamp, record, species, mm, weightG, previous, newRecord ? 1 : 0);
     out << line;
     out.close(); // the unlock below appends to the same file
-    RF3Stock_UnlockForCatch(species, mm); // steps 21b/21c: rod conditions, then one item per fish caught
+    RF3Stock_UnlockForCatch(record, species, mm, weightG); // steps 21b/21c/43a: rods, lures, then one item per fish
     return newRecord ? 1 : 0;
 }
 

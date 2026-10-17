@@ -212,7 +212,12 @@ void RF3Stock_GiveStarter(const char* why);
 // by catch count mod the categories left, usable first. Returns 1 if an item was given.
 // Step 21c: first the catch counts toward the user's rod conditions (with the rod in use), and any rod
 // earned is given.
-int32_t RF3Stock_UnlockForCatch(int32_t species, float lengthMm);
+int32_t RF3Stock_UnlockForCatch(int32_t record, int32_t species, float lengthMm, int32_t weightG);
+// Step 43a: the lure unlock conditions' events. A hooked fish was lost (line break, hook out, line reeled in with a
+// fish on); the lure landed in the water (cast state 2 -> 3); a fish bit (the strike). Frames are play->gameplayFrames.
+void RF3Stock_FishLost(const char* why);
+void RF3Stock_NoteLureLanded(uint32_t frame);
+void RF3Stock_NoteBite(uint32_t frame);
 // The rods the latest catch earned (up to max); returns how many.
 int32_t RF3Stock_LastRods(int32_t* rods, int32_t max);
 typedef struct {

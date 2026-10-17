@@ -411,6 +411,94 @@ void RodProgressAddCatch(RodProgress& p, int species, float lengthMm, int rod);
 // bought: false.
 bool RodConditionMet(const RodProgress& p, int rod);
 
+// Step 43a: the user's lure unlock conditions (docs/LURE-UNLOCK-CHOICES.md; DESIGN step 43). A condition is a filter
+// on catches and a goal. Lure indices are RLRE 0-90 plus OoT's 91 (normal) and 92 (sinking); species are RF3's
+// (fishdata.fdt +0x02; Hylian Bass 33). Lures without a condition come with their rod (48, 0, 11, 91) or are unused
+// (89, 90).
+// Step 44a: flies, baits and floats have conditions too (docs/FLY-BAIT-FLOAT-UNLOCK-CHOICES.md). Every item with a
+// condition has a slot: lures 0-92, flies 93-132, baits 133-144 (a bait type, all hook sizes), floats 145-150.
+constexpr int kLureCount = 93;
+constexpr int kFlyCount = 40;
+constexpr int kBaitCount = 12;
+constexpr int kFloatCount = 6;
+constexpr int kFlySlot0 = kLureCount;
+constexpr int kBaitSlot0 = kFlySlot0 + kFlyCount;
+constexpr int kFloatSlot0 = kBaitSlot0 + kBaitCount;
+constexpr int kUnlockSlots = kFloatSlot0 + kFloatCount;
+// Fly types as bits (tackle.json "type": 0 dry, 1 nymph, 2 wet, 3 streamer). "Sunken" = nymph, wet or streamer.
+enum FlyTypeBits : uint8_t { kFlyDry = 1, kFlyNymph = 2, kFlyWet = 4, kFlyStreamer = 8, kSunkenFly = 14, kAnyFly = 15 };
+enum class UnlockGoal : uint8_t {
+    Count,      // n matching catches
+    Streak,     // n matching catches since the last lost fish
+    Visit,      // n matching catches since the last scene change
+    Species,    // n different species among matching catches
+    Places,     // n different scenes among matching catches (the pond is one)
+    SpeciesAll, // every species of the filter's species set
+    WeightTotal // matching catches weighing totalG grams together
+};
+enum UnlockTime : uint8_t { kAnyTime = 0, kNight = 1, kDawnDusk = 2 };
+struct LureCondition {
+    int16_t slot = -1; // step 44a: the item's slot (a lure's slot is its index)
+    UnlockGoal goal = UnlockGoal::Count;
+    uint16_t n = 1;
+    uint32_t totalG = 0;      // WeightTotal
+    uint64_t species = 0;     // bit per species; 0 = any
+    uint16_t minMm = 0;
+    uint32_t minWeightG = 0;
+    bool lunker = false;      // size class big or legendary
+    uint16_t rods = 0;        // step 44a: bit per RROD number; 0 = any
+    uint64_t luresLo = 0;     // lures 0-63 (bit per lure); both 0 = any
+    uint64_t luresHi = 0;     // lures 64-92
+    int8_t lureType = -1;     // 0 top water .. 4 bottom; -1 = any
+    UnlockTime time = kAnyTime;
+    bool outsidePond = false;
+    bool thinLine = false;    // the box's thinnest line (Line Dia 1)
+    float biteWithin = 0.0f;  // > 0: a bite within this many seconds of the lure landing
+    float landWithin = 0.0f;  // > 0: landed within this many seconds of the bite
+    uint64_t flies = 0;       // step 44a: flies 0-39 (bit per fly); 0 = any
+    uint8_t flyTypes = 0;     // FlyTypeBits; 0 = any (a lure or bait too)
+    uint16_t baits = 0;       // baits 0-11 (bit per bait type); 0 = any
+    uint8_t floats = 0;       // floats 0-5; 0 = any
+};
+// The catch, as the conditions see it.
+struct UnlockCatch {
+    int species = -1;
+    char sizeClass = 'n';
+    float lengthMm = 0.0f;
+    int weightG = 0;
+    int rod = -1;
+    int lure = -1;     // the lure on the line (-1: a fly or bait set)
+    int fly = -1;      // step 44a: the fly on the line (-1: a lure or bait set)
+    int flyType = -1;  // 0 dry, 1 nymph, 2 wet, 3 streamer
+    int bait = -1;     // the bait type on the hook (-1: none)
+    int floatIdx = -1; // the float (-1: none)
+    int lureType = -1;
+    int scene = -1;
+    bool pond = false;
+    float dayHours = 12.0f; // OoT's clock, 0-24
+    int lineCell = -1;      // 0 = the box's thinnest line
+    float biteSeconds = -1.0f; // lure landing -> bite (-1 unknown)
+    float landSeconds = -1.0f; // bite -> landed (-1 unknown)
+};
+struct UnlockProgress { // per slot
+    uint16_t count[kUnlockSlots] = {};
+    uint64_t setLo[kUnlockSlots] = {}; // species seen (bits 0-63), or scenes 0-63
+    uint64_t setHi[kUnlockSlots] = {}; // scenes 64-127
+    uint32_t sumG[kUnlockSlots] = {};
+};
+// The slot's condition, or nullptr; LureConditionFor takes a lure index (= its slot).
+const LureCondition* UnlockConditionFor(int slot);
+const LureCondition* LureConditionFor(int lure);
+int UnlockConditionCount(); // slots that have one (87 lures + 39 flies + 8 baits + 3 floats = 137)
+int LureConditionCount();   // lures that have one (87)
+bool UnlockMatches(const LureCondition& c, const UnlockCatch& k);
+// Counts one catch toward every condition.
+void UnlockAddCatch(UnlockProgress& p, const UnlockCatch& k);
+// A hooked fish was lost: streaks start over. A new scene: visits start over.
+void UnlockFishLost(UnlockProgress& p);
+void UnlockNewVisit(UnlockProgress& p);
+bool UnlockMet(const UnlockProgress& p, int slot);
+
 // Tension limit for this fish and tackle (1.4).
 float TensionLimit(const FishParams& fish, const TackleParams& tackle);
 

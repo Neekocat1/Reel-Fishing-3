@@ -4667,6 +4667,7 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                     RF3Fight_StartStrike(Fishing_RF3FishIndex(this), this->fishLength); // the bite is the strike
                     // Step 33a: a bait set's bait goes with the bite (after StartStrike read the fight's tackle).
                     RF3Stock_UseBait("strike");
+                    RF3Stock_NoteBite(play->gameplayFrames); // step 43a: bite timing for the lure conditions
                     Fishing_RF3ResetVisuals(this);
                 }
                 rf3Outcome = Fishing_RF3Fight(this, play, input, &rf3Hooked);
@@ -4700,6 +4701,14 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                 if (rf3Fight) {
                     RF3Fight_End();
                     sRF3HookPending = false;
+                    // Step 43a: a hooked fish lost (line break, hook out, or the line reeled in with it on) ends the lure
+                    // conditions' streaks; a missed bite was never hooked.
+                    if ((rf3Outcome == RF3_OUTCOME_LINEBREAK) || (rf3Outcome == RF3_OUTCOME_HOOKOUT) ||
+                        ((rf3Outcome != RF3_OUTCOME_MISSED) && sLineHooked)) {
+                        RF3Stock_FishLost(rf3Outcome == RF3_OUTCOME_LINEBREAK  ? "line-break"
+                                          : rf3Outcome == RF3_OUTCOME_HOOKOUT ? "hook-out"
+                                                                              : "reeled-in");
+                    }
                     if (rf3Outcome == RF3_OUTCOME_MISSED) {
                         sLureBitTimer = 0; // step 9: OoT's "missed bite" text (0x4081) below
                         // Step 10: a fish that spat the lure stays wary for 60 s (RF3-MECHANICS 2.3).
@@ -6162,6 +6171,15 @@ void Fishing_QuitAtDoor(Fishing* this, PlayState* play) {
 // #endregion
 
 // Reel Fishing III mod: one CSV row of the rod, line, lure and hooked fish (owner or portable).
+// Step 43a: the lure landing in the water (cast state 2 -> 3), for the lure conditions' bite timing.
+static void Fishing_RF3WatchCast(PlayState* play) {
+    static s16 sPrevCastState = 0;
+    if ((sRodCastState == 3) && (sPrevCastState == 2)) {
+        RF3Stock_NoteLureLanded(play->gameplayFrames);
+    }
+    sPrevCastState = sRodCastState;
+}
+
 static void Fishing_RF3LogFrame(PlayState* play, Input* input, Player* player) {
     if (RF3Log_IsEnabled()) {
         RF3OwnerFrame logFrame = { 0 };
@@ -6860,6 +6878,7 @@ void Fishing_UpdateOwner(Actor* thisx, PlayState* play2) {
     }
 
     Fishing_RF3LogFrame(play, input, player); // Reel Fishing III mod: log this frame. Read-only.
+    Fishing_RF3WatchCast(play);               // step 43a
 
     osSyncPrintf("HI_SCORE = %x\n", HIGH_SCORE(HS_FISHING));
 }
@@ -7108,6 +7127,7 @@ static void Fishing_RF3UpdatePortable(Actor* thisx, PlayState* play) {
     }
 
     Fishing_RF3LogFrame(play, input, player);
+    Fishing_RF3WatchCast(play); // step 43a
 }
 
 static void Fishing_RF3DrawPortable(Actor* thisx, PlayState* play) {
@@ -7607,6 +7627,26 @@ static void Fishing_RF3InitRegionFish(Fishing* this, PlayState* play) {
 
 // Called from RF3RegionFish.cpp: remove this scene's region fish (editor "respawn"). Not while one is
 // hooked. Returns how many were removed, or -1 if a fight is running.
+// Step 45a: is a fish on the line (cast state 4+)? Region fish are not removed then.
+s32 Fishing_RF3LineBusy(void) {
+    return sRodCastState >= 4;
+}
+
+// Step 45a: kill one region slot's fish (the caller checks Fishing_RF3LineBusy first). Returns how many were killed.
+s32 Fishing_RF3KillRegionSlot(PlayState* play, s32 slot) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_NPC].head;
+    s32 count = 0;
+
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_FISHING) && (actor->params == EN_FISH_REGION + slot)) {
+            Actor_Kill(actor);
+            count++;
+        }
+        actor = actor->next;
+    }
+    return count;
+}
+
 s32 Fishing_RF3KillRegionFish(PlayState* play) {
     Actor* actor = play->actorCtx.actorLists[ACTORCAT_NPC].head;
     s32 count = 0;

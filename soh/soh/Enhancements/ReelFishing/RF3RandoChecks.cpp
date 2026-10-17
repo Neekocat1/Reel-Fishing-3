@@ -19,6 +19,7 @@
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "RF3Bridge.h"
+#include "RF3Sim.h" // step 43b: which lures have a condition
 
 extern "C" {
 #include "z64.h"
@@ -30,6 +31,18 @@ namespace {
 
 static_assert(RC_RF3_CATCH_147 - RC_RF3_CATCH_1 + 1 == RF3_RANDO_CATCH_MAX, "catch checks");
 static_assert(RAND_INF_RF3_CATCH_147 - RAND_INF_RF3_CATCH_1 + 1 == RF3_RANDO_CATCH_MAX, "catch flags");
+static_assert(RC_RF3_LURE_92 - RC_RF3_LURE_0 + 1 == rf3::kLureCount, "lure checks");
+static_assert(RAND_INF_RF3_LURE_92 - RAND_INF_RF3_LURE_0 + 1 == rf3::kLureCount, "lure flags");
+// Step 44c: check/flag = RC_RF3_LURE_0 / RAND_INF_RF3_LURE_0 + the condition's slot.
+static_assert(RC_RF3_FLY_0 - RC_RF3_LURE_0 == rf3::kFlySlot0 && RC_RF3_BAIT_0 - RC_RF3_LURE_0 == rf3::kBaitSlot0 &&
+                  RC_RF3_FLOAT_0 - RC_RF3_LURE_0 == rf3::kFloatSlot0 &&
+                  RC_RF3_FLOAT_5 - RC_RF3_LURE_0 + 1 == rf3::kUnlockSlots,
+              "condition checks");
+static_assert(RAND_INF_RF3_FLY_0 - RAND_INF_RF3_LURE_0 == rf3::kFlySlot0 &&
+                  RAND_INF_RF3_BAIT_0 - RAND_INF_RF3_LURE_0 == rf3::kBaitSlot0 &&
+                  RAND_INF_RF3_FLOAT_0 - RAND_INF_RF3_LURE_0 == rf3::kFloatSlot0 &&
+                  RAND_INF_RF3_FLOAT_5 - RAND_INF_RF3_LURE_0 + 1 == rf3::kUnlockSlots,
+              "condition flags");
 
 const char* const kRodNames[10] = { "Lure Rod/Bass",     "Lure Rod/Trout",   "Lure Rod/Salmon", "Fly Rod",
                                     "Big Game Fly Rod",  "Stream Pole S",    "Stream Pole L",   "Crucian Carp Rod",
@@ -38,6 +51,12 @@ const char* const kRodNames[10] = { "Lure Rod/Bass",     "Lure Rod/Trout",   "Lu
 // Which number catch a check is (1..147), 0 if it isn't a catch check.
 int32_t CatchNumber(RandomizerCheck rc) {
     return (rc >= RC_RF3_CATCH_1 && rc <= RC_RF3_CATCH_147) ? static_cast<int32_t>(rc - RC_RF3_CATCH_1) + 1 : 0;
+}
+
+// Step 43b: the slot of an unlock condition check (lures 0-92; step 44c: flies, baits, floats up to 150), -1 if it
+// isn't one.
+int32_t SlotOfCheck(RandomizerCheck rc) {
+    return (rc >= RC_RF3_LURE_0 && rc <= RC_RF3_FLOAT_5) ? static_cast<int32_t>(rc - RC_RF3_LURE_0) : -1;
 }
 
 void Add(RandomizerCheck rc, RandomizerInf flag, std::string name, RandomizerGet vanilla);
@@ -61,6 +80,19 @@ void Rando::StaticData::RegisterRF3Locations() {
     for (int32_t n = 1; n <= RF3_RANDO_CATCH_MAX; n++) {
         Add(static_cast<RandomizerCheck>(RC_RF3_CATCH_1 + n - 1), static_cast<RandomizerInf>(RAND_INF_RF3_CATCH_1 + n - 1),
             "RF3 Catch " + std::to_string(n), RG_NONE);
+    }
+    // Step 43b: one per lure (only those with a condition are ever in a seed); stable names for spoiler logs.
+    for (int32_t l = 0; l < rf3::kLureCount; l++) {
+        Add(static_cast<RandomizerCheck>(RC_RF3_LURE_0 + l), static_cast<RandomizerInf>(RAND_INF_RF3_LURE_0 + l),
+            "RF3 Lure Condition " + std::to_string(l), RG_NONE);
+    }
+    // Step 44c: flies, baits and floats, by their own index.
+    for (int32_t slot = rf3::kFlySlot0; slot < rf3::kUnlockSlots; slot++) {
+        std::string name = slot < rf3::kBaitSlot0    ? "RF3 Fly Condition " + std::to_string(slot - rf3::kFlySlot0)
+                           : slot < rf3::kFloatSlot0 ? "RF3 Bait Condition " + std::to_string(slot - rf3::kBaitSlot0)
+                                                     : "RF3 Float Condition " + std::to_string(slot - rf3::kFloatSlot0);
+        Add(static_cast<RandomizerCheck>(RC_RF3_LURE_0 + slot), static_cast<RandomizerInf>(RAND_INF_RF3_LURE_0 + slot),
+            name, RG_NONE);
     }
 }
 
@@ -89,23 +121,29 @@ void RegisterRF3RandoChecks() {
 
 static RegisterShipInitFunc initRF3RandoChecks(RegisterRF3RandoChecks);
 
-bool RF3Rando_CheckIncluded(RandomizerCheck rc, bool shuffle, int32_t catchChecks) {
+bool RF3Rando_CheckIncluded(RandomizerCheck rc, bool shuffle, int32_t catchChecks, bool advanced) {
     if (!shuffle) {
         return false;
     }
+    int32_t slot = SlotOfCheck(rc);
+    if (slot >= 0) {
+        return advanced && rf3::UnlockConditionFor(slot) != nullptr; // steps 43b, 44c
+    }
     int32_t n = CatchNumber(rc);
-    return n == 0 || n <= catchChecks;
+    return n == 0 || (!advanced && n <= catchChecks);
 }
 
 bool RF3Rando_CheckIncludedBySeed(RandomizerCheck rc) {
     auto ctx = Rando::Context::GetInstance();
     return RF3Rando_CheckIncluded(rc, ctx->GetOption(RSK_RF3_TACKLE_SHUFFLE).Get() != 0,
-                                  ctx->GetOption(RSK_RF3_CATCH_CHECKS).Get());
+                                  ctx->GetOption(RSK_RF3_CATCH_CHECKS).Get(),
+                                  ctx->GetOption(RSK_RF3_CHECK_MODE).Get() == 1);
 }
 
 bool RF3Rando_CheckIncludedByCVars(RandomizerCheck rc) {
     return RF3Rando_CheckIncluded(rc, CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3TackleShuffle"), 0) != 0,
-                                  CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3CatchChecks"), 20));
+                                  CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3CatchChecks"), 20),
+                                  CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3CheckMode"), 0) == 1);
 }
 
 // RF3Rando_AddRegionLocations: RF3RandoLogic.cpp (step 24c).
@@ -118,6 +156,10 @@ bool RF3Rando_Active() {
 
 int32_t RF3Rando_CatchChecks() {
     return RAND_GET_OPTION(RSK_RF3_CATCH_CHECKS).Get();
+}
+
+bool RF3Rando_Advanced() {
+    return RF3Rando_Active() && RAND_GET_OPTION(RSK_RF3_CHECK_MODE).Get() == 1;
 }
 
 bool RF3Rando_ItemInSeed(RandomizerGet rg) {
