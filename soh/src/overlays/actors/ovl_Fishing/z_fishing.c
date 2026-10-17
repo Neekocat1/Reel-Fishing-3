@@ -28,6 +28,9 @@ static u8 sRF3NoLure = false;
 // Reel Fishing III mod: RF3 steps are 1/60 s; OoT's game logic runs R_UPDATE_RATE of them per
 // game frame (3 = 20 Hz in normal play).
 #define RF3_SUBSTEPS ((R_UPDATE_RATE > 0) ? R_UPDATE_RATE : 1)
+// Step 48d: OoT's Actor_UpdatePos moves velocity x R_UPDATE_RATE x 0.5 a frame (1.5 at 20 Hz). An RF3 step for the frame
+// is divided by this before it goes into speedXZ, so OoT's mover makes exactly RF3's step.
+#define RF3_OOT_MOVE_SCALE ((R_UPDATE_RATE > 0) ? (R_UPDATE_RATE * 0.5f) : 1.0f)
 // OoT only lets fish line up and bite within 800 units of the pond centre (states 2-4).
 #define RF3_LURE_IN_BITE_AREA() (Fishing_RF3LureInBiteArea()) // pond: within 800 of the centre; step 16d: region
 // Step 11: B held during OoT's cast wind-up (sRodCastTimer 37 -> 18) charges RF3 cast power.
@@ -84,6 +87,16 @@ static s32 sRF3JumpLines[RF3_REGION_SLOTS];   // lines written in that second
 static s32 sRF3JumpSkipped[RF3_REGION_SLOTS]; // lines not written since the last one
 #define RF3_JUMP_STAGE_UNITS 10.0f            // [assumed] a stage other than the move moving the fish this far is logged
 #define RF3_JUMP_LINES_PER_SECOND 5
+// Step 48d: RF3's step this frame per region slot (free swim or hooked), for the rf3-step line
+static f32 sRF3StepLen[RF3_REGION_SLOTS];
+static u32 sRF3StepFrame[RF3_REGION_SLOTS];    // play->gameplayFrames it was set on
+static u32 sRF3StepLogFrame[RF3_REGION_SLOTS]; // the last rf3-step line
+// Step 49a: the RF3 mover. The free swim or a hooked fish's RF3FishMove gives this frame's step and heading; the fish
+// then moves by exactly that, instead of OoT's turn, velocity, Actor_UpdatePos, leap code and Actor_UpdateBgCheckInfo.
+static Vec3f sRF3MoverStep[RF3_REGION_SLOTS];
+static s16 sRF3MoverYaw[RF3_REGION_SLOTS];   // world.rot.y
+static s16 sRF3MoverPitch[RF3_REGION_SLOTS]; // world.rot.x (shape.rot.x is its negative, as 47c)
+static u32 sRF3MoverFrame[RF3_REGION_SLOTS]; // play->gameplayFrames + 1 when set this frame
 
 #define WATER_SURFACE_Y(play)                         \
     ((sRF3CurRegion != NULL) ? sRF3CurRegion->surfaceY \
@@ -162,6 +175,9 @@ static s32 Fishing_RF3SwamThisFrame(Fishing* this, PlayState* play) {
     return RF3_IS_REGION_FISH(this) && (slot >= 0) && (slot < RF3_REGION_SLOTS) &&
            (sRF3SwimDrawFrame[slot] == (u32)play->gameplayFrames + 1);
 }
+static void Fishing_RF3SetMover(s32 slot, PlayState* play, f32 x, f32 y, f32 z, s16 yaw, s16 pitch); // step 49a
+static s32 Fishing_RF3MoverReady(Fishing* this, PlayState* play);
+static void Fishing_RF3Mover(Fishing* this, PlayState* play);
 
 typedef struct {
     /* 0x00 */ u8 isLoach;
@@ -3605,7 +3621,25 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
                 this->fishTargetPos.y = mo.target[1];
                 this->fishTargetPos.z = mo.target[2];
                 sRF3FishSpeed = mo.speed;
-                this->actor.speedXZ = mo.speed;
+                this->actor.speedXZ = mo.speed / RF3_OOT_MOVE_SCALE; // step 48d: OoT's mover then makes RF3's step
+                sRF3StepLen[slot] = mo.speed;
+                sRF3StepFrame[slot] = play->gameplayFrames;
+                {
+                    // Step 49a: RF3's step along RF3FishMove's heading (mo.target is the point ahead on it), measured
+                    // from the fish before the line's drag below, for the RF3 mover
+                    f32 hx = mo.target[0] - mi.fishPos[0];
+                    f32 hy = mo.target[1] - mi.fishPos[1];
+                    f32 hz = mo.target[2] - mi.fishPos[2];
+                    f32 hl = sqrtf(SQ(hx) + SQ(hy) + SQ(hz));
+
+                    if (hl > 0.001f) {
+                        Fishing_RF3SetMover(slot, play, hx / hl * mo.speed, hy / hl * mo.speed, hz / hl * mo.speed,
+                                            Math_Atan2S(hz, hx), Math_Atan2S(sqrtf(SQ(hx) + SQ(hz)), hy));
+                    } else {
+                        Fishing_RF3SetMover(slot, play, 0.0f, 0.0f, 0.0f, this->actor.world.rot.y,
+                                            this->actor.world.rot.x);
+                    }
+                }
                 // Step 30b-2b: the line's drag while it turns on the spot (before OoT's move and wall check)
                 this->actor.world.pos.x += mo.drag[0];
                 this->actor.world.pos.z += mo.drag[2];
@@ -5046,7 +5080,9 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
 
     Math_ApproachS(&this->fishLimbEFRotYDelta, (Math_SinS(this->stateAndTimer * 0x1000) * 5000.0f) + 5000.0f, 2, 0x7D0);
 
-    if (this->fishState != 6) {
+    if ((this->fishState != 6) && Fishing_RF3MoverReady(this, play)) {
+        Fishing_RF3Mover(this, play); // step 49a: RF3's step and heading, none of OoT's movement below
+    } else if (this->fishState != 6) {
         if (this->actor.world.pos.y > WATER_SURFACE_Y(play)) {
             this->unk_190 = 1.5f;
             this->unk_194 = 5000.0f;
@@ -7608,7 +7644,11 @@ static s32 Fishing_RF3FreeSwim(Fishing* this, PlayState* play, Input* input) {
     } else {
         this->fishTargetPos = this->actor.world.pos;
     }
-    this->actor.speedXZ = len;  // OoT's mover: velocity = the step (Actor_UpdateVelocityXYZ)
+    this->actor.speedXZ = len / RF3_OOT_MOVE_SCALE; // OoT's mover: velocity x RF3_OOT_MOVE_SCALE = the step (48d)
+    sRF3StepLen[slot] = len;                        // step 48d: for rf3-step
+    sRF3StepFrame[slot] = play->gameplayFrames;
+    // step 49a: the RF3 mover makes this step with RF3's heading
+    Fishing_RF3SetMover(slot, play, out.step[0], out.step[1], out.step[2], sRF3SwimYaw[slot], sRF3SwimPitch[slot]);
     this->rotationStep = 0.0f;  // ... with no OoT turn
     this->unk_190 = 1.0f;       // OoT's tail beat (OoT's model only)
     this->unk_194 = 2000.0f;
@@ -7941,6 +7981,73 @@ static void Fishing_RF3WallTest(Fishing* this, PlayState* play) {
     this->actor.world.pos = slid;
 }
 
+// Step 49a: the RF3 mover (DESIGN "Step 49 design"). A path that computed RF3's movement for this frame stores it here.
+static void Fishing_RF3SetMover(s32 slot, PlayState* play, f32 x, f32 y, f32 z, s16 yaw, s16 pitch) {
+    if ((slot < 0) || (slot >= RF3_REGION_SLOTS)) {
+        return;
+    }
+    sRF3MoverStep[slot].x = x;
+    sRF3MoverStep[slot].y = y;
+    sRF3MoverStep[slot].z = z;
+    sRF3MoverYaw[slot] = yaw;
+    sRF3MoverPitch[slot] = pitch;
+    sRF3MoverFrame[slot] = (u32)play->gameplayFrames + 1;
+}
+
+static s32 Fishing_RF3MoverReady(Fishing* this, PlayState* play) {
+    s32 slot = this->actor.params - EN_FISH_REGION;
+
+    return RF3_IS_REGION_FISH(this) && (slot >= 0) && (slot < RF3_REGION_SLOTS) &&
+           (sRF3MoverFrame[slot] == (u32)play->gameplayFrames + 1);
+}
+
+// The fish moves by RF3's step and faces RF3's heading. None of OoT's movement runs for it: no OoT turn, no
+// Actor_UpdatePos (and its x1.5), no unk_184 lift or leap code at the surface, no Actor_UpdateBgCheckInfo (no 30-unit
+// wall push, no floor snap, no "throw" toward the world origin). The floor height comes from a raycast at the fish (no
+// snap: RF3's move keeps half a body over it). The mod's own rules run after this: Fishing_RF3WallTest, the shore rule.
+static void Fishing_RF3Mover(Fishing* this, PlayState* play) {
+    s32 slot = this->actor.params - EN_FISH_REGION;
+    Vec3f step = sRF3MoverStep[slot];
+    f32 len = sqrtf(SQ(step.x) + SQ(step.y) + SQ(step.z));
+    CollisionPoly* floorPoly;
+    Vec3f floorProbe;
+
+    this->actor.world.pos.x += step.x;
+    this->actor.world.pos.y += step.y;
+    this->actor.world.pos.z += step.z;
+    this->actor.world.rot.y = this->actor.shape.rot.y = sRF3MoverYaw[slot];
+    this->actor.world.rot.x = sRF3MoverPitch[slot];
+    this->actor.shape.rot.x = -sRF3MoverPitch[slot];
+    // speedXZ and velocity as OoT's mover would have them (the motion rule and the ripple below read speedXZ)
+    this->actor.speedXZ = len / RF3_OOT_MOVE_SCALE;
+    this->actor.velocity.x = step.x / RF3_OOT_MOVE_SCALE;
+    this->actor.velocity.y = step.y / RF3_OOT_MOVE_SCALE;
+    this->actor.velocity.z = step.z / RF3_OOT_MOVE_SCALE;
+    // OoT's leap lift and its drawn turn and roll offsets don't apply
+    this->unk_184 = 0.0f;
+    this->unk_152 = 0;
+    this->rotationTarget.x = this->rotationTarget.y = this->rotationTarget.z = 0;
+    this->unk_160 = this->unk_162 = this->unk_164 = 0;
+    this->actor.bgCheckFlags &= ~(BGCHECKFLAG_WALL | BGCHECKFLAG_GROUND);
+
+    floorProbe = this->actor.world.pos;
+    this->actor.floorHeight = BgCheck_EntityRaycastFloor1(&play->colCtx, &floorPoly, &floorProbe);
+
+    // the rf3-jump stages (48a): the whole move is the "move" stage; nothing between "preWall" and "postWall"
+    sRF3JumpPreWall = sRF3JumpPostWall = this->actor.world.pos;
+    sRF3JumpSpeed = this->actor.speedXZ;
+    sRF3JumpWallRan = true;
+
+    // OoT's ripple near the surface (visual only)
+    if ((this->actor.world.pos.y < WATER_SURFACE_Y(play)) &&
+        (this->actor.world.pos.y > (WATER_SURFACE_Y(play) - 10.0f)) && ((this->stateAndTimer & 1) == 0) &&
+        (this->actor.speedXZ > 0.0f)) {
+        Vec3f pos = this->actor.world.pos;
+        pos.y = WATER_SURFACE_Y(play);
+        Fishing_SpawnRipple(&this->actor.projectedPos, sFishingEffects, &pos, 80.0f, 500.0f, 150, 90);
+    }
+}
+
 // Step 48a: log a region fish that moved more than it should in one frame (DESIGN "Step 48 design"), with the move
 // split by stage: gap (last update's end -> this one's start: something outside the fish's update, or a new fish in
 // the slot), move (Fishing_UpdateFishImpl up to OoT's wall/floor check: RF3's step through OoT's mover), ootWall (that
@@ -7964,6 +8071,16 @@ static void Fishing_RF3JumpLog(Fishing* this, PlayState* play, s32 slot, Vec3f* 
     u32 second = (u32)play->gameplayFrames / 20;
     s32 freeSwim = (sRF3SwimDrawFrame[slot] == play->gameplayFrames + 1);
     char line[700];
+
+    // Step 48d: once a second per moving RF3 fish, RF3's step against what the update moved it before OoT's wall/floor
+    // check (1.00 = exactly RF3's step; 1.50 before 48d)
+    if ((sRF3StepFrame[slot] == (u32)play->gameplayFrames) && sRF3JumpWallRan && (sRF3StepLen[slot] > 0.05f) &&
+        ((u32)(play->gameplayFrames - sRF3StepLogFrame[slot]) >= 20)) {
+        snprintf(line, sizeof(line), "slot=%d rf3-step state=%d free=%d rf3Step=%.2f move=%.2f ratio=%.2f", slot,
+                 this->fishState, freeSwim ? 1 : 0, sRF3StepLen[slot], move, move / sRF3StepLen[slot]);
+        RF3FishMove_Log(line);
+        sRF3StepLogFrame[slot] = play->gameplayFrames;
+    }
 
     if ((total <= limit) && (gap <= limit) && (ootWall <= RF3_JUMP_STAGE_UNITS) && (rest <= RF3_JUMP_STAGE_UNITS) &&
         (wallTest <= RF3_JUMP_STAGE_UNITS) && (shore <= RF3_JUMP_STAGE_UNITS)) {
