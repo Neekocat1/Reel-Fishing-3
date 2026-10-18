@@ -110,6 +110,8 @@ static u32 sRF3MoverFrame[RF3_REGION_SLOTS]; // play->gameplayFrames + 1 when se
 #define RF3_FLY_HOLD_TIMER 30
 // Step 20a-6: with the lure sim active, a lure this close to the rod tip horizontally (OoT units) is reeled in.
 #define RF3_LURE_REELED_IN_UNITS 10.0f
+// Step 50a: RF3's reel moves the lure toward the rod at +0x6C = 0.2 m/s (RF3-MECHANICS 3.2)
+#define RF3_LURE_REEL_MPS 0.2f
 
 // Is the lure (or a line point) on land? The pond: beyond its 920-unit radius. Portable: no water under the lure.
 static s32 Fishing_RF3OnLand(f32 xzLenSq) {
@@ -179,6 +181,11 @@ static void Fishing_RF3SetMover(s32 slot, PlayState* play, f32 x, f32 y, f32 z, 
 static s32 Fishing_RF3MoverReady(Fishing* this, PlayState* play);
 static void Fishing_RF3Mover(Fishing* this, PlayState* play);
 static s32 Fishing_RF3StrikesInPlace(Fishing* this); // step 49c
+static s32 Fishing_RF3Chase(Fishing* this, PlayState* play, const RF3ApproachStatus* ap, s32 waiting,
+                            s32* reached); // step 49d
+static s32 sRF3ChaseFail = -1; // step 49d: the fish index whose chase was blocked or stuck this frame
+static void Fishing_RF3HookedOther(Fishing* this, PlayState* play, s32 slot, s32 mode,
+                                   const RF3RegionFishInfo* info); // step 49e
 
 typedef struct {
     /* 0x00 */ u8 isLoach;
@@ -2428,10 +2435,23 @@ static void Fishing_RF3LureDepthApply(PlayState* play, Input* input) {
 // Step 20a-6: with the lure sim active the lure leads and the line follows it, so the rod's swing doesn't drag
 // it (user, 2026-10-07). Only the reel moves it horizontally: straight toward the rod tip by reelUnits.
 static void Fishing_RF3LureReel(f32 reelUnits) {
+    static s32 sReelLogCount = 0; // step 50a: reeling frames since the last lure-reel line
     f32 dx = sRodTipPos.x - sLurePos.x;
     f32 dz = sRodTipPos.z - sLurePos.z;
     f32 dist = sqrtf(SQ(dx) + SQ(dz));
 
+    if (reelUnits > 0.0f) {
+        if (++sReelLogCount >= 20) { // about once a second while reeling
+            char line[160];
+
+            sReelLogCount = 0;
+            snprintf(line, sizeof(line), "lure-reel units=%.2f/frame mps=%.3f dist_to_tip=%.0f", reelUnits,
+                     reelUnits / RF3_UNITS_PER_METRE / (RF3_SUBSTEPS / 60.0f), dist);
+            RF3FishMove_Log(line);
+        }
+    } else {
+        sReelLogCount = 19; // the first reeling frame logs at once
+    }
     if ((reelUnits > 0.0f) && (dist > 0.001f)) {
         if (reelUnits > dist) {
             reelUnits = dist;
@@ -3009,6 +3029,11 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     Math_ApproachF(&sReelLinePosStep, 1000.0f, 1.0f, 2.0f);
                 } else {
                     rf3ReelUnits = sRodReelingSpeed * 5.0f;
+                    if (RF3Lure_IsActive()) {
+                        // Step 50a: the RF3 lure reels at RF3's 0.2 m/s (was OoT's 2.5 units a frame, 0.74 m/s);
+                        // R + A above keeps OoT's fast reel (user's choice)
+                        rf3ReelUnits = RF3_LURE_REEL_MPS * RF3_UNITS_PER_METRE * (RF3_SUBSTEPS / 60.0f);
+                    }
                     if (!RF3Lure_IsActive()) {
                         sRodLineSpooled += sRodReelingSpeed;
                     }
@@ -3445,6 +3470,15 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
             func_800A9F6C(0.0f, 220, (u8)CLAMP(rf3Out.hookWindowFrames, 1, 255), 255);
             sRF3WindowRumbled = true;
         }
+        if (RF3_IS_REGION_FISH(this) && RF3FishModel_WillPlayMotions(this->actor.params - EN_FISH_REGION)) {
+            // Step 49e-2: an RF3 fish moves by RF3's HIT here (49e put it after this return, so it never ran)
+            RF3RegionFishInfo hitInfo;
+            s32 hitSlot = this->actor.params - EN_FISH_REGION;
+
+            if (RF3RegionFish_Get(hitSlot, &hitInfo)) {
+                Fishing_RF3HookedOther(this, play, hitSlot, rf3Out.mode, &hitInfo);
+            }
+        }
         return rf3Out.outcome;
     }
 
@@ -3646,6 +3680,10 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
                 this->actor.world.pos.z += mo.drag[2];
                 this->rotationStep = 16384.0f; // RF3 sets the heading; OoT's turn just follows it
                 sRF3TurnScale = 1;
+            } else {
+                // Step 49e: modes RF3FishMove doesn't drive (HIT, and QuickTurn/escape/BUKKONUKI/CATCH): RF3's HIT
+                // movement, or holding still; never OoT's state-5 movement or its line leash
+                Fishing_RF3HookedOther(this, play, slot, rf3Out.mode, &regionInfo);
             }
         }
     }
@@ -4200,6 +4238,13 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                     (SQ(sLurePos.x - player->actor.world.pos.x) + SQ(sLurePos.z - player->actor.world.pos.z)) <
                         SQ(KREG(59) + 50.0f),
                     rf3Reached, RF3_SUBSTEPS);
+                if (sRF3ChaseFail == Fishing_RF3FishIndex(this)) {
+                    // Step 49d: RF3's chase was blocked or stuck (0x001A0B00 -> FAIL, wary 30 s, RF3-MECHANICS 2.5)
+                    sRF3ChaseFail = -1;
+                    RF3Approach_EndChase(Fishing_RF3FishIndex(this));
+                    RF3Approach_SetWary(Fishing_RF3FishIndex(this), 30.0f);
+                    rf3Approach = RF3_APPROACH_FAIL;
+                }
                 if (rf3Approach == RF3_APPROACH_STRIKE) {
                     // OoT's own strike setup: line up (state 3, or -3 for a loach), then lunge.
                     // Step 49c: an RF3 fish strikes where it reached the lure (RF3-MECHANICS 2.5, 0x001A0B00 -> HIT):
@@ -7435,6 +7480,148 @@ static u32 sRF3PrevLureFrame = 0;
 static f32 sRF3LureVelX = 0.0f;
 static f32 sRF3LureVelZ = 0.0f;
 
+// Step 49d: RF3's CHASE / WAIT for an RF3 fish (RF3FishSwim_Chase, RF3-MECHANICS 2.5/2.6, DESIGN "Step 49 design"). The
+// bridge's state picks the mode: WAIT, CHASE while interested, else LOST (a glide). The step and heading go to the RF3
+// mover (49a). Returns false if the fish has no RF3 swim values (the caller then uses 29h).
+static s32 Fishing_RF3Chase(Fishing* this, PlayState* play, const RF3ApproachStatus* ap, s32 waiting, s32* reached) {
+    RF3RegionFishInfo info;
+    RF3FishSwimInput in = { 0 };
+    RF3FishChaseInput ch = { 0 };
+    RF3FishSwimOutput out;
+    s32 slot = this->actor.params - EN_FISH_REGION;
+    s32 me = Fishing_RF3FishIndex(this);
+    s32 layerMin;
+    s32 layerMax;
+    f32 speedMps = 0.0f;
+    f32 rampS = 1.0f;
+    f32 heightPerM = 0.3f; // [assumed] if the model has no height
+    f32 len;
+    s32 result;
+
+    if ((slot < 0) || (slot >= RF3_REGION_SLOTS) || !RF3RegionFish_Get(slot, &info) || (info.mm <= 0.0f) ||
+        !RF3FishSwim_Species(info.record, &in.species, &layerMin, &layerMax)) {
+        return false;
+    }
+    RF3FishModel_MoveInfo(info.record, &speedMps, &rampS, &heightPerM);
+    in.slot = slot;
+    in.lengthM = info.mm * 0.001f;
+    in.heightM = in.lengthM * heightPerM;
+    in.lengthMm = (s32)info.mm;
+    in.unitsPerMetre = RF3_UNITS_PER_METRE;
+    in.pos[0] = this->actor.world.pos.x;
+    in.pos[1] = this->actor.world.pos.y;
+    in.pos[2] = this->actor.world.pos.z;
+    in.yaw = this->actor.shape.rot.y * (M_PI / 32768.0f); // read only if the slot has no swim state yet
+    in.pitch = -this->actor.shape.rot.x * (M_PI / 32768.0f);
+    in.waterY = WATER_SURFACE_Y(play);
+    in.floorY = this->actor.floorHeight;
+    in.hp = 100.0f;
+    in.substeps = RF3_SUBSTEPS;
+    in.frame = play->gameplayFrames;
+    in.probe = Fishing_RF3Probe;
+    in.codeTurn = RF3FishModel_CodeTurn;
+    in.log = RF3FishMove_Log;
+    sRF3MovePlay = play;
+    sRF3MoveFish = this;
+    sRF3SwimSlot = slot;
+    RF3FishSwim_SetPushOff(CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishPushOff"), 1));
+
+    ch.want = waiting ? RF3_SWIM_WAIT
+                      : (((ap->chaser == me) && !ap->chaserInterested) ? RF3_SWIM_CHASE_LOST : RF3_SWIM_CHASE);
+    ch.lure[0] = sLurePos.x; // RF3 aims at the lure itself (0x0019A130)
+    ch.lure[1] = sLurePos.y;
+    ch.lure[2] = sLurePos.z;
+    ch.waitSeconds = ap->chaserWaitLeft;
+    result = RF3FishSwim_Chase(&in, &ch, &out);
+
+    // RF3's heading after the update (Fishing_UpdateFish) and the centre-height wall test (48c) as for a free swim
+    sRF3SwimYaw[slot] = (s16)(out.yaw * (32768.0f / M_PI));
+    sRF3SwimPitch[slot] = (s16)(out.pitch * (32768.0f / M_PI));
+    sRF3SwimDrawFrame[slot] = play->gameplayFrames + 1;
+    Fishing_RF3SetMover(slot, play, out.step[0], out.step[1], out.step[2], sRF3SwimYaw[slot], sRF3SwimPitch[slot]);
+    len = sqrtf(SQ(out.step[0]) + SQ(out.step[1]) + SQ(out.step[2]));
+    sRF3StepLen[slot] = len; // rf3-step (48d)
+    sRF3StepFrame[slot] = play->gameplayFrames;
+    this->fishTargetPos = sLurePos;
+    this->rotationStep = 0.0f;
+    this->actor.speedXZ = len / RF3_OOT_MOVE_SCALE;
+
+    if ((result == RF3_CHASE_BLOCKED) || (result == RF3_CHASE_STUCK)) {
+        sRF3ChaseFail = me;
+    }
+    *reached = (result == RF3_CHASE_REACHED);
+    return true;
+}
+
+// Step 49e: a hooked RF3 fish in a fight mode RF3FishMove doesn't drive. HIT (2): RF3's own (RF3FishSwim_Chase mode
+// HIT, 0x001A1820): steer to the home point, "Kuh!" at the hook window's centre. Other modes: hold still [assumed: not
+// read]. Either way through the RF3 mover, and marked RF3-moved so OoT's line leash leaves it alone.
+static void Fishing_RF3HookedOther(Fishing* this, PlayState* play, s32 slot, s32 mode, const RF3RegionFishInfo* info) {
+    RF3FishSwimInput in = { 0 };
+    RF3FishChaseInput ch = { 0 };
+    RF3FishSwimOutput out;
+    s32 layerMin;
+    s32 layerMax;
+    f32 speedMps = 0.0f;
+    f32 rampS = 1.0f;
+    f32 heightPerM = 0.3f; // [assumed] if the model has no height
+
+    if ((mode == 2) && (info->mm > 0.0f) && RF3FishSwim_Species(info->record, &in.species, &layerMin, &layerMax)) {
+        RF3FightStatus fs;
+        f32 turnYaw = 0.0f;
+        f32 turnSeconds = 0.0f;
+        f32 len;
+
+        RF3FishModel_MoveInfo(info->record, &speedMps, &rampS, &heightPerM);
+        in.slot = slot;
+        in.lengthM = info->mm * 0.001f;
+        in.heightM = in.lengthM * heightPerM;
+        in.lengthMm = (s32)info->mm;
+        in.unitsPerMetre = RF3_UNITS_PER_METRE;
+        in.pos[0] = this->actor.world.pos.x;
+        in.pos[1] = this->actor.world.pos.y;
+        in.pos[2] = this->actor.world.pos.z;
+        in.yaw = this->actor.shape.rot.y * (M_PI / 32768.0f);
+        in.pitch = -this->actor.shape.rot.x * (M_PI / 32768.0f);
+        in.home[0] = this->actor.home.pos.x; // RF3's +0x80: the spawn point
+        in.home[1] = this->actor.home.pos.y;
+        in.home[2] = this->actor.home.pos.z;
+        in.bandTop = sRF3SwimBand[slot][0]; // the free swim's band, for the picker
+        in.bandBottom = sRF3SwimBand[slot][1];
+        in.waterY = WATER_SURFACE_Y(play);
+        in.floorY = this->actor.floorHeight;
+        in.hp = 100.0f;
+        in.substeps = RF3_SUBSTEPS;
+        in.frame = play->gameplayFrames;
+        in.probe = Fishing_RF3Probe;
+        in.clampXZ = Fishing_RF3SwimClamp;
+        in.codeTurn = RF3FishModel_CodeTurn;
+        in.log = RF3FishMove_Log;
+        sRF3MovePlay = play;
+        sRF3MoveFish = this;
+        sRF3SwimSlot = slot;
+
+        RF3Fight_GetStatus(&fs);
+        ch.want = RF3_SWIM_HIT;
+        ch.kuhAt = (fs.hookWindowStart + fs.hookWindowEnd) * 0.5f; // +0x1F0
+        ch.kuhSeconds = 1.0f;                                      // [assumed] if code 28 has no pattern
+        if (RF3FishModel_CodeTurn(28, &turnYaw, &turnSeconds) && (turnSeconds > 0.0f)) {
+            ch.kuhSeconds = turnSeconds;
+        }
+        RF3FishSwim_Chase(&in, &ch, &out);
+        Fishing_RF3SetMover(slot, play, out.step[0], out.step[1], out.step[2], (s16)(out.yaw * (32768.0f / M_PI)),
+                            (s16)(out.pitch * (32768.0f / M_PI)));
+        len = sqrtf(SQ(out.step[0]) + SQ(out.step[1]) + SQ(out.step[2]));
+        sRF3StepLen[slot] = len; // rf3-step (48d)
+        sRF3StepFrame[slot] = play->gameplayFrames;
+    } else {
+        Fishing_RF3SetMover(slot, play, 0.0f, 0.0f, 0.0f, this->actor.world.rot.y, this->actor.world.rot.x);
+    }
+    sRF3MovedFish = this; // OoT's line leash skips it (30b-1d)
+    sRF3MovedFrame = play->gameplayFrames;
+    sRF3TurnScale = 1;
+}
+
 static s32 Fishing_RF3ApproachMove(Fishing* this, PlayState* play) {
     RF3ApproachStatus ap;
     RF3RegionFishInfo info;
@@ -7456,6 +7643,15 @@ static s32 Fishing_RF3ApproachMove(Fishing* this, PlayState* play) {
 
     RF3Approach_GetStatus(&ap);
     waiting = (ap.chaser == me) && (ap.chaserMode == 3);
+
+    // Step 49d: an RF3 fish chases and waits by RF3's own movement (RF3FishSwim_Chase); 29h below is for the others
+    if (Fishing_RF3StrikesInPlace(this)) {
+        s32 reached = false;
+
+        if (Fishing_RF3Chase(this, play, &ap, waiting, &reached)) {
+            return reached;
+        }
+    }
 
     this->fishTargetPos.x = sLurePos.x;
     this->fishTargetPos.z = sLurePos.z;

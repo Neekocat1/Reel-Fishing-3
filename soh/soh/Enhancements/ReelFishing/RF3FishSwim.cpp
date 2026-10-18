@@ -112,6 +112,20 @@ struct SwimState {
     int32_t rank = 0;   // step 47e: its species rank (its own body radius)
     float ghostT = 0.0f;       // step 47e: s left skipping fish (+0xDE4)
     float sincePushLog = 99.0f;
+    // step 49d: the chase and WAIT
+    bool deflected = false;  // +0x2B4: the steering slid along something this tick
+    bool stuckRec = false;   // +0x23C: a spot is recorded for the stuck test
+    float stuckPos[3] = { 0, 0, 0 }; // +0x230
+    float stuckT = 0.0f;     // +0x1F8
+    float waitLen = 0.0f;    // +0x15C
+    float backDir[3] = { 0, 0, 0 }; // +0x230 in WAIT: straight behind the heading, flattened
+    float backSpeed = 0.0f;  // +0x1F4, units per tick
+    bool backStopped = false; // +0x210: a probe hit stopped the backing
+    float sinceChaseLog = 99.0f;
+    int32_t slides = 0;      // slides since the last rf3-chase line
+    // step 49e: HIT
+    bool kuhDone = false;    // +0x21C
+    float holdLeft = 0.0f;   // s still holding for "Kuh!" (+0x220: until the motion ends)
 };
 
 std::map<int32_t, SwimState> sStates;
@@ -268,6 +282,37 @@ void Enter(Ctx& c, int32_t mode, RF3FishSwimOutput* out, int32_t why) {
     } else if (mode == RF3_SWIM_GLIDE) {
         Dir(s.yaw, s.pitch, s.moveDir);
         Request(s, 3, 0.2f);
+    } else if (mode == RF3_SWIM_CHASE) {
+        // step 49d: CHASE (0x001A0B00): fight-mode steering at the lure; the stuck test starts afresh
+        s.fast = true;
+        s.stuckRec = false;
+        s.stuckT = 0.0f;
+    } else if (mode == RF3_SWIM_CHASE_LOST) {
+        // step 49d: interest lost: the glide with the fast flag (0x0019B480(fish, 1))
+        s.fast = true;
+        Dir(s.yaw, s.pitch, s.moveDir);
+        Request(s, 3, 0.2f);
+    } else if (mode == RF3_SWIM_WAIT) {
+        // step 49d: WAIT (0x001A1FD0): back off straight behind the heading, flattened, 0.1 m (0.15 m from L = 0.2 m)
+        // over the WAIT's length; motion 2 (0x00196D70(0.2, fish, 2))
+        float d[3];
+        Dir(s.yaw, 0.0f, d);
+        for (int k = 0; k < 3; k++) {
+            s.backDir[k] = -d[k];
+        }
+        const float backM = (c.in.lengthM < 0.2f) ? 0.1f : 0.15f;
+        s.backSpeed = backM * c.U / (std::max(s.waitLen, kTick) * 60.0f);
+        s.backStopped = false;
+        s.speed = 0.0f;
+        Request(s, 2, 0.2f);
+    } else if (mode == RF3_SWIM_HIT) {
+        // step 49e: HIT (0x001A15C0 -> 0x0019A040): the target is the fish's home point; fight-mode steering
+        s.fast = true;
+        for (int k = 0; k < 3; k++) {
+            s.target[k] = c.in.home[k];
+        }
+        s.kuhDone = false;
+        s.holdLeft = 0.0f;
     }
     if (c.in.log != nullptr) {
         char line[320];
@@ -600,6 +645,106 @@ int GlideTick(Ctx& c) {
     return 0;
 }
 
+// Step 49d: one CHASE tick (0x001A0B00 -> 0x0019B360(fish, 1) -> 0x0019B7A0): the fight-mode steering of the fast swim
+// at the lure (s.target). Returns RF3_CHASE_BLOCKED when blocked, else RF3_CHASE_GOING; sets s.deflected on a slide.
+int ChaseSteerTick(Ctx& c) {
+    SwimState& s = c.s;
+    const RF3FishSwimInput& in = c.in;
+    s.deflected = false; // 0x0019B360 clears +0x2B4
+    if (s.spotLeft > 0.0f) {
+        // a turn on the spot (0x0019BEE0), standing still [as 30b-2]
+        s.yaw = WrapAngle(s.yaw + s.spotRate);
+        s.spotLeft -= kTick;
+        return RF3_CHASE_GOING;
+    }
+    s.turnRate = kBaseTurn * 2.0f; // fight mode (+0x2A8 = 1): the full species speed, turning at 2 x base
+    const float cap = c.speciesTick;
+    s.swimT += kTick;
+    if (s.swimT < 1.0f) {
+        Request(s, 20, 0.1f);
+    } else if (s.swimT < 2.0f) {
+        Request(s, 4, 0.1f);
+    } else {
+        Request(s, 3, 0.1f);
+    }
+    float d[3] = { s.target[0] - c.pos[0], s.target[1] - c.pos[1], s.target[2] - c.pos[2] };
+    float dist = Length3(d);
+    for (float& v : d) {
+        v = dist > 0.001f ? v / dist : 0.0f;
+    }
+    float toYaw, toPitch;
+    YawPitchOf(d, &toYaw, &toPitch);
+    float rf3Off = -WrapAngle(toYaw - s.yaw); // RF3 sense, + = right
+    if (std::fabs(rf3Off) >= kSpotTurn) {
+        int32_t code = rf3Off > 0.0f ? (rf3Off < kSpotTurn180 ? 66 : 64) : (rf3Off > -kSpotTurn180 ? 65 : 63);
+        float yawDeg = (code == 66) ? 90.0f : (code == 65) ? -90.0f : (code == 64) ? 180.0f : -180.0f;
+        float seconds = kSpotTurnSeconds;
+        if (in.codeTurn != nullptr) {
+            float y2 = 0.0f, s2 = 0.0f;
+            if (in.codeTurn(code, &y2, &s2) && s2 > 0.0f) {
+                yawDeg = y2;
+                seconds = s2;
+            }
+        }
+        // [assumed, as the free swim's turn on the spot] probe along the heading first; blocked fails the chase
+        float ahead[3], n[3];
+        Dir(s.yaw, s.pitch, ahead);
+        if (Probe(c, ahead, 0.05f * c.U, n) == 2) {
+            return RF3_CHASE_BLOCKED;
+        }
+        s.code = code;
+        s.raw = -1;
+        s.blend = 0.1f;
+        s.spotLeft = seconds;
+        s.spotRate = -(yawDeg * kPi / 180.0f) * kTick / seconds;
+        s.speed = 0.0f; // the ramp clock goes on, as in the free swim's turn on the spot
+        return RF3_CHASE_GOING;
+    }
+    float u = std::min(1.0f, s.rampT / std::max(0.01f, in.species.speedUpS));
+    s.speed = cap * std::sin(u * kPi * 0.5f);
+    s.rampT += kTick;
+    for (int i = 0; i < 2; i++) {
+        float n[3];
+        int32_t other = -1;
+        int hit = ProbeAll(c, d, s.speed + 0.05f * c.U, n, &other);
+        if (hit == 0) {
+            break;
+        }
+        if (hit == 3) {
+            // another fish (0x0019B7A0): skip fish for 1 s and slide off it; head-on, don't move this tick
+            s.ghostT = kPushGhostSeconds;
+            if (!Slide(d, n)) {
+                LogPush(c, other, "chase-wait");
+                return RF3_CHASE_GOING;
+            }
+            LogPush(c, other, "chase-slide");
+        } else if (hit == 2 || !Slide(d, n)) {
+            return RF3_CHASE_BLOCKED;
+        }
+        s.deflected = true;
+        s.slides++;
+    }
+    YawPitchOf(d, &toYaw, &toPitch);
+    TurnToward(s, toYaw, toPitch, nullptr);
+    Move(c, d, s.speed);
+    return RF3_CHASE_GOING;
+}
+
+// Step 49d: one WAIT tick (0x001A21C0): probe, then back off; a probe hit stops the backing for this WAIT
+void WaitTick(Ctx& c) {
+    SwimState& s = c.s;
+    if (s.backStopped) {
+        return;
+    }
+    float n[3];
+    int32_t other = -1;
+    if (ProbeAll(c, s.backDir, s.backSpeed, n, &other) != 0) {
+        s.backStopped = true;
+        return;
+    }
+    Move(c, s.backDir, s.backSpeed);
+}
+
 } // namespace
 
 extern "C" void RF3FishSwim_Seed(uint32_t seed) {
@@ -748,4 +893,137 @@ extern "C" void RF3FishSwim_Step(const RF3FishSwimInput* inp, RF3FishSwimOutput*
     out->code = s.code;
     out->rawAnim = s.raw;
     out->blend = s.blend;
+}
+
+extern "C" int32_t RF3FishSwim_Chase(const RF3FishSwimInput* inp, const RF3FishChaseInput* ch, RF3FishSwimOutput* out) {
+    const RF3FishSwimInput& in = *inp;
+    SwimState& s = sStates[in.slot];
+    Ctx c{ in, s, { in.pos[0], in.pos[1], in.pos[2] }, in.unitsPerMetre, in.lengthM * in.unitsPerMetre,
+           in.heightM * in.unitsPerMetre, in.species.speedMps / 60.0f * in.unitsPerMetre };
+    out->modeChanged = 0;
+    out->endWhy = RF3_SWIM_END_NONE;
+    out->prevMode = s.mode;
+    out->prevModeTime = s.t;
+    if (!s.started) {
+        s = SwimState{};
+        s.started = true;
+        s.yaw = in.yaw;
+        s.pitch = in.pitch;
+        s.mode = -1;
+    }
+    if (ch->want != RF3_SWIM_HIT) {
+        for (int k = 0; k < 3; k++) {
+            s.target[k] = ch->lure[k]; // 0x0019A130: the lure, every frame
+        }
+    }
+    if (s.mode != ch->want) {
+        if (ch->want == RF3_SWIM_WAIT) {
+            s.waitLen = ch->waitSeconds;
+        }
+        Enter(c, ch->want, out, RF3_SWIM_END_NONE);
+    }
+    s.frame = in.frame;
+    s.rank = in.species.rank;
+    // the reach (0x0019B280, flag 1): within min(0.1 m, L/2) of the lure on every axis, + 0.1 m under 150 mm
+    const float reach = std::min(0.1f * c.U, 0.5f * c.L) + (in.lengthMm < 150 ? 0.1f * c.U : 0.0f);
+    int32_t result = RF3_CHASE_GOING;
+    const int ticks = std::max(1, in.substeps);
+    for (int i = 0; i < ticks && result == RF3_CHASE_GOING; i++) {
+        s.t += kTick;
+        s.ghostT = std::max(0.0f, s.ghostT - kTick);
+        s.sincePushLog += kTick;
+        s.sinceChaseLog += kTick;
+        if (s.mode == RF3_SWIM_CHASE) {
+            if (std::fabs(s.target[0] - c.pos[0]) <= reach && std::fabs(s.target[1] - c.pos[1]) <= reach &&
+                std::fabs(s.target[2] - c.pos[2]) <= reach) {
+                result = RF3_CHASE_REACHED;
+                break;
+            }
+            if (ChaseSteerTick(c) == RF3_CHASE_BLOCKED) {
+                result = RF3_CHASE_BLOCKED;
+                break;
+            }
+            // stuck (0x001A0B00): while sliding, less than L/2 from the spot of 1 s ago fails the chase
+            if (s.deflected) {
+                if (!s.stuckRec) {
+                    s.stuckRec = true;
+                    s.stuckT = 0.0f;
+                    for (int k = 0; k < 3; k++) {
+                        s.stuckPos[k] = c.pos[k];
+                    }
+                } else {
+                    s.stuckT += kTick;
+                    if (s.stuckT > 1.0f) {
+                        float m[3] = { c.pos[0] - s.stuckPos[0], c.pos[1] - s.stuckPos[1], c.pos[2] - s.stuckPos[2] };
+                        if (Length3(m) < 0.5f * c.L) {
+                            result = RF3_CHASE_STUCK;
+                            break;
+                        }
+                        s.stuckRec = false;
+                        s.stuckT = 0.0f;
+                    }
+                }
+            } else {
+                s.stuckRec = false;
+                s.stuckT = 0.0f;
+            }
+        } else if (s.mode == RF3_SWIM_CHASE_LOST) {
+            GlideTick(c);
+        } else if (s.mode == RF3_SWIM_HIT) {
+            // step 49e (0x001A1820): "Kuh!" at the hook window's centre, holding still until the motion ends;
+            // otherwise steer home; blocked -> a new target (0x00199AD0(0, 0, 45 deg)): home radius x 0.6-1.0
+            if (s.holdLeft > 0.0f) {
+                s.holdLeft -= kTick;
+                s.speed = 0.0f;
+            } else if (!s.kuhDone && s.t >= ch->kuhAt) {
+                s.kuhDone = true;
+                Request(s, 28, 0.02f);
+                s.holdLeft = ch->kuhSeconds;
+                s.speed = 0.0f;
+                if (in.log != nullptr) {
+                    char line[120];
+                    std::snprintf(line, sizeof(line), "slot=%d rf3-hit-kuh at=%.2fs hold=%.2fs", in.slot, s.t,
+                                  ch->kuhSeconds);
+                    in.log(line);
+                }
+            } else if (ChaseSteerTick(c) == RF3_CHASE_BLOCKED) {
+                const float factor = static_cast<float>(Rand() % 5u + 1u) * 0.1f + 0.5f;
+                PickTarget(c, in.species.homeRadiusM * factor, kPi, kPi / 4.0f);
+            }
+        } else {
+            WaitTick(c);
+        }
+    }
+    for (int k = 0; k < 3; k++) {
+        out->step[k] = c.pos[k] - in.pos[k];
+        out->target[k] = s.target[k];
+    }
+    RF3FishSwim_Body(in.slot, c.pos, s.yaw, s.pitch, in.lengthM, in.frame);
+    out->yaw = s.yaw;
+    out->pitch = s.pitch;
+    out->mode = s.mode;
+    out->modeTime = s.t;
+    out->hoverLen = 0.0f;
+    out->speed = (s.mode == RF3_SWIM_WAIT) ? (s.backStopped ? 0.0f : s.backSpeed) : s.speed;
+    out->code = s.code;
+    out->rawAnim = s.raw;
+    out->blend = s.blend;
+    if (in.log != nullptr && (result != RF3_CHASE_GOING || s.sinceChaseLog >= 1.0f)) {
+        char line[260];
+        const float dx = s.target[0] - c.pos[0];
+        const float dz = s.target[2] - c.pos[2];
+        std::snprintf(line, sizeof(line),
+                      "slot=%d rf3-chase%s mode=%d dist_xz=%.1f dy=%.1f reach=%.1f speed=%.3f/tick slides=%d "
+                      "stuck=%.2fs%s",
+                      in.slot, result != RF3_CHASE_GOING ? "-end" : "", s.mode, std::sqrt(dx * dx + dz * dz),
+                      s.target[1] - c.pos[1], reach, out->speed, s.slides, s.stuckRec ? s.stuckT : 0.0f,
+                      result == RF3_CHASE_REACHED ? " why=reached"
+                      : result == RF3_CHASE_BLOCKED ? " why=blocked"
+                      : result == RF3_CHASE_STUCK   ? " why=stuck"
+                                                    : "");
+        in.log(line);
+        s.sinceChaseLog = 0.0f;
+        s.slides = 0;
+    }
+    return result;
 }

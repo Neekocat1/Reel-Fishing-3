@@ -78,6 +78,24 @@ typedef struct RF3FishSwimOutput {
 } RF3FishSwimOutput;
 
 void RF3FishSwim_Step(const RF3FishSwimInput* in, RF3FishSwimOutput* out);
+
+// Step 49d: RF3's CHASE and WAIT for a region fish going for the lure (RF3-MECHANICS 2.5/2.6, 0x001A0B00, 0x001A21C0).
+// The modes share the slot's swim state (heading, speed); the free swim starts again in hover afterwards (its reset).
+// Step 49e: HIT (13), a hooked fish from the bite to the hook set (0x001A1820): it steers to its home point (in.home)
+// as CHASE steers, a blocked probe picks a new target, and at the hook window's centre it holds still for "Kuh!" (28).
+enum { RF3_SWIM_CHASE = 10, RF3_SWIM_CHASE_LOST = 11, RF3_SWIM_WAIT = 12, RF3_SWIM_HIT = 13 };
+enum { RF3_CHASE_GOING = 0, RF3_CHASE_REACHED = 1, RF3_CHASE_BLOCKED = 2, RF3_CHASE_STUCK = 3 };
+typedef struct RF3FishChaseInput {
+    int32_t want;      // RF3_SWIM_CHASE (interested), RF3_SWIM_CHASE_LOST (not interested), RF3_SWIM_WAIT, RF3_SWIM_HIT
+    float lure[3];     // the lure (world); not used in HIT
+    float waitSeconds; // the WAIT's length, read when a WAIT starts (its back-off is spread over it)
+    float kuhAt;       // HIT: s after the bite when "Kuh!" plays (the hook window's centre)
+    float kuhSeconds;  // HIT: how long it holds still for it
+} RF3FishChaseInput;
+// One game frame of the chase. Uses `in` as RF3FishSwim_Step does (home, band, current, clampXZ are not used).
+// Returns RF3_CHASE_*: reached the lure (RF3's strike or WAIT follows), blocked or stuck (the chase fails).
+int32_t RF3FishSwim_Chase(const RF3FishSwimInput* in, const RF3FishChaseInput* chase, RF3FishSwimOutput* out);
+
 void RF3FishSwim_Forget(int32_t slot);
 // Step 47c: the record's species values (RF3FishTable.h kFishSwim) and depth layers. Returns 0 for an unknown record.
 int32_t RF3FishSwim_Species(int32_t record, RF3FishSwimSpecies* out, int32_t* layerMin, int32_t* layerMax);
