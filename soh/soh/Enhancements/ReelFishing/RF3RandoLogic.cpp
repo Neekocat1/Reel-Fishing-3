@@ -694,6 +694,26 @@ void RF3Rando_ApplyItemNames() {
         RF3Rando_BuildItem(static_cast<RandomizerGet>(rg), name);
         nameToEnum[name] = static_cast<RandomizerGet>(rg); // the generic name stays mapped too
     }
+    // Step 53a: the hint texts the items now carry (clear / ambiguous / obscure), for three samples.
+    std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::ofstream out(dir + "/rf3_rando.txt", std::ios::app);
+    char stamp[32];
+    std::time_t now = std::time(nullptr);
+    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+    int keyed = 0;
+    for (int rg = RG_RF3_ROD_0; rg <= RG_RF3_LURE_92; rg++) {
+        RandomizerHintTextKey key = Rando::StaticData::RetrieveItem(static_cast<RandomizerGet>(rg)).GetHintKey();
+        keyed += (key == RHT_RF3_ITEM_0 + (rg - RG_RF3_ROD_0)) ? 1 : 0;
+    }
+    out << stamp << " rf3-hint-text items=" << (RG_RF3_LURE_92 - RG_RF3_ROD_0 + 1) << " keyed=" << keyed;
+    for (RandomizerGet rg : { ItemOf(RF3_STOCK_ROD, 0), ItemOf(RF3_STOCK_LURE, 48), ItemOf(RF3_STOCK_ROD, 10) }) {
+        const HintText& h = Rando::StaticData::RetrieveItem(rg).GetHint();
+        out << " | " << h.GetClear().GetEnglish(MF_CLEAN) << " / " << h.GetAmbiguous().GetEnglish(MF_CLEAN) << " / "
+            << h.GetObscure().GetEnglish(MF_CLEAN);
+    }
+    out << "\n";
 }
 
 RandomizerInf RF3Rando_OwnedFlag(RandomizerGet rg) {

@@ -1105,6 +1105,17 @@ void Settings::CreateOptions() {
     OPT_BOOL(RSK_FISHSANITY_AGE_SPLIT, CVAR_RANDOMIZER_SETTING("FishsanityAgeSplit"));
     // Reel Fishing III mod (step 24b): RF3 tackle checks (RF3RandoChecks.cpp).
     OPT_BOOL(RSK_RF3_TACKLE_SHUFFLE, CVAR_RANDOMIZER_SETTING("RF3TackleShuffle"));
+    OPT_CALLBACK(RSK_RF3_TACKLE_SHUFFLE, {
+        // Step 52 (user, 2026-10-17): RF3's own rods and pond shop take over the pole, so SoH's pole shuffle is off
+        // (and greyed out) while RF3 tackle is shuffled. Its hint goes with it.
+        if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3TackleShuffle"), RO_GENERIC_OFF)) {
+            CVarSetInteger(CVAR_RANDOMIZER_SETTING("ShuffleFishingPole"), RO_GENERIC_OFF);
+            mOptions[RSK_SHUFFLE_FISHING_POLE].Disable("Disabled because Shuffle RF3 Tackle is on.");
+            mOptions[RSK_FISHING_POLE_HINT].Disable("This option is disabled since the fishing pole is not shuffled.");
+        } else {
+            mOptions[RSK_SHUFFLE_FISHING_POLE].Enable();
+        }
+    });
     OPT_U8(RSK_RF3_CATCH_CHECKS, {NumOpts(0,147,1)}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("RF3CatchChecks"), WIDGET_CVAR_SLIDER_INT, 20, false, nullptr, IMFLAG_NONE);
     // Reel Fishing III mod (step 43b): which RF3 checks: catch #1..#N (simple) or one per lure condition (advanced).
     OPT_U8(RSK_RF3_CHECK_MODE, {"Simple", "Advanced"}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("RF3CheckMode"), WIDGET_CVAR_COMBOBOX, 0);
@@ -2560,6 +2571,9 @@ void Settings::CreateOptions() {
     mOptionGroups[RSG_EXCLUDES_MARKET] = OptionGroup::SubGroup("Market", mExcludeLocationsOptionsAreas[RCAREA_MARKET]);
     mOptionGroups[RSG_EXCLUDES_GANONS_CASTLE] =
         OptionGroup::SubGroup("Ganon's Castle", mExcludeLocationsOptionsAreas[RCAREA_GANONS_CASTLE]);
+    // Reel Fishing III mod (step 53b): the RF3 checks' own area.
+    mOptionGroups[RSG_EXCLUDES_REEL_FISHING] =
+        OptionGroup::SubGroup("Reel Fishing", mExcludeLocationsOptionsAreas[RCAREA_REEL_FISHING]);
     mOptionGroups[RSG_EXCLUDES] =
         OptionGroup::SubGroup("Exclude Locations", {
                                                        &mOptionGroups[RSG_EXCLUDES_KOKIRI_FOREST],
@@ -2594,6 +2608,7 @@ void Settings::CreateOptions() {
                                                        &mOptionGroups[RSG_EXCLUDES_HYRULE_CASTLE],
                                                        &mOptionGroups[RSG_EXCLUDES_MARKET],
                                                        &mOptionGroups[RSG_EXCLUDES_GANONS_CASTLE],
+                                                       &mOptionGroups[RSG_EXCLUDES_REEL_FISHING],
                                                    });
     mOptionGroups[RSG_DETAILED_LOGIC] =
         OptionGroup("Detailed Logic Settings",
@@ -3089,6 +3104,11 @@ void Context::FinalizeSettings(const std::set<RandomizerCheck>& excludedLocation
 
     if (!mOptions[RSK_SHUFFLE_100_GS_REWARD]) {
         mOptions[RSK_KAK_100_SKULLS_HINT].Set(RO_GENERIC_OFF);
+    }
+
+    // Reel Fishing III mod (step 52): no pole shuffle with RF3 tackle shuffled, whatever the settings came from.
+    if (mOptions[RSK_RF3_TACKLE_SHUFFLE]) {
+        mOptions[RSK_SHUFFLE_FISHING_POLE].Set(RO_GENERIC_OFF);
     }
 
     if (!mOptions[RSK_SHUFFLE_FISHING_POLE]) {

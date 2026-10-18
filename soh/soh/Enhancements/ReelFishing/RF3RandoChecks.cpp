@@ -6,9 +6,14 @@
 
 #include "RF3RandoChecks.h"
 
+#include <cstdio>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 #include <libultraship/bridge/consolevariablebridge.h>
+#include <ship/Context.h>
 
 #include "soh/OTRGlobals.h"
 #include "soh/ShipInit.hpp"
@@ -17,6 +22,8 @@
 #include "soh/Enhancements/randomizer/location_access.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
+#include "soh/Enhancements/randomizer/randomizer_check_objects.h" // step 53b
+#include "soh/Enhancements/randomizer/settings.h"                 // step 53b
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "RF3Bridge.h"
 #include "RF3Sim.h" // step 43b: which lures have a condition
@@ -100,7 +107,8 @@ namespace {
 
 void Add(RandomizerCheck rc, RandomizerInf flag, std::string name, RandomizerGet vanilla) {
     Rando::StaticData::GetLocationTable()[rc] =
-        Rando::Location::Base(rc, RCQUEST_BOTH, RCTYPE_RF3, ACTOR_ID_MAX, SCENE_FISHING_POND, 0x00, std::move(name),
+        Rando::Location::Base(rc, RCQUEST_BOTH, RCTYPE_RF3, RCAREA_REEL_FISHING, ACTOR_ID_MAX, SCENE_FISHING_POND, 0x00,
+                              std::move(name), // step 53b: the tracker's and exclusions' "Reel Fishing"
                               RHT_LH_POND_FISH, vanilla, Rando::SpoilerCollectionCheck::RandomizerInf(flag));
     rcToRandomizerInf[rc] = flag;
 }
@@ -109,11 +117,43 @@ void Add(RandomizerCheck rc, RandomizerInf flag, std::string name, RandomizerGet
 bool sInSeedBuilt = false;
 bool sInSeed[RG_RF3_LURE_92 - RG_RF3_ROD_0 + 1] = {};
 
+// Step 53b: one line per rando file load in logs/rf3_rando.txt: how many RF3 checks have the Reel Fishing area, how
+// many the seed includes, the exclude list's size for that area, and which tracker area the pond's scene maps to
+// (should stay Lake Hylia).
+void LogTrackerArea() {
+    int32_t inArea = 0;
+    int32_t otherArea = 0;
+    int32_t included = 0;
+    for (int32_t rc = RC_RF3_ROD_CONDITION_0; rc <= RC_RF3_FLOAT_5; rc++) {
+        const Rando::Location* loc = Rando::StaticData::GetLocation(static_cast<RandomizerCheck>(rc));
+        if (loc->GetRCType() != RCTYPE_RF3) {
+            continue;
+        }
+        (loc->GetArea() == RCAREA_REEL_FISHING ? inArea : otherArea)++;
+        included += RF3Rando_CheckIncludedBySeed(static_cast<RandomizerCheck>(rc)) ? 1 : 0;
+    }
+    size_t excludes = Rando::Settings::GetInstance()->GetExcludeOptionsForArea(RCAREA_REEL_FISHING).size();
+    RandomizerCheckArea pond = RandomizerCheckObjects::GetRCAreaBySceneID(SCENE_FISHING_POND);
+    std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::ofstream out(dir + "/rf3_rando.txt", std::ios::app);
+    char stamp[32];
+    std::time_t now = std::time(nullptr);
+    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+    out << stamp << " rf3-tracker area=" << RandomizerCheckObjects::GetRCAreaName(RCAREA_REEL_FISHING)
+        << " checks=" << inArea << " otherArea=" << otherArea << " inSeed=" << included << " excludes=" << excludes
+        << " pondScene=" << RandomizerCheckObjects::GetRCAreaName(pond) << "\n";
+}
+
 void RegisterRF3RandoChecks() {
     Rando::StaticData::RegisterRF3Locations();
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnLoadFile>([](int32_t fileNum) {
         sInSeedBuilt = false;
         RF3Rando_ApplyItemNames(); // step 24e: the tracker and hints show the real names
+        if (IS_RANDO) {
+            LogTrackerArea(); // step 53b
+        }
     });
 }
 

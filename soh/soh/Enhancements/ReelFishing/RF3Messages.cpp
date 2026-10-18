@@ -22,6 +22,7 @@
 #include "soh/cvar_prefixes.h"
 #include "RF3Bridge.h"
 #include "RF3Items.h"
+#include "RF3RandoChecks.h" // step 55c: RF3Rando_Active
 #include "soh/Enhancements/randomizer/randomizer.h" // RG_RF3_*, IS_RANDO
 #include "soh/OTRGlobals.h"
 #include "RF3SizeMap.h"
@@ -262,10 +263,26 @@ static void BuildRF3ItemGetMessage(uint16_t* textId, bool* loadFromMessageTable)
     RF3Rod_LogEvent("item-get-text", offset);
 }
 
+// Step 55c option A (user, 2026-10-18): in an RF3 seed, once the shop check is done and Link still owns no rod, the
+// owner's opening text (with its 20-rupee choice) becomes a plain line: no payment, no session. The owner's state 1
+// already closes a text without a choice (SoH's fix for the closed pond under pole shuffle).
+static void BuildRF3NoRodPondMessage(uint16_t* textId, bool* loadFromMessageTable) {
+    if (!RF3Rando_Active() || !Flags_GetRandomizerInf(RAND_INF_RF3_POND_SHOP) || RF3Stock_AnyRod()) {
+        return;
+    }
+    CustomMessage msg = CustomMessage("You'll need a rod of your own to fish here.");
+    msg.AutoFormat();
+    msg.LoadIntoFont();
+    *loadFromMessageTable = false;
+    RF3Rod_LogEvent("pond-no-rod-text", *textId);
+}
+
 static void RegisterRF3Messages() {
     COND_ID_HOOK(OnOpenText, kFishGotAwayText, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 0),
                  BuildRF3EscapeMessage);
     COND_ID_HOOK(OnOpenText, TEXT_RANDOMIZER_CUSTOM_ITEM, !IS_RANDO, BuildRF3ItemGetMessage); // step 22b
+    COND_ID_HOOK(OnOpenText, TEXT_FISHING_POND_START, IS_RANDO, BuildRF3NoRodPondMessage);     // step 55c
+    COND_ID_HOOK(OnOpenText, TEXT_FISHING_POND_START_MET, IS_RANDO, BuildRF3NoRodPondMessage); // step 55c
     // Step 12b: one general hook for the catch texts and the pond's weigh-in texts.
     COND_HOOK(OnOpenText, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 0), BuildRF3SizeMessages);
 }

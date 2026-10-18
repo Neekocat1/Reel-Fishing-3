@@ -39,3 +39,9 @@ void RF3Rando_ApplyItemNames();
 inline bool RF3Rando_IsItem(RandomizerGet rg) {
     return rg >= RG_RF3_ROD_0 && rg <= RG_RF3_LURE_92;
 }
+
+// Step 54 (RF3CheckNames.cpp): the check tracker's name for an RF3 check, its condition as a sentence ("Catch 5
+// Largemouth Bass"); and the tracker's overrides for the seed's RF3 checks (others removed; clashes get " (2)").
+#include <unordered_map>
+std::string RF3Rando_CheckLabel(RandomizerCheck rc);
+void RF3Rando_TrackerNames(std::unordered_map<RandomizerCheck, std::string>& overrides);

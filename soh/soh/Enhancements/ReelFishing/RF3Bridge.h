@@ -191,6 +191,8 @@ void RF3Size_SetRecord(int32_t isChild, float ootLength);
 // Does nothing with the RF3 option off.
 void RF3Rod_SetOwned(void);
 int32_t RF3Rod_IsOwned(void);
+// Step 55c: Link paid the owner in an RF3 seed without owning a rod: sets the shop check, returns 1 (no session).
+int32_t RF3Rod_PaidWithoutRod(void);
 // Step 15c: one line in logs/rf3_records.txt (e.g. "portable-start", scene number).
 void RF3Rod_LogEvent(const char* what, int32_t value);
 

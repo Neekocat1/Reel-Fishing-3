@@ -13,13 +13,32 @@ using namespace Rando;
 
 // Reel Fishing III mod (steps 22a/24e): an RF3 item, built like the Fishing Pole. Rods show the Fishing Pole model,
 // the rest the pond lure; progression (24c), major (24d fix: the randomizer shows its get-item animation).
+// Step 53a: each has its own hint text (RHT_RF3_ITEM_n), rebuilt with the item whenever its name changes.
 void RF3Rando_BuildItem(RandomizerGet get, const std::string& name) {
     auto& itemTable = Rando::StaticData::GetItemTable();
-    itemTable[get] = Item(get, Text{ name, name, name }, ITEMTYPE_ITEM, get, true, LOGIC_NONE, RHT_NONE, get,
+    int32_t offset = get - RG_RF3_ROD_0;
+    RandomizerHintTextKey hintKey = static_cast<RandomizerHintTextKey>(RHT_RF3_ITEM_0 + offset);
+    itemTable[get] = Item(get, Text{ name, name, name }, ITEMTYPE_ITEM, get, true, LOGIC_NONE, hintKey, get,
                           OBJECT_GI_FISH, GID_FISHING_POLE, TEXT_RANDOMIZER_CUSTOM_ITEM, 0x80, CHEST_ANIM_SHORT,
                           ITEM_CATEGORY_MAJOR, MOD_RANDOMIZER, { "a ", "un ", "ein " });
-    bool rod = RF3Items_Kind(get - RG_RF3_ROD_0) == 0; // RF3_STOCK_ROD; OoT's pole (step 23c) is a rod too
+    int32_t kind = RF3Items_Kind(offset);
+    bool rod = kind == 0; // RF3_STOCK_ROD; OoT's pole (step 23c) is a rod too
     itemTable[get].SetCustomDrawFunc(rod ? RF3Items_DrawRodGI : RF3Items_DrawTackleGI); // step 28: RF3's models
+
+    // Clear: the item's own name (English only, so German and French get it without an article). Ambiguous by kind
+    // (RF3_STOCK_ROD, LURE, FLY, BAIT, FLOAT); obscure as SoH's Fishing Pole for rods.
+    static const CustomMessage kAmbiguous[5] = {
+        CustomMessage("a fishing rod", "eine Angelrute", "une canne à pêche"),
+        CustomMessage("a fishing lure", "ein Köder", "un leurre"),
+        CustomMessage("a fly", "eine Fliege", "une mouche"),
+        CustomMessage("some bait", "etwas Köder", "un appât"),
+        CustomMessage("a float", "ein Schwimmer", "un flotteur"),
+    };
+    const CustomMessage obscure = rod ? CustomMessage("a fish-puller", "ein Fischzieher", "(un aimant à poisson)")
+                                      : CustomMessage("some fishing tackle", "etwas Angelzubehör", "du matériel de pêche");
+    Rando::StaticData::hintTextTable[hintKey] =
+        HintText(CustomMessage("the " + name, name, name), { kAmbiguous[(kind >= 0 && kind < 5) ? kind : 1] },
+                 { obscure });
 }
 
 std::array<Item, RG_MAX> Rando::StaticData::itemTable;

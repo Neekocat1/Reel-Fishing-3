@@ -134,6 +134,13 @@ void RequestLog(const std::string& why) {
     sLogWhy = sLogWhy.empty() ? why : sLogWhy + "," + why;
 }
 
+// Step 55b (user's rando test, 2026-10-18): with no rod owned the screen shows no box: "No rod." in the rod pane, no
+// rows, no input (RF3 never has no rod; the text is the mod's).
+bool NoRod() {
+    return RF3Stock_AnyRod() == 0;
+}
+constexpr const char* kNoRodText = "No rod.";
+
 const Box* CurrentBox() {
     const Assets& a = Get();
     RF3TackleChoice c;
@@ -1148,6 +1155,9 @@ void LogState(const Values& v) {
                   sCounts.elements, sCounts.sprites, sCounts.strips, sCounts.glyphs, sCounts.numbers,
                   sCounts.missingPieces);
     std::string text = head;
+    if (NoRod()) {
+        text += " noRod=1"; // step 55b
+    }
     text += " texts=[" + (v.box ? v.box->title : std::string("?")) + " | " +
             (v.target ? v.target->name : std::string("?")) + " | " + (v.box ? v.box->rodName : "?") + " | " +
             (v.box ? v.box->reelName : "?") + " | " + (v.line ? v.line->name : std::string("?")) + " | " +
@@ -1188,6 +1198,12 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
     PauseContext* pauseCtx = &play->pauseCtx;
     Input* input = &play->state.input[0];
     pauseCtx->cursorSpecialPos = 0; // the stick is the screen's; Z/R still turn pages
+    if (NoRod()) { // step 55b: nothing to choose
+        if (sMode != MODE_ROWS) {
+            CloseList("no-rod");
+        }
+        return;
+    }
 
     const Box* listBox = CurrentBox();
     if (sMode != MODE_ROWS && listBox != nullptr) {
@@ -1402,7 +1418,8 @@ extern "C" void RF3Pause_DrawTackleScreen(PlayState* play) {
     interfaceCtx->startAlpha = 0;
 
     sFrames++;
-    Values v = CurrentValues();
+    const bool noRod = NoRod(); // step 55b
+    Values v = noRod ? Values{} : CurrentValues();
     sCounts = {};
     sDrawn.clear();
     OPEN_DISPS(play->state.gfxCtx);
@@ -1420,13 +1437,20 @@ extern "C" void RF3Pause_DrawTackleScreen(PlayState* play) {
     const std::string rowsLayout = LayoutOf(v.box);
     for (const std::string& layout : { std::string("menu_01"), rowsLayout }) {
         auto it = Get().layouts.find(layout);
-        if (it == Get().layouts.end() || (sMode == MODE_LIST && layout != "menu_01")) {
-            continue; // step 35b-2: the item menu hides the tackle rows (RF3's screenshot)
+        if (it == Get().layouts.end() || (sMode == MODE_LIST && layout != "menu_01") ||
+            (noRod && layout != "menu_01")) {
+            continue; // step 35b-2: the item menu hides the tackle rows (RF3's screenshot); step 55b: no rod, no rows
         }
         for (auto e = it->second.rbegin(); e != it->second.rend(); ++e) {
             DrawElement(g, layout, *e, v);
             if (layout == "menu_01" && e->name == "Image07" && sMode != MODE_LIST) {
                 DrawRodPane(g, play, *e, v); // step 39a: the 3D rod pane on top of the dark pane
+                if (noRod && e->box) { // step 55b: centred in the pane
+                    const auto& b = *e->box;
+                    const float h = static_cast<float>(Get().fontCell[1]);
+                    DrawString(g, (b[0] + b[2]) * 0.5f - TextWidth(kNoRodText, 1.0f) * 0.5f, (b[1] + b[3]) * 0.5f - h * 0.5f,
+                               kNoRodText, 0, h, 1.0f);
+                }
             }
         }
     }

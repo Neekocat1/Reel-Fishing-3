@@ -41,6 +41,7 @@ std::map<RandomizerCheckArea, std::string> rcAreaNames = {
     { RCAREA_ICE_CAVERN, "Ice Cavern" },
     { RCAREA_GERUDO_TRAINING_GROUND, "Gerudo Training Ground" },
     { RCAREA_GANONS_CASTLE, "Ganon's Castle" },
+    { RCAREA_REEL_FISHING, "Reel Fishing" }, // Reel Fishing III mod (step 53b)
     { RCAREA_INVALID, "Invalid" },
 };
 
@@ -80,7 +81,9 @@ std::map<SceneID, RandomizerCheckArea> RandomizerCheckObjects::GetAllRCAreaBySce
     if (rcAreaBySceneID.size() == 0) {
         for (auto& location : Rando::StaticData::GetLocationTable()) {
             // There are some RCs that don't have checks implemented yet, prevent adding these to the map.
-            if (location.GetRandomizerCheck() != RC_UNKNOWN_CHECK) {
+            // Reel Fishing III mod (step 53b): RF3 checks have their own area but the pond's scene; the scene stays
+            // Lake Hylia.
+            if (location.GetRandomizerCheck() != RC_UNKNOWN_CHECK && location.GetRCType() != RCTYPE_RF3) {
                 rcAreaBySceneID[location.GetScene()] = location.GetArea();
             }
         }

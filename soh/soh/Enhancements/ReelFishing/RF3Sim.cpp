@@ -2,7 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <initializer_list>
+#include <string>
+#include <utility>
+#include <vector>
 
 // Section numbers in comments refer to docs/RF3-MECHANICS.md.
 
@@ -885,6 +889,335 @@ bool UnlockMet(const UnlockProgress& p, int slot) {
             return p.sumG[l] >= c->totalG;
     }
     return false;
+}
+
+// --- Step 54: conditions as text (DESIGN "Step 54 design", wording rules 1-11) ---------------------------------------
+
+namespace {
+
+// "a" or "an". A lone capital letter is read by its name ("an F Vibration", "a Popper").
+std::string Article(const std::string& s) {
+    if (s.empty()) {
+        return "a";
+    }
+    const char c0 = s[0];
+    const bool lone = s.size() == 1 || s[1] == ' ';
+    if (lone && c0 >= 'A' && c0 <= 'Z') {
+        return std::string("AEFHILMNORSX").find(c0) != std::string::npos ? "an" : "a";
+    }
+    return std::string("AEIOUaeiou").find(c0) != std::string::npos ? "an" : "a";
+}
+
+std::string WithArticle(const std::string& s) {
+    return Article(s) + " " + s;
+}
+
+// One decimal, without ".0" when whole.
+std::string Num1(double v) {
+    char buf[32];
+    const double r = std::round(v * 10.0) / 10.0;
+    if (std::fabs(r - std::round(r)) < 1e-9) {
+        std::snprintf(buf, sizeof(buf), "%d", static_cast<int>(std::round(r)));
+    } else {
+        std::snprintf(buf, sizeof(buf), "%.1f", r);
+    }
+    return buf;
+}
+
+std::string Length(double mm) { // rule 4: inches first, mm in brackets
+    return Num1(mm / 25.4) + " in (" + std::to_string(static_cast<int>(std::lround(mm))) + " mm)";
+}
+
+std::string Weight(double g) { // rule 4: kg first, lb in brackets
+    return Num1(g / 1000.0) + " kg (" + Num1(g / 453.59237) + " lb)";
+}
+
+std::string Join(const std::vector<std::string>& v, const char* last) { // "A", "A or B", "A, B or C"
+    std::string out;
+    for (size_t i = 0; i < v.size(); i++) {
+        if (i > 0) {
+            out += (i + 1 == v.size()) ? std::string(" ") + last + " " : ", ";
+        }
+        out += v[i];
+    }
+    return out;
+}
+
+std::vector<int> Bits(uint64_t lo, uint64_t hi = 0) {
+    std::vector<int> out;
+    for (int i = 0; i < 64; i++) {
+        if ((lo >> i) & 1) {
+            out.push_back(i);
+        }
+    }
+    for (int i = 0; i < 64; i++) {
+        if ((hi >> i) & 1) {
+            out.push_back(64 + i);
+        }
+    }
+    return out;
+}
+
+// Rule 5: one name; several with shared first words -> "a <shared words>"; else up to 3 joined by "or"; else "one
+// of N <plural>".
+std::string SetPhrase(const std::vector<std::string>& names, const char* plural) {
+    if (names.empty()) {
+        return "";
+    }
+    if (names.size() == 1) {
+        return names[0];
+    }
+    auto words = [](const std::string& s) {
+        std::vector<std::string> w;
+        size_t start = 0;
+        while (start <= s.size()) {
+            size_t end = s.find(' ', start);
+            if (end == std::string::npos) {
+                end = s.size();
+            }
+            w.push_back(s.substr(start, end - start));
+            start = end + 1;
+        }
+        return w;
+    };
+    std::vector<std::string> common = words(names[0]);
+    size_t shortest = common.size();
+    for (size_t i = 1; i < names.size(); i++) {
+        std::vector<std::string> w = words(names[i]);
+        shortest = std::min(shortest, w.size());
+        size_t k = 0;
+        while (k < common.size() && k < w.size() && common[k] == w[k]) {
+            k++;
+        }
+        common.resize(k);
+    }
+    if (!common.empty() && common.size() < shortest) {
+        std::string prefix;
+        for (size_t i = 0; i < common.size(); i++) {
+            prefix += (i ? " " : "") + common[i];
+        }
+        return WithArticle(prefix);
+    }
+    if (names.size() <= 3) {
+        return Join(names, "or");
+    }
+    return "one of " + std::to_string(names.size()) + " " + plural;
+}
+
+// Rule 3: the fish word, singular and plural alike. groupWord is set for a known group ("trout", "salmon", "bass").
+std::string FishWord(uint64_t species, const ConditionNames& names, std::string* groupWord) {
+    if (species == 0) {
+        return "fish";
+    }
+    std::string group;
+    if (species == kTrout || species == kTroutSix) {
+        group = "trout";
+    } else if (species == kSalmon) {
+        group = "salmon";
+    } else if (species == Sp({ 8, 9 })) {
+        group = "bass";
+    }
+    if (groupWord != nullptr) {
+        *groupWord = group;
+    }
+    std::vector<int> ids = Bits(species);
+    if (ids.size() == 1) {
+        return names.species(ids[0]);
+    }
+    if (!group.empty()) {
+        return group;
+    }
+    if (ids.size() <= 3) {
+        std::vector<std::string> v;
+        for (int id : ids) {
+            v.push_back(names.species(id));
+        }
+        return Join(v, "or");
+    }
+    return "fish of " + std::to_string(ids.size()) + " species";
+}
+
+// Rules 2-3: "a fish", "5 Largemouth Bass", "a Lunker Char", "5 Lunkers of any species".
+std::string CountedFish(const LureCondition& c, int n, const ConditionNames& names) {
+    if (c.lunker && c.species == 0) {
+        return n == 1 ? "a Lunker of any species" : std::to_string(n) + " Lunkers of any species";
+    }
+    std::string what = FishWord(c.species, names, nullptr);
+    if (c.lunker) {
+        what = "Lunker " + what;
+    }
+    return n == 1 ? WithArticle(what) : std::to_string(n) + " " + what;
+}
+
+std::string SizePart(const LureCondition& c) { // rule 4
+    std::string out;
+    if (c.minMm > 0) {
+        out += " of " + Length(c.minMm) + " or more";
+    }
+    if (c.minWeightG > 0) {
+        out += (c.minMm > 0 ? ", weighing " : " of ") + Weight(c.minWeightG) + " or more";
+    }
+    return out;
+}
+
+std::string FlyTypeWord(uint8_t types) { // rule 5
+    if (types == kAnyFly) {
+        return "fly";
+    }
+    if (types == kSunkenFly) {
+        return "sunken fly";
+    }
+    static const char* const kWords[4] = { "dry fly", "nymph", "wet fly", "streamer" };
+    std::vector<std::string> v;
+    for (int t = 0; t < 4; t++) {
+        if ((types >> t) & 1) {
+            v.push_back(kWords[t]);
+        }
+    }
+    return Join(v, "or");
+}
+
+std::string TacklePart(const LureCondition& c, const ConditionNames& names) { // rule 5
+    std::vector<std::string> parts;
+    auto named = [&](int kind, const std::vector<int>& ids, const char* plural) {
+        std::vector<std::string> v;
+        for (int i : ids) {
+            v.push_back(names.tackle(kind, i));
+        }
+        std::string p = SetPhrase(v, plural);
+        if (!p.empty()) {
+            parts.push_back(p);
+        }
+    };
+    named(0, Bits(c.rods), "rods");
+    named(1, Bits(c.luresLo, c.luresHi), "lures");
+    if (c.lureType >= 0 && c.lureType <= 4) {
+        static const char* const kTypes[5] = { "top water", "shallow", "medium", "deep", "bottom" };
+        parts.push_back(WithArticle(std::string(kTypes[c.lureType]) + " lure"));
+    }
+    named(2, Bits(c.flies), "flies");
+    if (c.flyTypes != 0) {
+        parts.push_back(WithArticle(FlyTypeWord(c.flyTypes)));
+    }
+    named(3, Bits(c.baits), "baits");
+    named(4, Bits(c.floats), "floats");
+    return parts.empty() ? "" : " with " + Join(parts, "and");
+}
+
+std::string OtherPart(const LureCondition& c) { // rule 6
+    std::string out;
+    if (c.outsidePond) {
+        out += " outside the fishing pond";
+    }
+    if (c.thinLine) {
+        out += " on Line Dia 1";
+    }
+    if (c.time == kNight) {
+        out += " at night";
+    } else if (c.time == kDawnDusk) {
+        out += " at dawn or dusk";
+    }
+    if (c.biteWithin > 0.0f) {
+        out += " with a bite within " + Num1(c.biteWithin) + " s of landing the lure";
+    }
+    if (c.landWithin > 0.0f) {
+        out += " landed within " + Num1(c.landWithin) + " s of the hook set";
+    }
+    return out;
+}
+
+} // namespace
+
+std::string DescribeCondition(const LureCondition& c, const ConditionNames& names) {
+    const std::string tail = SizePart(c) + TacklePart(c, names) + OtherPart(c);
+    switch (c.goal) {
+        case UnlockGoal::Count:
+            return "Catch " + CountedFish(c, c.n, names) + tail;
+        case UnlockGoal::Streak:
+            return "Catch " + CountedFish(c, c.n, names) + tail + " in a row without losing one";
+        case UnlockGoal::Visit:
+            return "Catch " + CountedFish(c, c.n, names) + tail + " without leaving the area";
+        case UnlockGoal::Species: {
+            std::string group;
+            std::string what = FishWord(c.species, names, &group);
+            std::string kinds = c.species == 0    ? "species"
+                                : !group.empty() ? group + " species"
+                                                 : "species of " + what;
+            return "Catch " + std::to_string(c.n) + " different " + kinds + tail;
+        }
+        case UnlockGoal::Places: {
+            std::string what = c.lunker && c.species == 0 ? "Lunkers of any species"
+                                                          : (c.lunker ? "Lunker " : "") + FishWord(c.species, names, nullptr);
+            return "Catch " + what + tail + " in " + std::to_string(c.n) + " different places";
+        }
+        case UnlockGoal::SpeciesAll: {
+            std::string group;
+            FishWord(c.species, names, &group);
+            if (!group.empty()) {
+                return "Catch every " + group + " species" + tail;
+            }
+            std::vector<std::string> v;
+            for (int id : Bits(c.species)) {
+                v.push_back(names.species(id));
+            }
+            return "Catch one of each: " + Join(v, "and") + tail;
+        }
+        case UnlockGoal::WeightTotal:
+            return "Catch " + Weight(c.totalG) + " of " + FishWord(c.species, names, nullptr) + tail + " in total";
+    }
+    return "";
+}
+
+std::string DescribeRodCondition(int rod, const ConditionNames& names) { // rule 8, as RodConditionMet
+    switch (rod) {
+        case 0:
+            return "Catch 5 fish";
+        case 1:
+            return "Catch 3 bass";
+        case 2:
+            return "Catch 3 trout";
+        case 3:
+            return "Catch 3 salmon";
+        case 4:
+            return "Catch 5 fish with the " + names.tackle(0, 3);
+        case 5:
+            return "Catch " + WithArticle(names.species(8)) + " over " + Length(355.6);
+        case 6:
+            return "Catch 5 fish with " + names.tackle(0, 5);
+        case 7:
+            return "Catch " + WithArticle(names.species(6));
+        case 8:
+            return "Catch " + WithArticle(names.species(7)) + " over " + Length(76.2);
+        case 9:
+            return "Catch " + WithArticle(names.species(7));
+        default:
+            return "";
+    }
+}
+
+std::string DescribeCatchNumber(int n) { // rule 9
+    const int lastTwo = n % 100;
+    const char* suffix = (lastTwo >= 11 && lastTwo <= 13) ? "th"
+                         : (n % 10 == 1)                  ? "st"
+                         : (n % 10 == 2)                  ? "nd"
+                         : (n % 10 == 3)                  ? "rd"
+                                                          : "th";
+    return "Land your " + std::to_string(n) + suffix + " fish";
+}
+
+int NumberClashes(std::vector<std::string>& labels) {
+    std::vector<std::pair<std::string, int>> seen; // sentence, times so far (a short list: no map needed)
+    int renamed = 0;
+    for (std::string& label : labels) {
+        auto it = std::find_if(seen.begin(), seen.end(), [&](const auto& e) { return e.first == label; });
+        if (it == seen.end()) {
+            seen.emplace_back(label, 1);
+            continue;
+        }
+        label += " (" + std::to_string(++it->second) + ")";
+        renamed++;
+    }
+    return renamed;
 }
 
 float FlyCastDistanceFactor(float heldSeconds) {

@@ -935,6 +935,7 @@ static std::map<RandomizerCheckArea, const char*> rcAreaNameMap = {
     { RCAREA_ICE_CAVERN, "Ice Cavern" },
     { RCAREA_GERUDO_TRAINING_GROUND, "Gerudo Training Ground" },
     { RCAREA_GANONS_CASTLE, "Ganon's Castle" },
+    { RCAREA_REEL_FISHING, "Reel Fishing" }, // Reel Fishing III mod (step 53b)
     { RCAREA_INVALID, "All" },
 };
 void PlandomizerDrawOptions() {

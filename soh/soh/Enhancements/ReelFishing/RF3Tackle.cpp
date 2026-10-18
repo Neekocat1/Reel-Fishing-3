@@ -166,6 +166,18 @@ bool BoxOwned(int32_t box) {
     return RF3Stock_Has(RF3_STOCK_ROD, box) != 0;
 }
 
+// Step 55b (user's rando test, 2026-10-18): nothing goes onto a rod Link doesn't own, once the stock is known (as
+// RF3Tackle_SetBox already refuses the box). Logs "tackle-refused".
+bool RodRefused(int32_t box, const char* why) {
+    if (!sStockKnown || BoxOwned(box)) {
+        return false;
+    }
+    char detail[96];
+    std::snprintf(detail, sizeof(detail), "box=%d why=rod-not-owned (%s)", box, why ? why : "-");
+    LogChoice("tackle-refused", detail);
+    return true;
+}
+
 // The current choice if owned, else the first owned item of the list, else kUnset.
 template <typename T> int32_t FirstOwned(const std::vector<T>& list, int32_t kind, int32_t current) {
     if (current != kUnset && Have(kind, current)) {
@@ -494,6 +506,9 @@ extern "C" int32_t RF3Tackle_SetLine(int32_t box, int32_t line, const char* why)
     if (const rf3tackle::Box* b = AssetBox(box); b != nullptr && rf3tackle::FindLine(*b, line) == nullptr) {
         return 0;
     }
+    if (RodRefused(box, why)) {
+        return 0; // step 55b
+    }
     if (line != sLine[box]) {
         sLine[box] = line;
         LogChoice("tackle-select", why);
@@ -510,6 +525,9 @@ extern "C" int32_t RF3Tackle_SetLure(int32_t box, int32_t lure, const char* why)
     }
     if (const rf3tackle::Box* b = AssetBox(box); sStockKnown && b != nullptr && !Have(ItemKind(*b), lure)) {
         return 0; // step 21d: not owned, or none left
+    }
+    if (RodRefused(box, why)) {
+        return 0; // step 55b
     }
     sEmptied[box] = kUnset; // step 32a: the player picked one; the lost one won't go back on by itself
     if (lure != sLure[box]) {
@@ -559,12 +577,15 @@ extern "C" int32_t RF3Tackle_SetFloat(int32_t box, int32_t floatIdx, const char*
     if (sStockKnown && !Have(RF3_STOCK_FLOAT, floatIdx)) {
         return 0; // step 21d
     }
+    if (RodRefused(box, why)) {
+        return 0; // step 55b
+    }
     return SetIfChanged(&sFloat[box], floatIdx, why);
 }
 
 extern "C" int32_t RF3Tackle_SetDepth(int32_t box, int32_t depth, const char* why) {
-    if (BaitBox(box) == nullptr || !InRange(depth, 5)) {
-        return 0;
+    if (BaitBox(box) == nullptr || !InRange(depth, 5) || RodRefused(box, why)) {
+        return 0; // step 55b: or the rod isn't owned
     }
     return SetIfChanged(&sDepth[box], depth, why);
 }
@@ -576,6 +597,9 @@ extern "C" int32_t RF3Tackle_SetBait(int32_t box, int32_t bait, const char* why)
     }
     if (sStockKnown && bait != kNoBait && !Have(RF3_STOCK_BAIT, bait)) {
         return 0; // step 21d
+    }
+    if (RodRefused(box, why)) {
+        return 0; // step 55b
     }
     sBaitGone[box] = kNoBait; // step 33a: the player picked; the taken bait won't go back on by itself
     return SetIfChanged(&sBait[box], bait, why);
@@ -613,8 +637,8 @@ extern "C" void RF3Tackle_SceneRestore(void) {
 }
 
 extern "C" int32_t RF3Tackle_SetSize(int32_t box, int32_t size, const char* why) {
-    if (BaitBox(box) == nullptr || !InRange(size, 5)) {
-        return 0;
+    if (BaitBox(box) == nullptr || !InRange(size, 5) || RodRefused(box, why)) {
+        return 0; // step 55b: or the rod isn't owned
     }
     return SetIfChanged(&sSize[box], size, why);
 }

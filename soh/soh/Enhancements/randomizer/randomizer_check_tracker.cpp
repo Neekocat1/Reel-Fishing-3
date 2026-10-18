@@ -178,7 +178,7 @@ std::vector<uint32_t> spoilingEntrances = {
 
 std::map<RandomizerCheckArea, std::vector<RandomizerCheck>> checksByArea;
 bool areasFullyChecked[RCAREA_INVALID];
-u32 areasSpoiled = 0;
+u64 areasSpoiled = 0; // Reel Fishing III mod (step 53b): u64, for a 33rd area
 bool showVOrMQ;
 s16 areaChecksGotten[RCAREA_INVALID]; //|     "Kokiri Forest (4/9)"
 s16 areaChecksAvailable[RCAREA_INVALID];
@@ -793,7 +793,7 @@ void CheckTrackerLoadGame(int32_t fileNum) {
 
         if (areaChecksGotten[entry2->GetArea()] != 0 || RandomizerCheckObjects::AreaIsOverworld(entry2->GetArea()) ||
             loc->GetCheckStatus() == RCSHOW_SCUMMED) {
-            areasSpoiled |= (1 << entry2->GetArea());
+            areasSpoiled |= (1ULL << entry2->GetArea());
         }
 
         // Create check name overrides for child pond fish if age split is disabled
@@ -805,6 +805,8 @@ void CheckTrackerLoadGame(int32_t fileNum) {
             }
         }
     }
+    // Reel Fishing III mod (step 54): RF3 checks are shown by their condition ("Catch 5 Largemouth Bass").
+    RF3Rando_TrackerNames(checkNameOverrides);
     for (int i = RCAREA_KOKIRI_FOREST; i < RCAREA_INVALID; i++) {
         if (!IsAreaSpoiled(static_cast<RandomizerCheckArea>(i)) &&
 
@@ -1202,7 +1204,7 @@ void LoadFile() {
             OTRGlobals::Instance->gRandoContext->GetItemLocation(rc)->SetIsSkipped(skipped);
         });
     });
-    SaveManager::Instance->LoadData("areasSpoiled", areasSpoiled, (uint32_t)0);
+    SaveManager::Instance->LoadData("areasSpoiled", areasSpoiled, (uint64_t)0);
     UpdateAllOrdering();
     UpdateAllAreas();
 }
@@ -1219,7 +1221,7 @@ void Teardown() {
 }
 
 bool IsAreaSpoiled(RandomizerCheckArea rcArea) {
-    return areasSpoiled & (1 << rcArea);
+    return (areasSpoiled & (1ULL << rcArea)) != 0;
 }
 
 // we don't care how many silvers for this check, only that all possible silver items are known
@@ -1230,7 +1232,7 @@ bool AreAllSilversSpoiled() {
 }
 
 void SetAreaSpoiled(RandomizerCheckArea rcArea) {
-    areasSpoiled |= (1 << rcArea);
+    areasSpoiled |= (1ULL << rcArea);
     SaveManager::Instance->SaveSection(gSaveContext.fileNum, sectionId, true);
     RefreshItemTrackerMainWindow();
 }
@@ -1572,6 +1574,9 @@ bool ShouldShowCheck(RandomizerCheck check) {
     std::string search = (Rando::StaticData::GetLocation(check)->GetShortName() + " " +
                           Rando::StaticData::GetLocation(check)->GetName() + " " +
                           RandomizerCheckObjects::GetRCAreaName(Rando::StaticData::GetLocation(check)->GetArea()));
+    if (checkNameOverrides.contains(check)) { // Reel Fishing III mod (step 54): the shown name is searchable too
+        search += " " + checkNameOverrides[check];
+    }
     if (itemLoc->HasObtained() || itemLoc->GetCheckStatus() == RCSHOW_SCUMMED ||
         (!mystery &&
          (itemLoc->GetCheckStatus() == RCSHOW_IDENTIFIED || itemLoc->GetCheckStatus() == RCSHOW_SEEN_OR_HINTED) &&

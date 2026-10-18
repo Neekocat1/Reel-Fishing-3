@@ -6045,6 +6045,11 @@ void Fishing_HandleOwnerDialog(Fishing* this, PlayState* play) {
             if ((Message_GetState(&play->msgCtx) == TEXT_STATE_EVENT) && Message_ShouldAdvance(play)) {
                 Message_CloseTextbox(play);
 
+                // Reel Fishing III mod (step 55c): in an RF3 seed with no rod owned, paying is only the shop check.
+                if (RF3Rod_PaidWithoutRod()) {
+                    this->stateAndTimer = 0;
+                    break;
+                }
                 play->interfaceCtx.unk_260 = 1;
                 play->startPlayerFishing(play);
                 RF3Rod_SetOwned(); // Reel Fishing III mod (step 15a): the first paid rental buys the rod

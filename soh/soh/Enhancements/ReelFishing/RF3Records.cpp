@@ -14,6 +14,7 @@
 #include "soh/SaveManager.h"
 #include "soh/ShipInit.hpp"
 #include "RF3Bridge.h"
+#include "RF3RandoChecks.h" // step 55a: RF3Rando_Active
 #include "RF3SizeMap.h"
 
 namespace {
@@ -240,7 +241,39 @@ extern "C" void RF3Rod_SetOwned(void) {
 
 extern "C" int32_t RF3Rod_IsOwned(void) {
     // Step 24d: any rod in the stock counts too (a randomizer seed hands rods out without the pole).
-    return (sHasRod || RF3Stock_AnyRod()) ? 1 : 0;
+    // Step 55a (user's rando test, 2026-10-18): in an RF3 seed only the stock counts. Paying the owner sets hasRod
+    // there too, but the shop is a check that gives no rod of its own, so hasRod alone isn't a rod.
+    const bool rando = RF3Rando_Active();
+    const bool stockRods = RF3Stock_AnyRod() != 0;
+    const bool owned = rando ? stockRods : (sHasRod || stockRods);
+    static int sLogged = -1; // one log line per change of the answer (this is asked every frame)
+    const int key = (rando ? 4 : 0) | (sHasRod ? 2 : 0) | (owned ? 1 : 0);
+    if (key != sLogged) {
+        sLogged = key;
+        std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+        char stamp[32];
+        std::time_t now = std::time(nullptr);
+        std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+        char line[128];
+        std::snprintf(line, sizeof(line), "%s rod-owned-check rando=%d hasRod=%d stockRods=%d -> %d\n", stamp,
+                      rando ? 1 : 0, sHasRod ? 1 : 0, stockRods ? 1 : 0, owned ? 1 : 0);
+        out << line;
+    }
+    return owned ? 1 : 0;
+}
+
+extern "C" int32_t RF3Rod_PaidWithoutRod(void) {
+    // Step 55c option A (user, 2026-10-18): in an RF3 seed with no rod owned, paying is the shop check and nothing
+    // else: Link gets the check's item, no rental, no session (z_fishing.c owner state 5).
+    if (!RF3_IsEnabled() || !RF3Rando_Active() || RF3Stock_AnyRod()) {
+        return 0;
+    }
+    RF3Rod_SetOwned(); // the shop check (RF3Stock_GiveStarter("bought") in an RF3 seed)
+    RF3Rod_LogEvent("pond-no-rod-paid", 0);
+    return 1;
 }
 
 extern "C" void RF3Rod_LogEvent(const char* what, int32_t value) {

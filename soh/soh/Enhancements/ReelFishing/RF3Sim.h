@@ -7,6 +7,9 @@
 // Written from docs/RF3-MECHANICS.md section 1 (project repository).
 
 #include <cstdint>
+#include <functional>
+#include <string>
+#include <vector>
 
 #include "RF3Params.h"
 
@@ -498,6 +501,19 @@ void UnlockAddCatch(UnlockProgress& p, const UnlockCatch& k);
 void UnlockFishLost(UnlockProgress& p);
 void UnlockNewVisit(UnlockProgress& p);
 bool UnlockMet(const UnlockProgress& p, int slot);
+
+// Step 54 (DESIGN "Step 54 design"): a condition as one English sentence, for the check tracker ("Catch 5 Largemouth
+// Bass", "Catch a Pink Salmon of 30 in (762 mm) or more"). Names come from the host: species by RF3 species id, tackle
+// by stock kind (0 rod, 1 lure, 2 fly, 3 bait, 4 float) and index; nothing here holds game text.
+struct ConditionNames {
+    std::function<std::string(int species)> species;
+    std::function<std::string(int kind, int index)> tackle;
+};
+std::string DescribeCondition(const LureCondition& c, const ConditionNames& names);
+std::string DescribeRodCondition(int rod, const ConditionNames& names); // rods 0-9, as RodConditionMet
+std::string DescribeCatchNumber(int n);                                  // "Land your 5th fish"
+// Rule 10: a sentence that already came earlier in the list gets " (2)", " (3)"... Returns how many were renamed.
+int NumberClashes(std::vector<std::string>& labels);
 
 // Tension limit for this fish and tackle (1.4).
 float TensionLimit(const FishParams& fish, const TackleParams& tackle);
