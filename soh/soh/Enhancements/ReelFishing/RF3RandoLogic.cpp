@@ -41,10 +41,12 @@ constexpr int kRods = 11; // RF3's 10 + OoT's pole (10)
 
 // A fish that can be caught somewhere: its record's species, longest length and rod mask, and the areas to reach.
 // Step 42: what a region's flag condition (step 36c) becomes in logic.
-enum class CondLogic { Always, Never, WaterTempleClear, DrainWell };
+// Step 51: WaterTempleLevel = a Water Temple water-level switch; `levels` is the levels it allows (kWt* bits).
+enum class CondLogic { Always, Never, WaterTempleClear, DrainWell, WaterTempleLevel };
 struct SourceCond {
     rf3::RegionAge age = rf3::RegionAge::Both; // the age it counts at
     CondLogic logic = CondLogic::Never;
+    uint8_t levels = 0; // step 51: WaterTempleLevel only
 };
 
 struct Source {
@@ -99,25 +101,53 @@ bool CanFishWith(int r) {
 constexpr int32_t kRaisedLake = 0x69;  // EVENTCHKINF_RAISED_LAKE_HYLIA_WATER
 constexpr int32_t kDrainedWell = 0x67; // EVENTCHKINF_DRAINED_WELL_IN_KAKARIKO
 constexpr int32_t kWaterSwitch = 0x3E; // the rando water control's temp switch (set = lowered)
+// Step 51: the Water Temple's water-level switches (z_bg_mizu_water.h WATER_TEMPLE_WATER_F1/F2/F3_FLAG). The water
+// actor keeps exactly one set: 0x1C low (-15), 0x1D middle (445), 0x1E high (765, the start).
+constexpr int32_t kWtLowSwitch = 0x1C;
+constexpr int32_t kWtMidSwitch = 0x1D;
+constexpr int32_t kWtHighSwitch = 0x1E;
+constexpr uint8_t kWtLow = 1, kWtMid = 2, kWtHigh = 4, kWtAll = 7;
 
-CondLogic LogicOf(const rf3::RegionCondition& c) {
+// Step 51: switch flags are per scene, so a switch maps only in its own scene; events are global.
+SourceCond LogicOf(const rf3::RegionCondition& c, int scene) {
+    SourceCond sc;
+    sc.age = c.age;
     if (c.kind == "event" && c.flag == kRaisedLake) {
-        return c.set ? CondLogic::WaterTempleClear : CondLogic::Always;
+        sc.logic = c.set ? CondLogic::WaterTempleClear : CondLogic::Always;
+    } else if (c.kind == "switch" && c.flag == kWaterSwitch && scene == SCENE_LAKE_HYLIA) {
+        sc.logic = c.set ? CondLogic::WaterTempleClear : CondLogic::Always;
+    } else if (c.kind == "event" && c.flag == kDrainedWell) {
+        sc.logic = c.set ? CondLogic::DrainWell : CondLogic::Never;
+    } else if (c.kind == "switch" && scene == SCENE_WATER_TEMPLE &&
+               (c.flag == kWtLowSwitch || c.flag == kWtMidSwitch || c.flag == kWtHighSwitch)) {
+        // step 51: set = that switch's level; unset = the other two (one is always set)
+        const uint8_t level = c.flag == kWtLowSwitch ? kWtLow : (c.flag == kWtMidSwitch ? kWtMid : kWtHigh);
+        sc.logic = CondLogic::WaterTempleLevel;
+        sc.levels = c.set ? level : static_cast<uint8_t>(kWtAll & ~level);
+    } else {
+        sc.logic = CondLogic::Never;
     }
-    if (c.kind == "switch" && c.flag == kWaterSwitch) {
-        return c.set ? CondLogic::WaterTempleClear : CondLogic::Always;
-    }
-    if (c.kind == "event" && c.flag == kDrainedWell) {
-        return c.set ? CondLogic::DrainWell : CondLogic::Never;
-    }
-    return CondLogic::Never;
+    return sc;
 }
 
-const char* CondLogicName(CondLogic l) {
-    switch (l) {
+std::string WtLevelsName(uint8_t levels) { // step 51
+    static const uint8_t kBits[3] = { kWtLow, kWtMid, kWtHigh };
+    static const char* const kNames[3] = { "low", "mid", "high" };
+    std::string s;
+    for (int i = 0; i < 3; i++) {
+        if (levels & kBits[i]) {
+            s += (s.empty() ? "" : ",") + std::string(kNames[i]);
+        }
+    }
+    return s.empty() ? "none" : s;
+}
+
+std::string CondLogicName(const SourceCond& c) {
+    switch (c.logic) {
         case CondLogic::Always: return "always";
         case CondLogic::WaterTempleClear: return "water-temple-clear";
         case CondLogic::DrainWell: return "drain-well";
+        case CondLogic::WaterTempleLevel: return "wt(" + WtLevelsName(c.levels) + ")";
         default: return "never";
     }
 }
@@ -131,6 +161,20 @@ bool CondHolds(CondLogic l) {
     }
 }
 
+// Step 51: can Link get the Water Temple's water to one of these levels? SoH's own model (Logic::WaterLevel).
+bool WaterLevelAny(uint8_t levels) {
+    switch (levels & kWtAll) {
+        case 0: return false;
+        case kWtLow: return logic->WaterLevel(WL_LOW);
+        case kWtMid: return logic->WaterLevel(WL_MID);
+        case kWtHigh: return logic->WaterLevel(WL_HIGH);
+        case kWtLow | kWtMid: return logic->WaterLevel(WL_LOW_OR_MID);
+        case kWtMid | kWtHigh: return logic->WaterLevel(WL_HIGH_OR_MID);
+        case kWtLow | kWtHigh: return logic->WaterLevel(WL_LOW) || logic->WaterLevel(WL_HIGH);
+        default: return true; // all three
+    }
+}
+
 bool AgeAllows(rf3::RegionAge age, bool adult) {
     return age == rf3::RegionAge::Both || (age == rf3::RegionAge::Adult) == adult;
 }
@@ -141,10 +185,21 @@ bool ReachableAt(const Source& s, bool adult) {
     if (!AgeAllows(s.age, adult)) {
         return false;
     }
+    uint8_t wtLevels = kWtAll; // step 51: the water levels all of its Water Temple conditions allow
+    bool anyWt = false;
     for (const SourceCond& c : s.conds) {
-        if (AgeAllows(c.age, adult) && !CondHolds(c.logic)) {
+        if (!AgeAllows(c.age, adult)) {
+            continue;
+        }
+        if (c.logic == CondLogic::WaterTempleLevel) {
+            wtLevels &= c.levels;
+            anyWt = true;
+        } else if (!CondHolds(c.logic)) {
             return false;
         }
+    }
+    if (anyWt && !WaterLevelAny(wtLevels)) {
+        return false;
     }
     for (RandomizerRegion rr : s.areas) {
         if (adult ? areaTable[rr].Adult() : areaTable[rr].Child()) {
@@ -317,15 +372,22 @@ void BuildTables() {
         // step 42: the region's age and its conditions in logic
         std::vector<SourceCond> conds;
         std::string condText;
+        uint8_t wtLevels = kWtAll; // step 51: for the log, all ages together
+        bool anyWt = false;
         for (const rf3::RegionCondition& c : region.conditions) {
-            SourceCond sc;
-            sc.age = c.age;
-            sc.logic = LogicOf(c);
+            SourceCond sc = LogicOf(c, region.scene);
             conds.push_back(sc);
-            char buf[96];
+            if (sc.logic == CondLogic::WaterTempleLevel) {
+                wtLevels &= sc.levels;
+                anyWt = true;
+            }
+            char buf[112];
             std::snprintf(buf, sizeof(buf), "%s%s 0x%X %s@%s->%s", condText.empty() ? "" : ",", c.kind.c_str(), c.flag,
-                          c.set ? "set" : "unset", rf3::RegionAgeName(c.age), CondLogicName(sc.logic));
+                          c.set ? "set" : "unset", rf3::RegionAgeName(c.age), CondLogicName(sc).c_str());
             condText += buf;
+        }
+        if (anyWt) {
+            condText += " wt-levels=" + WtLevelsName(wtLevels);
         }
         for (int record : region.records) {
             AddSource(areas, record, region.age, conds, region.scene);
