@@ -35,17 +35,19 @@ struct FishParams {
     // Approach (section 2).
     float sightBaseM;          // record +0x1C (2.4)
     uint8_t maxAction;         // record +0x12: interest only up to this x/255 (2.2)
-    int8_t activitySeason[3];  // record +0x48, indexed by condition A (2.4)
-    int8_t activityWeather[3]; // record +0x4B, indexed by condition C
-    int8_t activityTime[3];    // record +0x4E, indexed by condition B
+    // Step 57c-1 (RF3-MECHANICS 7.4): the three activity tables, named by what indexes them. (Before 57c-1 the
+    // last two were named the other way round; the values were already in the right places.)
+    int8_t activitySeason[3];  // record +0x48, by season (A): Spring, Summer, Autumn
+    int8_t activityTime[3];    // record +0x4B, by time of day (C): Morning, Afternoon, Evening
+    int8_t activityWeather[4]; // record +0x4E-0x51, by weather (B): Sunny, Cloudy, Fog, Dense fog
 };
 
-// Game conditions, each 0..2 (2.4). Which index means what is only partly known:
-// the user's RF3 session (summer, morning, sunny) was season 1, time 0, weather 0.
+// RF3's game conditions (RF3-MECHANICS 7.1): season A (+0x94) 0-2, weather B (+0x98) 0-3, time of day C (+0x9C)
+// 0-2. The user's RF3 session was Summer, Sunny, Morning.
 struct Conditions {
-    int season;  // condition A
-    int time;    // condition B
-    int weather; // condition C
+    int season;  // A: 0 Spring, 1 Summer, 2 Autumn
+    int weather; // B: 0 Sunny, 1 Cloudy, 2 Fog, 3 Dense fog
+    int time;    // C: 0 Morning, 1 Afternoon, 2 Evening
 };
 inline constexpr Conditions kConditionsTestSession = { 1, 0, 0 };
 
@@ -53,15 +55,15 @@ inline constexpr Conditions kConditionsTestSession = { 1, 0, 0 };
 // Record 14 (juvenile) is used only to check against the test fight's save states.
 inline constexpr FishParams kBassJuvenile = {
     "bass_s (14)", 2.0f, 0.26f, 1.16f, 0.3f, 0, 4, 100, 220, 12.0f, 0.6f, 5.0f, 3.0f, 1.5f, 9, 4, 180, 250, 250.0f, 399.0f,
-    3.5f, 255, { 3, 3, 2 }, { 3, 2, 3 }, { 2, 2, 0 },
+    3.5f, 255, { 3, 3, 2 }, { 3, 2, 3 }, { 2, 2, 0, -1 },
 };
 inline constexpr FishParams kBassNormal = {
     "bass_n (15)", 2.0f, 0.26f, 1.16f, 0.1f, 0, 5, 100, 230, 10.0f, 0.5f, 6.0f, 4.0f, 1.5f, 5, 7, 251, 400, 400.0f, 1199.0f,
-    3.5f, 255, { 2, 3, 1 }, { 3, 2, 3 }, { 2, 2, 0 },
+    3.5f, 255, { 2, 3, 1 }, { 3, 2, 3 }, { 2, 2, 0, -1 },
 };
 inline constexpr FishParams kBassLunker = {
     "bass_b (16)", 2.0f, 0.26f, 1.16f, 0.0f, 0, 6, 100, 240, 10.0f, 0.5f, 6.0f, 5.0f, 1.5f, 2, 8, 401, 700, 1200.0f, 4000.0f,
-    3.5f, 255, { 2, 3, 1 }, { 3, 2, 3 }, { 2, 2, 0 },
+    3.5f, 255, { 2, 3, 1 }, { 3, 2, 3 }, { 2, 2, 0, -1 },
 };
 
 // Default tackle: Lure Rod/Bass + Baitcast Reel + 10 lb line + Suspended Vibration G.

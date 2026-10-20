@@ -70,6 +70,10 @@ typedef struct {
     u8 syncItemsAndFlags; // 0 = off, 1 = on
 } RoomState;
 
+namespace rf3 {
+struct UnlockCatch; // Reel Fishing III mod (step 56b): RF3Sim.h
+}
+
 class Anchor : public Network {
   private:
     uint32_t spawningDummyPlayerForClientId = 0;
@@ -110,6 +114,7 @@ class Anchor : public Network {
     void HandlePacket_UpdateDungeonItems(nlohmann::json payload);
     void HandlePacket_UpdateRoomState(nlohmann::json payload);
     void HandlePacket_UpdateTeamState(nlohmann::json payload);
+    void HandlePacket_RF3Catch(nlohmann::json payload); // Reel Fishing III mod (step 56b)
 
   public:
     uint32_t ownClientId;
@@ -138,6 +143,7 @@ class Anchor : public Network {
     inline static const std::string UPDATE_DUNGEON_ITEMS = "UPDATE_DUNGEON_ITEMS";
     inline static const std::string UPDATE_ROOM_STATE = "UPDATE_ROOM_STATE";
     inline static const std::string UPDATE_TEAM_STATE = "UPDATE_TEAM_STATE";
+    inline static const std::string RF3_CATCH = "RF3_CATCH"; // Reel Fishing III mod (step 56b)
 
     static Anchor* Instance;
     std::map<uint32_t, AnchorClient> clients;
@@ -176,6 +182,7 @@ class Anchor : public Network {
     void SendPacket_UpdateDungeonItems();
     void SendPacket_UpdateRoomState();
     void SendPacket_UpdateTeamState();
+    void SendPacket_RF3Catch(const rf3::UnlockCatch& k); // Reel Fishing III mod (step 56b)
 };
 
 typedef enum {

@@ -4,6 +4,7 @@
 #include "soh/OTRGlobals.h"
 #include "soh/Notification/Notification.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
+#include "soh/Enhancements/ReelFishing/RF3Sync.h" // Reel Fishing III mod (step 56c)
 
 extern "C" {
 #include "macros.h"
@@ -95,6 +96,9 @@ void Anchor::SendPacket_UpdateTeamState() {
         //     payload["state"]["rando"]["randoSettings"][i] =
         //     randoContext->GetOption((RandomizerSettingKey(i))).GetSelectedOptionIndex();
         // }
+
+        // Reel Fishing III mod (step 56c): RF3 progress (catch count, rod and unlock conditions) for late joiners.
+        payload["state"]["rf3"] = RF3Sync_ExportTeamState();
 
         // payload["state"]["rando"]["masterQuestDungeonCount"] = randoContext->GetDungeons()->CountMQ();
         // payload["state"]["rando"]["masterQuestDungeons"] = json::array();
@@ -297,6 +301,11 @@ void Anchor::HandlePacket_UpdateTeamState(nlohmann::json payload) {
             //         randoContext->GetTrial(i)->SetAsRequired();
             //     }
             // }
+        }
+
+        // Reel Fishing III mod (step 56c): after the flags (RF3 owned flags included) are merged above.
+        if (IS_RANDO && payload["state"].contains("rf3")) {
+            RF3Sync_ReceiveTeamState(payload["state"]["rf3"]);
         }
 
         Notification::Emit({

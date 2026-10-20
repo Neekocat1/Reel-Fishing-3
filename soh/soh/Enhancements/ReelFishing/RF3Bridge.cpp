@@ -13,6 +13,7 @@
 
 #include "soh/cvar_prefixes.h"
 #include "RF3Sim.h"
+#include "RF3Conditions.h" // step 57c-3
 #include "RF3SizeMap.h"
 #include "RF3FishTable.h"
 #include "RF3TackleRules.h"
@@ -296,10 +297,10 @@ uint32_t sApproachFrame = 0;
 uint32_t sChaserPingFrame = 0;
 uint32_t sApproachRng = 0x1234567u;
 
-// Our choice (DESIGN step 10): conditions fixed to the user's RF3 session. The activity level is
-// per fish record (step 14b).
+// The activity level is per fish record (step 14b). Step 57c-3: the conditions are live (RF3Conditions.cpp: OoT's day
+// count, clock, scene and weather); before, they were fixed to the user's RF3 session (DESIGN step 10).
 int ActivityOf(const rf3::FishParams& fish) {
-    return rf3::ActivityLevel(fish, rf3::kConditionsTestSession);
+    return rf3::ActivityLevel(fish, RF3Conditions_Current());
 }
 
 // Step 18c: the sight range with the chosen tackle (heart sum, lure appeal) for a fish record.

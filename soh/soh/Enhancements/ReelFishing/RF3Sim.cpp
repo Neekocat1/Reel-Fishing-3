@@ -173,10 +173,94 @@ void ApproachFish::SetWary(float seconds) {
 }
 
 int ActivityLevel(const FishParams& fish, const Conditions& c) {
+    // RF3 0x00196980: record +0x48[season] + +0x4B[time] + +0x4E[weather] (RF3-MECHANICS 7.4). Step 57c-1: weather
+    // has 4 values (Dense fog reads +0x51).
     int season = std::clamp(c.season, 0, 2);
     int time = std::clamp(c.time, 0, 2);
-    int weather = std::clamp(c.weather, 0, 2);
-    return fish.activitySeason[season] + fish.activityWeather[weather] + fish.activityTime[time];
+    int weather = std::clamp(c.weather, 0, 3);
+    return fish.activitySeason[season] + fish.activityTime[time] + fish.activityWeather[weather];
+}
+
+// --- Step 57c-3: conditions from OoT ------------------------------------------------------------------------------
+
+int SeasonForDay(int totalDays) {
+    return (std::max(0, totalDays) / kDaysPerSeason) % 3;
+}
+
+int TimeForHours(float hours) {
+    if (hours >= 5.0f && hours < 12.0f) {
+        return 0; // Morning
+    }
+    if (hours >= 12.0f && hours < 17.0f) {
+        return 1; // Afternoon
+    }
+    return 2; // Evening, and night
+}
+
+int OotWeatherOverride(int weatherMode) {
+    return (weatherMode >= 1 && weatherMode <= 5) ? 1 : -1; // any OoT weather -> Cloudy
+}
+
+namespace {
+uint32_t Mix(uint32_t x) {
+    x ^= x >> 16;
+    x *= 0x7FEB352Du;
+    x ^= x >> 15;
+    x *= 0x846CA68Bu;
+    x ^= x >> 16;
+    return x;
+}
+} // namespace
+
+int RollWeather(int totalDays, int scene, int season, int time, const WeatherWeights& weights) {
+    season = std::clamp(season, 0, 2);
+    time = std::clamp(time, 0, 2);
+    const int* w = weights.valid ? weights.counts[season][time] : kFallbackWeather;
+    int total = 0;
+    for (int i = 0; i < 4; i++) {
+        total += std::max(0, w[i]);
+    }
+    if (total <= 0) {
+        return 0;
+    }
+    const uint32_t seed = Mix(static_cast<uint32_t>(std::max(0, totalDays)) * 0x9E3779B1u ^
+                              Mix(static_cast<uint32_t>(scene + 1)) * 0x85EBCA77u ^
+                              static_cast<uint32_t>(time + 1) * 0xC2B2AE3Du);
+    int pick = static_cast<int>(seed % static_cast<uint32_t>(total));
+    for (int i = 0; i < 4; i++) {
+        pick -= std::max(0, w[i]);
+        if (pick < 0) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+float SeasonLengthExponent(const float* meanMm, int season, float minMm, float maxMm) {
+    if (meanMm == nullptr || maxMm <= minMm || season < 0 || season > 2) {
+        return 1.0f;
+    }
+    const float year = (meanMm[0] + meanMm[1] + meanMm[2]) / 3.0f;
+    if (year <= 0.0f || meanMm[season] <= 0.0f) {
+        return 1.0f;
+    }
+    const float target = (minMm + maxMm) * 0.5f * (meanMm[season] / year); // the record's mean, moved by RF3's %
+    const float f = std::clamp((target - minMm) / (maxMm - minMm), 0.15f, 0.85f); // E[u^k] = 1 / (k + 1) = f
+    return 1.0f / f - 1.0f;
+}
+
+float SeasonSkewedLength(float u, float k, float minMm, float maxMm) {
+    u = std::clamp(u, 0.0f, 1.0f);
+    return minMm + std::pow(u, std::max(0.01f, k)) * (maxMm - minMm);
+}
+
+Conditions ConditionsFor(int totalDays, float hours, int scene, int weatherMode, const WeatherWeights& weights) {
+    Conditions c;
+    c.season = SeasonForDay(totalDays);
+    c.time = TimeForHours(hours);
+    const int forced = OotWeatherOverride(weatherMode);
+    c.weather = forced >= 0 ? forced : RollWeather(totalDays, scene, c.season, c.time, weights);
+    return c;
 }
 
 float SightRange(const FishParams& fish, int activityLevel) {
@@ -820,11 +904,14 @@ bool UnlockMatches(const LureCondition& c, const UnlockCatch& k) {
     return true;
 }
 
-void UnlockAddCatch(UnlockProgress& p, const UnlockCatch& k) {
+void UnlockAddCatch(UnlockProgress& p, const UnlockCatch& k, bool remote) {
     int n = 0;
     const LureCondition* t = Table(&n);
     for (int i = 0; i < n; i++) {
         const LureCondition& c = t[i];
+        if (remote && (c.goal == UnlockGoal::Streak || c.goal == UnlockGoal::Visit)) {
+            continue; // step 56a: a teammate's catch doesn't add to your streak or visit
+        }
         if (!UnlockMatches(c, k)) {
             continue;
         }
@@ -889,6 +976,34 @@ bool UnlockMet(const UnlockProgress& p, int slot) {
             return p.sumG[l] >= c->totalG;
     }
     return false;
+}
+
+// --- Step 56c: team progress ---------------------------------------------------------------------------------------
+
+void RodProgressMerge(RodProgress& into, const RodProgress& other) {
+    into.total = std::max(into.total, other.total);
+    into.bass = std::max(into.bass, other.bass);
+    into.trout = std::max(into.trout, other.trout);
+    into.salmon = std::max(into.salmon, other.salmon);
+    into.withFlyRod = std::max(into.withFlyRod, other.withFlyRod);
+    into.withPoleS = std::max(into.withPoleS, other.withPoleS);
+    into.largemouthOver14in = into.largemouthOver14in || other.largemouthOver14in;
+    into.paleChub = into.paleChub || other.paleChub;
+    into.bitterlingOver3in = into.bitterlingOver3in || other.bitterlingOver3in;
+    into.bitterling = into.bitterling || other.bitterling;
+}
+
+void UnlockProgressMerge(UnlockProgress& into, const UnlockProgress& other) {
+    for (int slot = 0; slot < kUnlockSlots; slot++) {
+        const LureCondition* c = UnlockConditionFor(slot);
+        if (c != nullptr && (c->goal == UnlockGoal::Streak || c->goal == UnlockGoal::Visit)) {
+            continue; // personal (user's choice A)
+        }
+        into.count[slot] = std::max(into.count[slot], other.count[slot]);
+        into.setLo[slot] |= other.setLo[slot];
+        into.setHi[slot] |= other.setHi[slot];
+        into.sumG[slot] = std::max(into.sumG[slot], other.sumG[slot]);
+    }
 }
 
 // --- Step 54: conditions as text (DESIGN "Step 54 design", wording rules 1-11) ---------------------------------------

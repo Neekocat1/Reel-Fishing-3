@@ -20,7 +20,10 @@
 #include "soh/ShipInit.hpp"
 #include "soh/cvar_prefixes.h"
 #include "RF3Bridge.h"
+#include "RF3Conditions.h"   // step 57d: the season
 #include "RF3FishTable.h"
+#include "RF3Sim.h"          // step 57d: the length skew
+#include "RF3TackleAssets.h" // step 57d: RF3's season sizes
 #include "RF3Regions.h"
 #include "RF3SizeMap.h"
 
@@ -212,14 +215,24 @@ int SpawnRegion(PlayState* play, size_t ri, const rf3::FishRegion& r, bool* full
         s.info.surfaceY = r.surfaceY;
         s.info.angle = r.Radians(); // step 16i
         s.info.record = record;
-        s.info.mm = rec->params.lengthMinMm + Rand01() * (rec->params.lengthMaxMm - rec->params.lengthMinMm);
+        // Step 57d (the user's D1): the length roll leans small in Spring and large in Autumn, by RF3's own
+        // per-species growth (tackle.json "season_sizes"); the record's range is unchanged.
+        const int season = RF3Conditions_Current().season;
+        const auto& means = rf3tackle::Get().seasonMeanMm;
+        const auto mean = means.find(rec->species);
+        const float minMm = rec->params.lengthMinMm;
+        const float maxMm = rec->params.lengthMaxMm;
+        const float lengthK = rf3::SeasonLengthExponent(mean != means.end() ? mean->second.data() : nullptr, season, minMm,
+                                                  maxMm);
+        s.info.mm = rf3::SeasonSkewedLength(Rand01(), lengthK, minMm, maxMm);
         s.info.ootLength = OotLengthFor(rec->species, s.info.mm);
         Actor* actor = Actor_Spawn(&play->actorCtx, play, ACTOR_FISHING, pos.x, pos.y, pos.z, 0,
                                    static_cast<s16>(Rand01() * 0x10000), 0, kFishParamBase + slot);
         std::snprintf(line, sizeof(line),
-                      "scene %d region %d (%s) slot %d: record %d (%s %c) %.0f mm, oot %.1f at %.0f %.0f %.0f%s",
+                      "scene %d region %d (%s) slot %d: record %d (%s %c) %.0f mm, oot %.1f at %.0f %.0f %.0f "
+                      "season=%d k=%.2f%s",
                       play->sceneNum, (int)ri, r.name.c_str(), slot, record, rec->speciesName, rec->sizeClass,
-                      s.info.mm, s.info.ootLength, pos.x, pos.y, pos.z, actor ? "" : "  SPAWN FAILED");
+                      s.info.mm, s.info.ootLength, pos.x, pos.y, pos.z, season, lengthK, actor ? "" : "  SPAWN FAILED");
         Log(line);
         if (actor == nullptr) {
             s = {};

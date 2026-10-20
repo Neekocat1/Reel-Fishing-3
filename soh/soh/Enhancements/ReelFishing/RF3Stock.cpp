@@ -19,6 +19,7 @@
 #include "RF3Bridge.h"
 #include "RF3Items.h"
 #include "RF3Sim.h"
+#include "RF3Sync.h" // step 56a
 #include "RF3SizeMap.h" // step 23d: kSpeciesHylianLoach
 #include "RF3TackleAssets.h"
 #include "RF3FishTable.h" // step 43a: size classes
@@ -550,10 +551,10 @@ bool SlotOpen(int32_t slot, bool rando) {
 
 } // namespace
 
-// Counts the catch toward every unlock condition (lures; step 44a: flies, baits, floats), then gives (normal play) or
-// checks (an advanced seed) each met one.
-static void UnlockConditionsForCatch(int32_t record, int32_t species, float lengthMm, int32_t weightG,
-                                   const RF3TackleChoice& tackle, bool rando) {
+// Step 56a: a catch as an event. Everything the rod rules, the loach check and the unlock conditions read is in
+// rf3::UnlockCatch, so a teammate's catch (56b) can be applied the same way as Link's own.
+static rf3::UnlockCatch BuildCatch(int32_t record, int32_t species, float lengthMm, int32_t weightG,
+                                   const RF3TackleChoice& tackle) {
     rf3::UnlockCatch k;
     k.species = species;
     k.sizeClass = SizeClassOf(record);
@@ -578,16 +579,23 @@ static void UnlockConditionsForCatch(int32_t record, int32_t species, float leng
     if (sBiteValid && gPlayState != nullptr) {
         k.landSeconds = static_cast<float>(gPlayState->gameplayFrames - sBiteFrame) / 20.0f; // 20 Hz game frames
     }
-    rf3::UnlockAddCatch(sUnlock, k);
     sBiteValid = false;
     sBiteSeconds = -1.0f;
     sHookedBait = -1;
-    char why[240];
+    return k;
+}
+
+// Counts the catch toward every unlock condition (lures; step 44a: flies, baits, floats), then gives (normal play) or
+// checks (an advanced seed) each met one. Step 56a: remote = a teammate's catch (no Streak/Visit goals).
+static void CountConditions(const rf3::UnlockCatch& k, bool rando, bool remote) {
+    rf3::UnlockAddCatch(sUnlock, k, remote);
+    char why[256];
     std::snprintf(why, sizeof(why),
                   "species=%d class=%c mm=%.1f g=%d rod=%d lure=%d type=%d fly=%d flytype=%d bait=%d float=%d scene=%d "
-                  "pond=%d hours=%.2f line=%d bite_s=%.2f land_s=%.2f",
+                  "pond=%d hours=%.2f line=%d bite_s=%.2f land_s=%.2f remote=%d",
                   k.species, k.sizeClass, k.lengthMm, k.weightG, k.rod, k.lure, k.lureType, k.fly, k.flyType, k.bait,
-                  k.floatIdx, k.scene, k.pond ? 1 : 0, k.dayHours, k.lineCell, k.biteSeconds, k.landSeconds);
+                  k.floatIdx, k.scene, k.pond ? 1 : 0, k.dayHours, k.lineCell, k.biteSeconds, k.landSeconds,
+                  remote ? 1 : 0);
     Log("unlock-progress", -1, -1, why);
     for (int32_t slot = 0; slot < rf3::kUnlockSlots; slot++) {
         if (rf3::UnlockConditionFor(slot) == nullptr || !SlotOpen(slot, rando) || !rf3::UnlockMet(sUnlock, slot)) {
@@ -633,23 +641,21 @@ extern "C" void RF3Stock_NoteBite(uint32_t frame) {
 // categories that still have items; the item is a random uncollected one a rod Link owns can use, else
 // any uncollected one. Step 21c: first the catch counts toward the rod conditions, and any rod it earns
 // is given (so the item pick already sees the new rod as usable).
-extern "C" int32_t RF3Stock_UnlockForCatch(int32_t record, int32_t species, float lengthMm, int32_t weightG) {
-    sLastUnlockKind = -1;
-    sLastUnlockIndex = -1;
-    sLastRodCount = 0;
-    if (!RF3_IsEnabled()) {
-        return 0;
-    }
-    RF3TackleChoice tackle;
-    RF3Tackle_Get(&tackle);
-    rf3::RodProgressAddCatch(sRodProgress, species, lengthMm, tackle.rod);
+// Step 56a: applies one catch event: rod progress, the loach, the unlock conditions, the catch count. A remote event
+// (a teammate's, rando only) sets the same checks, but never gives items itself and never runs the one-per-catch
+// pick after catch #N: the finder's item reaches the team through Anchor's GIVE_ITEM.
+static int32_t ApplyCatch(const rf3::UnlockCatch& k, bool remote) {
+    const int32_t species = k.species;
+    const float lengthMm = k.lengthMm;
+    rf3::RodProgressAddCatch(sRodProgress, species, lengthMm, k.rod);
     const rf3::RodProgress& p = sRodProgress;
-    char rodWhy[192];
+    char rodWhy[200];
     std::snprintf(rodWhy, sizeof(rodWhy),
                   "rod-condition species=%d mm=%.1f usedRod=%d total=%u bass=%u trout=%u salmon=%u flyRod=%u "
-                  "poleS=%u lmb14=%d chub=%d bitt3=%d bitt=%d",
-                  species, lengthMm, tackle.rod, p.total, p.bass, p.trout, p.salmon, p.withFlyRod, p.withPoleS,
-                  p.largemouthOver14in ? 1 : 0, p.paleChub ? 1 : 0, p.bitterlingOver3in ? 1 : 0, p.bitterling ? 1 : 0);
+                  "poleS=%u lmb14=%d chub=%d bitt3=%d bitt=%d remote=%d",
+                  species, lengthMm, k.rod, p.total, p.bass, p.trout, p.salmon, p.withFlyRod, p.withPoleS,
+                  p.largemouthOver14in ? 1 : 0, p.paleChub ? 1 : 0, p.bitterlingOver3in ? 1 : 0, p.bitterling ? 1 : 0,
+                  remote ? 1 : 0);
     bool rando = RF3Rando_Active(); // step 24d: rod conditions, the loach and catches are checks
     for (int32_t r = 0; r < rf3::kRodCount; r++) { // step 23d: rod 0 too (any 5 fish)
         if (rando) {
@@ -676,7 +682,7 @@ extern "C" int32_t RF3Stock_UnlockForCatch(int32_t record, int32_t species, floa
     if (species == rf3::kSpeciesHylianLoach && rando) {
         RF3Rando_SetCheck(RAND_INF_RF3_FIRST_LOACH, "rando-first-loach");
     }
-    UnlockConditionsForCatch(record, species, lengthMm, weightG, tackle, rando); // steps 43a, 44a
+    CountConditions(k, rando, remote); // steps 43a, 44a
     // Catch #1..#N are checks; later catches unlock leftover tackle below.
     if (rando && !RF3Rando_Advanced() && static_cast<int32_t>(sCatchCount) < RF3Rando_CatchChecks()) {
         uint32_t number = sCatchCount + 1;
@@ -685,7 +691,12 @@ extern "C" int32_t RF3Stock_UnlockForCatch(int32_t record, int32_t species, floa
         return 0;
     }
     // Step 44b (user): the stand-in "one item per catch" rule is only for a simple seed's catches after #N. Normal
-    // play and advanced seeds give every item by its condition.
+    // play and advanced seeds give every item by its condition. Step 56a: a teammate's catch only counts.
+    if (remote) {
+        sCatchCount++;
+        Log("catch-remote", -1, -1, "counted");
+        return 0;
+    }
     if (!rando || RF3Rando_Advanced()) {
         sCatchCount++;
         Log("catch-unlock-off", -1, -1, rando ? "mode=advanced" : "mode=normal");
@@ -736,6 +747,88 @@ extern "C" int32_t RF3Stock_UnlockForCatch(int32_t record, int32_t species, floa
     sLastUnlockKind = kind;
     sLastUnlockIndex = index;
     return 1;
+}
+
+extern "C" int32_t RF3Stock_UnlockForCatch(int32_t record, int32_t species, float lengthMm, int32_t weightG) {
+    sLastUnlockKind = -1;
+    sLastUnlockIndex = -1;
+    sLastRodCount = 0;
+    if (!RF3_IsEnabled()) {
+        return 0;
+    }
+    RF3TackleChoice tackle;
+    RF3Tackle_Get(&tackle);
+    const rf3::UnlockCatch k = BuildCatch(record, species, lengthMm, weightG, tackle); // step 56a
+    const int32_t unlocked = ApplyCatch(k, false);
+    RF3Sync_SendCatch(k); // step 56b: teammates count it too (RF3 seeds in Anchor co-op only)
+    return unlocked;
+}
+
+// Step 56a: a teammate's catch (Anchor co-op, 56b), in an RF3 seed only (user's choice, 2026-10-18).
+void RF3Stock_ApplyRemoteCatch(const rf3::UnlockCatch& k) {
+    if (!RF3_IsEnabled() || !RF3Rando_Active()) {
+        return;
+    }
+    ApplyCatch(k, true);
+}
+
+// Step 56c: the team state (Anchor's UPDATE_TEAM_STATE carries this save's RF3 progress for late joiners).
+void RF3Stock_GetTeamProgress(uint32_t* catches, rf3::RodProgress* rod, rf3::UnlockProgress* unlock) {
+    *catches = sCatchCount;
+    *rod = sRodProgress;
+    *unlock = sUnlock;
+}
+
+// Step 56c: merges a teammate's progress, then sets every check the merged progress meets (most are already set
+// through Anchor's flag sync) and puts RF3 items the team owns (their owned flags arrive merged) into the stock,
+// silently. RF3 seeds only.
+void RF3Stock_MergeTeamProgress(uint32_t catches, const rf3::RodProgress& rod, const rf3::UnlockProgress& unlock) {
+    if (!RF3_IsEnabled() || !RF3Rando_Active()) {
+        return;
+    }
+    const uint32_t before = sCatchCount;
+    const uint16_t troutBefore = sRodProgress.trout;
+    sCatchCount = std::max(sCatchCount, catches);
+    rf3::RodProgressMerge(sRodProgress, rod);
+    rf3::UnlockProgressMerge(sUnlock, unlock);
+    int checks = 0;
+    for (int32_t r = 0; r < rf3::kRodCount; r++) {
+        if (rf3::RodConditionMet(sRodProgress, r)) {
+            checks += RF3Rando_SetCheck(static_cast<RandomizerInf>(RAND_INF_RF3_ROD_CONDITION_0 + r),
+                                        "rando-rod-condition-team") ? 1 : 0;
+        }
+    }
+    for (int32_t slot = 0; slot < rf3::kUnlockSlots; slot++) {
+        if (rf3::UnlockConditionFor(slot) != nullptr && SlotOpen(slot, true) && rf3::UnlockMet(sUnlock, slot)) {
+            checks += RF3Rando_SetCheck(static_cast<RandomizerInf>(RAND_INF_RF3_LURE_0 + slot),
+                                        "rando-unlock-condition-team") ? 1 : 0;
+        }
+    }
+    if (!RF3Rando_Advanced()) {
+        const uint32_t upTo = std::min<uint32_t>(sCatchCount, static_cast<uint32_t>(RF3Rando_CatchChecks()));
+        for (uint32_t n = 1; n <= upTo; n++) {
+            checks += RF3Rando_SetCheck(static_cast<RandomizerInf>(RAND_INF_RF3_CATCH_1 + n - 1),
+                                        "rando-catch-check-team") ? 1 : 0;
+        }
+    }
+    int items = 0;
+    for (int32_t offset = 0; offset < RF3_ITEM_COUNT; offset++) {
+        const int32_t kind = RF3Items_Kind(offset);
+        const int32_t index = RF3Items_Index(offset);
+        if (kind < 0 || !Valid(kind, index) || sStock[kind][index].collected) {
+            continue;
+        }
+        if (Flags_GetRandomizerInf(RF3Rando_OwnedFlag(static_cast<RandomizerGet>(RG_RF3_ROD_0 + offset)))) {
+            items += RF3Stock_Give(kind, index, "team-state") ? 1 : 0;
+        }
+    }
+    if (items > 0) {
+        RF3Tackle_StockChanged("team-state");
+    }
+    char why[160];
+    std::snprintf(why, sizeof(why), "catches=%u->%u (team %u) trout=%u->%u newChecks=%d newItems=%d", before,
+                  sCatchCount, catches, troutBefore, sRodProgress.trout, checks, items);
+    Log("team-merge", -1, -1, why);
 }
 
 extern "C" int32_t RF3Stock_LastRods(int32_t* rods, int32_t max) {

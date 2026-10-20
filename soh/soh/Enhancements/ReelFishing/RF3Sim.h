@@ -224,6 +224,31 @@ inline constexpr float kBaitStillMeter = 0.01f;
 
 // Activity level from the fish's tables and the game conditions (2.4).
 int ActivityLevel(const FishParams& fish, const Conditions& conditions);
+
+// Step 57c-3 (DESIGN "Step 57 design", the user's 57b choices): RF3's conditions from OoT's state.
+// - season: OoT's day count, 8 days per season as RF3's 24-day year (RF3-MECHANICS 7.2);
+// - time: OoT's clock, 5:00-11:59 Morning, 12:00-16:59 Afternoon, 17:00-4:59 Evening (RF3 has no night);
+// - weather: one roll per OoT day, scene and time of day, weighted by RF3's own weather counts for that season and
+//   time (tackle.json "conditions", 57c-2), or kFallbackWeather without them; OoT's own weather (gWeatherMode 1-5:
+//   cloudy, snow, rain, storm) makes it Cloudy, as RF3 has no rain or snow.
+struct WeatherWeights {
+    int counts[3][3][4] = {}; // [season][time][weather]
+    bool valid = false;
+};
+inline constexpr int kDaysPerSeason = 8;
+inline constexpr int kFallbackWeather[4] = { 50, 20, 15, 15 }; // our own: RF3's shares rounded [assumed]
+int SeasonForDay(int totalDays);
+int TimeForHours(float hours);
+int OotWeatherOverride(int weatherMode); // -1 = none
+int RollWeather(int totalDays, int scene, int season, int time, const WeatherWeights& weights);
+Conditions ConditionsFor(int totalDays, float hours, int scene, int weatherMode, const WeatherWeights& weights);
+
+// Step 57d (DESIGN "Step 57 design", the user's D1, fish regions only): fish grow through RF3's year, so a region
+// fish's length roll leans small in Spring and large in Autumn. length = min + u^k x (max - min), u uniform 0-1; k is
+// set so the mean in the record's range moves by RF3's own percentage for the species (its season mean / its yearly
+// mean, tackle.json "season_sizes"). The range itself never changes. Without data (meanMm null or 0) k = 1.
+float SeasonLengthExponent(const float* meanMm, int season, float minMm, float maxMm);
+float SeasonSkewedLength(float u, float k, float minMm, float maxMm);
 // Sight range in metres for the default lure (appeal 15/15) (2.4).
 float SightRange(const FishParams& fish, int activityLevel);
 // Step 18c: with the lure's appeal for this fish record (2.4: x appeal / 15). Appeal 0 = never seen.
@@ -495,12 +520,17 @@ const LureCondition* LureConditionFor(int lure);
 int UnlockConditionCount(); // slots that have one (87 lures + 39 flies + 8 baits + 3 floats = 137)
 int LureConditionCount();   // lures that have one (87)
 bool UnlockMatches(const LureCondition& c, const UnlockCatch& k);
-// Counts one catch toward every condition.
-void UnlockAddCatch(UnlockProgress& p, const UnlockCatch& k);
+// Counts one catch toward every condition. Step 56a: remote = a teammate's catch (Anchor co-op): it counts toward
+// every goal except Streak and Visit, which stay personal (user's choice A, 2026-10-18).
+void UnlockAddCatch(UnlockProgress& p, const UnlockCatch& k, bool remote = false);
 // A hooked fish was lost: streaks start over. A new scene: visits start over.
 void UnlockFishLost(UnlockProgress& p);
 void UnlockNewVisit(UnlockProgress& p);
 bool UnlockMet(const UnlockProgress& p, int slot);
+// Step 56c: a teammate's progress (Anchor's team state) merged into this one. Every player applies every catch, so
+// counters take the larger value and sets the union; Streak and Visit slots stay personal and are left alone.
+void RodProgressMerge(RodProgress& into, const RodProgress& other);
+void UnlockProgressMerge(UnlockProgress& into, const UnlockProgress& other);
 
 // Step 54 (DESIGN "Step 54 design"): a condition as one English sentence, for the check tracker ("Catch 5 Largemouth
 // Bass", "Catch a Pink Salmon of 30 in (762 mm) or more"). Names come from the host: species by RF3 species id, tackle

@@ -33,6 +33,7 @@
 #include <ship/Context.h>
 
 #include "RF3Bridge.h"
+#include "RF3Conditions.h" // step 57c-4
 #include "RF3PausePage.h"
 #include "RF3TackleAssets.h"
 #include "RF3LureModel.h"
@@ -93,6 +94,7 @@ struct Counts {
     int glyphs = 0;
     int numbers = 0;
     int missingPieces = 0;
+    int buttonIcons = 0; // step 58
 };
 Counts sCounts;
 std::string sDrawn; // names of the elements drawn, for the log
@@ -140,6 +142,30 @@ bool NoRod() {
     return RF3Stock_AnyRod() == 0;
 }
 constexpr const char* kNoRodText = "No rod.";
+
+// Step 57c-4 (DESIGN "Step 57 design"): the conditions in RF3's words (tackle.json "conditions" names, from
+// system.trf: Spring.., Sunny.., and the results screens' "Result (Morning)".. without "Result ( )"), English
+// otherwise. Drawn centred in the free strip under the rod pane (menu_01 Image00 ends at y 468; nothing but the
+// background is drawn at y 470-528 from x 387, checked against every layout).
+std::string ConditionName(const std::vector<std::string>& names, int i, const char* fallback) {
+    std::string n = (i >= 0 && i < static_cast<int>(names.size())) ? names[i] : std::string();
+    const std::string kPrefix = "Result (";
+    if (n.rfind(kPrefix, 0) == 0 && !n.empty() && n.back() == ')') {
+        n = n.substr(kPrefix.size(), n.size() - kPrefix.size() - 1);
+    }
+    return n.empty() ? std::string(fallback) : n;
+}
+
+std::string ConditionsText() {
+    static const char* const kSeason[3] = { "Spring", "Summer", "Autumn" };
+    static const char* const kWeather[4] = { "Sunny", "Cloudy", "Fog", "Dense fog" };
+    static const char* const kTime[3] = { "Morning", "Afternoon", "Evening" };
+    const rf3::Conditions c = RF3Conditions_Current();
+    const Assets& a = Get();
+    return ConditionName(a.seasonNames, c.season, kSeason[c.season]) + " / " +
+           ConditionName(a.weatherNames, c.weather, kWeather[c.weather]) + " / " +
+           ConditionName(a.timeNames, c.time, kTime[c.time]);
+}
 
 const Box* CurrentBox() {
     const Assets& a = Get();
@@ -256,6 +282,24 @@ void DrawTiled(Gfx*& g, const rf3tackle::Sprite& s) {
                       static_cast<float>(y + p->h));
         }
     }
+}
+
+// Step 58b (DESIGN "Step 58 design"; user, 2026-10-19: the erased plaques didn't look seamless): RF3's L1/R1 and
+// L2/R2 plaques are not drawn; an icon is drawn in each one's place instead, 22 RF3 units square, centred on it: the
+// stick pointing left/right (box), C-Left/C-Right (target). Returns false (draw RF3's plaque) without the icon.
+bool DrawButtonIcon(Gfx*& g, const rf3tackle::Sprite& s) {
+    const auto& icons = Get().buttonIcons;
+    auto it = icons.find(s.piece);
+    if (it == icons.end() || FindPiece(it->second.icon) == nullptr) {
+        return false;
+    }
+    const float cx = (s.rect[0] + s.rect[2]) * 0.5f;
+    const float cy = (s.rect[1] + s.rect[3]) * 0.5f;
+    constexpr float kIcon = 22.0f;
+    gDPSetPrimColor(g++, 0, 0, 255, 255, 255, 255);
+    DrawPiece(g, it->second.icon, cx - kIcon * 0.5f, cy - kIcon * 0.5f, cx + kIcon * 0.5f, cy + kIcon * 0.5f);
+    sCounts.buttonIcons++;
+    return true;
 }
 
 void DrawSprite(Gfx*& g, const rf3tackle::Sprite& s) {
@@ -526,7 +570,9 @@ void DrawElement(Gfx*& g, const std::string& layout, const Element& e, const Val
         // Within an element, too, the first sprite is the top layer (menu_02 Image04 lists the
         // "Finish Modification" picture before the button it sits on).
         for (auto s = e.sprites.rbegin(); s != e.sprites.rend(); ++s) {
-            DrawSprite(g, *s);
+            if (!DrawButtonIcon(g, *s)) { // step 58: the L1/R1/L2/R2 plaques get N64 icons
+                DrawSprite(g, *s);
+            }
         }
         drawn = true;
     } else if (e.kind == "TXTX") {
@@ -1158,6 +1204,8 @@ void LogState(const Values& v) {
     if (NoRod()) {
         text += " noRod=1"; // step 55b
     }
+    text += " conditions=\"" + ConditionsText() + "\""; // step 57c-4
+    text += " buttonIcons=" + std::to_string(sCounts.buttonIcons); // step 58: plaques drawn with N64 icons
     text += " texts=[" + (v.box ? v.box->title : std::string("?")) + " | " +
             (v.target ? v.target->name : std::string("?")) + " | " + (v.box ? v.box->rodName : "?") + " | " +
             (v.box ? v.box->reelName : "?") + " | " + (v.line ? v.line->name : std::string("?")) + " | " +
@@ -1456,6 +1504,18 @@ extern "C" void RF3Pause_DrawTackleScreen(PlayState* play) {
     }
     if (sMode == MODE_LIST && v.box != nullptr) {
         DrawItemMenu(g, play, v); // step 35b: RF3's menu_06 on top
+    }
+    {
+        // Step 57c-4: season / weather / time in the free strip above the two top panels (y 0-28 in RF3's screen
+        // units; the bottom of RF3's 528-high screen is cut off in SoH: user's screenshot, 2026-10-19). 20 high, so
+        // it ends before the panels at y 28. Centred on the screen in every mode (user: it shouldn't move in the
+        // item list), and drawn after the item menu so nothing covers it.
+        const std::string cond = ConditionsText();
+        const float fontH = static_cast<float>(std::max<int32_t>(1, Get().fontCell[1]));
+        const float drawH = std::min(fontH, 20.0f);
+        const float full = TextWidth(cond, drawH / fontH);
+        const float fit = full > 400.0f ? 400.0f / full : 1.0f;
+        DrawString(g, 336.5f - full * fit * 0.5f, 4.0f, cond, 0, drawH, drawH / fontH * fit);
     }
     gDPPipeSync(g++);
     OVERLAY_DISP = g;

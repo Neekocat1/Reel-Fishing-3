@@ -9,6 +9,7 @@
 
 #include "soh/cvar_prefixes.h"
 #include "RF3Bridge.h"
+#include "RF3Conditions.h" // step 57c-3
 #include "RF3Items.h"
 #include "RF3FishModel.h"
 #include "RF3RodModel.h"
@@ -90,6 +91,7 @@ static void DrawApproach() {
     }
     ImGui::Text("Sight range %.1f m (activity %d, tackle heart %+d, lure appeal %d/15)   wary fish: %d", a.sightRangeM,
                 a.activityLevel, a.sightBonus, a.lureAppeal, a.waryFish);
+    ImGui::TextUnformatted(RF3Conditions_Describe().c_str()); // step 57c-3
     ImGui::Text("Fish ignoring this tackle this visit: %d can't take the rod, %d don't see the lure (appeal 0)",
                 a.blockedRod, a.blockedAppeal); // step 18c
     float power, factor;

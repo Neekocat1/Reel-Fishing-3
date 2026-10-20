@@ -147,6 +147,48 @@ void ReadTackle(const json& t) {
         sAssets.boxes.push_back(std::move(box));
     }
     sAssets.fishRodMask = ReadInts(t, "fish_rod_mask");
+    if (t.contains("conditions") && t.at("conditions").is_object()) { // step 57c-3
+        const json& c = t.at("conditions");
+        if (c.contains("weather_counts") && c.at("weather_counts").is_array() && c.at("weather_counts").size() == 3) {
+            bool ok = true;
+            for (int s = 0; s < 3 && ok; s++) {
+                const json& bySeason = c.at("weather_counts").at(s);
+                ok = bySeason.is_array() && bySeason.size() == 3;
+                for (int tm = 0; tm < 3 && ok; tm++) {
+                    const json& byTime = bySeason.at(tm);
+                    ok = byTime.is_array() && byTime.size() == 4;
+                    for (int w = 0; w < 4 && ok; w++) {
+                        sAssets.weatherCounts[s][tm][w] = byTime.at(w).get<int32_t>();
+                    }
+                }
+            }
+            sAssets.weatherCountsOk = ok;
+        }
+        if (c.contains("names") && c.at("names").is_object()) {
+            auto names = [&](const char* key, std::vector<std::string>& out) {
+                if (c.at("names").contains(key)) {
+                    for (const json& n : c.at("names").at(key)) {
+                        out.push_back(n.get<std::string>());
+                    }
+                }
+            };
+            names("season", sAssets.seasonNames);
+            names("weather", sAssets.weatherNames);
+            names("time", sAssets.timeNames);
+        }
+        if (c.contains("season_sizes") && c.at("season_sizes").is_object()) { // step 57d
+            for (auto& [species, v] : c.at("season_sizes").items()) {
+                if (!v.contains("mean_mm") || !v.at("mean_mm").is_array() || v.at("mean_mm").size() != 3) {
+                    continue;
+                }
+                std::array<float, 3> m{};
+                for (int k = 0; k < 3; k++) {
+                    m[k] = v.at("mean_mm")[k].get<float>();
+                }
+                sAssets.seasonMeanMm[std::stoi(species)] = m;
+            }
+        }
+    }
     if (t.contains("type_names") && t.at("type_names").is_object()) { // step 35a
         for (auto& [kind, names] : t.at("type_names").items()) {
             for (const json& n : names) {
@@ -238,6 +280,15 @@ void ReadLayout(const json& l) {
     for (const std::string& dn : sAssets.digitNames) {
         sAssets.digitPaths.push_back(kOtrPrefix + TexturePath("digit_" + dn));
     }
+    if (l.contains("button_icons") && l.at("button_icons").is_object()) { // step 58
+        for (auto& [plaque, b] : l.at("button_icons").items()) {
+            ButtonIcon bi;
+            bi.icon = b.value("icon", std::string());
+            if (!bi.icon.empty()) {
+                sAssets.buttonIcons[plaque] = std::move(bi);
+            }
+        }
+    }
 }
 
 // Texture name (without prefix) for a glyph, e.g. "font_31".
@@ -293,7 +344,10 @@ void WriteLog(const std::string& why, const std::vector<std::string>& missing) {
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
     out << stamp << " assets loaded=" << (sAssets.loaded ? 1 : 0) << " texturesOk=" << (sAssets.texturesOk ? 1 : 0)
-        << " needed=" << sAssets.texturesNeeded << " missing=" << sAssets.texturesMissing;
+        << " needed=" << sAssets.texturesNeeded << " missing=" << sAssets.texturesMissing
+        << " weatherCounts=" << (sAssets.weatherCountsOk ? 1 : 0) // step 57c-3
+        << " buttonIcons=" << sAssets.buttonIcons.size()            // step 58
+        << " seasonSizes=" << sAssets.seasonMeanMm.size();          // step 57d
     for (const Box& b : sAssets.boxes) {
         out << " " << b.key << "(rod=" << b.rod << " lines=" << b.lines.size() << " lures=" << b.lures.size()
             << " targets=" << b.targets.size() << ")";

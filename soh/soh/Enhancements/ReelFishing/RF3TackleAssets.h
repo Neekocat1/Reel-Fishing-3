@@ -116,6 +116,12 @@ struct Piece {
     std::vector<Strip> strips;
 };
 
+// Step 58b (layout.json "button_icons", tools/rf3_menuassets.py): the icon drawn instead of an RF3 L1/R1/L2/R2
+// plaque piece (the stick left/right, C-Left/C-Right, each with its arrow).
+struct ButtonIcon {
+    std::string icon;
+};
+
 struct Assets {
     bool loaded = false;       // both JSON files read and parsed
     bool texturesOk = false;   // every texture they name is in the archives
@@ -137,6 +143,16 @@ struct Assets {
     std::vector<std::string> depthNames; // step 19c: Ldr below Flt, left to right (Surface .. Deepest)
     // Step 35a: the item menu's type names by box kind ("lure": Top Water .. Bottom, "fly": Dry .. Streamer)
     std::map<std::string, std::vector<std::string>> typeNames;
+    std::map<std::string, ButtonIcon> buttonIcons; // step 58: by plaque piece; empty with an older archive
+    // Step 57c-3 (tackle.json "conditions", written by tools/rf3_menuassets.py, 57c-2): RF3's weather counts per
+    // [season][time][weather] over its area records, and RF3's names (system.trf) for the three conditions.
+    bool weatherCountsOk = false;
+    int32_t weatherCounts[3][3][4] = {};
+    std::vector<std::string> seasonNames;  // Spring, Summer, Autumn
+    std::vector<std::string> weatherNames; // Sunny, Cloudy, Fog, Dense fog
+    std::vector<std::string> timeNames;    // "Result (Morning)" .. (the results screens' titles)
+    // Step 57d ("conditions" "season_sizes"): RF3's mean fish length per species (RF3 species id) and season, mm.
+    std::map<int32_t, std::array<float, 3>> seasonMeanMm;
 };
 
 // Loads on the first call (later calls return the same result). Safe to call every frame.
