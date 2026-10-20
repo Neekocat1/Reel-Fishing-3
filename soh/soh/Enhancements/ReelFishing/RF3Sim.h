@@ -236,6 +236,10 @@ struct WeatherWeights {
     bool valid = false;
 };
 inline constexpr int kDaysPerSeason = 8;
+// Step 59a (DESIGN "Step 59 design", the user's R1/A2): Rain is the mod's 5th weather. A third of RF3's Cloudy weight
+// becomes Rain; its activity is Cloudy's entry + 1; OoT's own rain and storm (gWeatherMode 4, 5) are Rain.
+inline constexpr int kWeatherRain = 4;
+inline constexpr int kWeatherCount = 5;
 inline constexpr int kFallbackWeather[4] = { 50, 20, 15, 15 }; // our own: RF3's shares rounded [assumed]
 int SeasonForDay(int totalDays);
 int TimeForHours(float hours);

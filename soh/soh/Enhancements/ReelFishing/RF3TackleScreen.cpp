@@ -158,7 +158,7 @@ std::string ConditionName(const std::vector<std::string>& names, int i, const ch
 
 std::string ConditionsText() {
     static const char* const kSeason[3] = { "Spring", "Summer", "Autumn" };
-    static const char* const kWeather[4] = { "Sunny", "Cloudy", "Fog", "Dense fog" };
+    static const char* const kWeather[5] = { "Sunny", "Cloudy", "Fog", "Dense fog", "Rain" }; // 59a: RF3 has no Rain
     static const char* const kTime[3] = { "Morning", "Afternoon", "Evening" };
     const rf3::Conditions c = RF3Conditions_Current();
     const Assets& a = Get();

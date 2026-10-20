@@ -31,7 +31,7 @@ extern PlayState* gPlayState;
 namespace {
 
 const char* const kSeasonNames[3] = { "Spring", "Summer", "Autumn" };
-const char* const kWeatherNames[4] = { "Sunny", "Cloudy", "Fog", "Dense fog" };
+const char* const kWeatherNames[5] = { "Sunny", "Cloudy", "Fog", "Dense fog", "Rain" }; // step 59a: Rain
 const char* const kTimeNames[3] = { "Morning", "Afternoon", "Evening" };
 
 struct Inputs {
@@ -44,6 +44,17 @@ struct Inputs {
 
 Inputs sLastInputs;
 rf3::Conditions sLast = { -1, -1, -1 };
+
+// Step 59c (user, 2026-10-19: "The song of storms should set the rf3 weather to rain"): OoT's Song of Storms (its
+// storm actor sets envCtx.unk_F2[0], the rain request) makes it Rain in that scene until the RF3 time of day changes
+// (the next weather roll), or the day.
+struct Storm {
+    bool active = false;
+    int days = 0;
+    int time = 0;
+    int scene = -1;
+};
+Storm sStorm;
 
 rf3::WeatherWeights Weights() {
     rf3::WeatherWeights w;
@@ -61,7 +72,7 @@ rf3::WeatherWeights Weights() {
     return w;
 }
 
-void Log(const rf3::Conditions& c, const Inputs& in) {
+void Log(const rf3::Conditions& c, const Inputs& in, bool storm) {
     if (!RF3_IsEnabled()) {
         return;
     }
@@ -75,9 +86,10 @@ void Log(const rf3::Conditions& c, const Inputs& in) {
     char line[256];
     std::snprintf(line, sizeof(line),
                   "%s conditions season=%d(%s) weather=%d(%s) time=%d(%s) day=%d hours=%.2f scene=%d oot_weather=%d "
-                  "weights=%s\n",
+                  "weights=%s storm=%d\n",
                   stamp, c.season, kSeasonNames[c.season], c.weather, kWeatherNames[c.weather], c.time,
-                  kTimeNames[c.time], in.days, in.hours, in.scene, in.ootWeather, in.rf3Weights ? "rf3" : "fallback");
+                  kTimeNames[c.time], in.days, in.hours, in.scene, in.ootWeather, in.rf3Weights ? "rf3" : "fallback",
+                  storm ? 1 : 0);
     out << line;
 }
 
@@ -94,10 +106,18 @@ rf3::Conditions RF3Conditions_Current() {
     in.ootWeather = gWeatherMode;
     const rf3::WeatherWeights w = Weights();
     in.rf3Weights = w.valid;
-    const rf3::Conditions c = rf3::ConditionsFor(in.days, in.hours, in.scene, in.ootWeather, w);
+    rf3::Conditions c = rf3::ConditionsFor(in.days, in.hours, in.scene, in.ootWeather, w);
+    if (gPlayState->envCtx.unk_F2[0] != 0 &&
+        !(sStorm.active && sStorm.days == in.days && sStorm.time == c.time && sStorm.scene == in.scene)) {
+        sStorm = { true, in.days, c.time, in.scene }; // the Song of Storms is playing here now
+    }
+    const bool storm = sStorm.active && sStorm.days == in.days && sStorm.time == c.time && sStorm.scene == in.scene;
+    if (storm) {
+        c.weather = rf3::kWeatherRain;
+    }
     if (c.season != sLast.season || c.weather != sLast.weather || c.time != sLast.time || in.days != sLastInputs.days ||
         in.scene != sLastInputs.scene || in.ootWeather != sLastInputs.ootWeather) {
-        Log(c, in);
+        Log(c, in, storm);
         sLast = c;
         sLastInputs = in;
     }

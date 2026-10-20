@@ -177,6 +177,9 @@ int ActivityLevel(const FishParams& fish, const Conditions& c) {
     // has 4 values (Dense fog reads +0x51).
     int season = std::clamp(c.season, 0, 2);
     int time = std::clamp(c.time, 0, 2);
+    if (c.weather == kWeatherRain) { // step 59a: the mod's Rain = Cloudy's entry + 1 (the user's A2)
+        return fish.activitySeason[season] + fish.activityTime[time] + fish.activityWeather[1] + 1;
+    }
     int weather = std::clamp(c.weather, 0, 3);
     return fish.activitySeason[season] + fish.activityTime[time] + fish.activityWeather[weather];
 }
@@ -198,7 +201,10 @@ int TimeForHours(float hours) {
 }
 
 int OotWeatherOverride(int weatherMode) {
-    return (weatherMode >= 1 && weatherMode <= 5) ? 1 : -1; // any OoT weather -> Cloudy
+    if (weatherMode == 4 || weatherMode == 5) {
+        return kWeatherRain; // step 59a: OoT's rain and storm
+    }
+    return (weatherMode >= 1 && weatherMode <= 3) ? 1 : -1; // OoT's cloudy and snow -> Cloudy
 }
 
 namespace {
@@ -215,10 +221,13 @@ uint32_t Mix(uint32_t x) {
 int RollWeather(int totalDays, int scene, int season, int time, const WeatherWeights& weights) {
     season = std::clamp(season, 0, 2);
     time = std::clamp(time, 0, 2);
-    const int* w = weights.valid ? weights.counts[season][time] : kFallbackWeather;
+    const int* w4 = weights.valid ? weights.counts[season][time] : kFallbackWeather;
+    // Step 59a (R1): five weights, x3 so a third of Cloudy can go to Rain exactly.
+    const int w[kWeatherCount] = { 3 * std::max(0, w4[0]), 2 * std::max(0, w4[1]), 3 * std::max(0, w4[2]),
+                                   3 * std::max(0, w4[3]), std::max(0, w4[1]) };
     int total = 0;
-    for (int i = 0; i < 4; i++) {
-        total += std::max(0, w[i]);
+    for (int i = 0; i < kWeatherCount; i++) {
+        total += w[i];
     }
     if (total <= 0) {
         return 0;
@@ -227,8 +236,8 @@ int RollWeather(int totalDays, int scene, int season, int time, const WeatherWei
                               Mix(static_cast<uint32_t>(scene + 1)) * 0x85EBCA77u ^
                               static_cast<uint32_t>(time + 1) * 0xC2B2AE3Du);
     int pick = static_cast<int>(seed % static_cast<uint32_t>(total));
-    for (int i = 0; i < 4; i++) {
-        pick -= std::max(0, w[i]);
+    for (int i = 0; i < kWeatherCount; i++) {
+        pick -= w[i];
         if (pick < 0) {
             return i;
         }

@@ -46,7 +46,7 @@ struct FishParams {
 // 0-2. The user's RF3 session was Summer, Sunny, Morning.
 struct Conditions {
     int season;  // A: 0 Spring, 1 Summer, 2 Autumn
-    int weather; // B: 0 Sunny, 1 Cloudy, 2 Fog, 3 Dense fog
+    int weather; // B: 0 Sunny, 1 Cloudy, 2 Fog, 3 Dense fog; step 59a: 4 Rain (the mod's own, RF3 has none)
     int time;    // C: 0 Morning, 1 Afternoon, 2 Evening
 };
 inline constexpr Conditions kConditionsTestSession = { 1, 0, 0 };
