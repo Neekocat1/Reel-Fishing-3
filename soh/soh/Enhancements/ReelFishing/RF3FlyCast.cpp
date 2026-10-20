@@ -32,12 +32,13 @@ struct Tuning {
     float lo;
     float hi;
 };
-// Frames of gPlayerAnim_link_fishing_throw. Defaults are first guesses: OoT launches the lure 19 game frames into
-// the throw, i.e. at about frame 28.5 (1.5 animation frames per game frame). Tuned by the user in the debug window.
+// Frames of gPlayerAnim_link_fishing_throw. OoT launches the lure 19 game frames into the throw, i.e. at about frame
+// 28.5 (1.5 animation frames per game frame). Defaults are the user's values from the debug window (2026-10-19:
+// back 4, forward 14, swing speed 0.80, release 28.50); 20c-3d's first guesses were 6 / 20 / 1.0 / 28.5.
 const Tuning kTuning[4] = {
-    { CVAR_ENHANCEMENT("ReelFishing3.FlyCast.BackFrame"), 6.0f, 0.0f, 60.0f },
-    { CVAR_ENHANCEMENT("ReelFishing3.FlyCast.ForwardFrame"), 20.0f, 0.0f, 60.0f },
-    { CVAR_ENHANCEMENT("ReelFishing3.FlyCast.SwingSpeed"), 1.0f, 0.1f, 4.0f },
+    { CVAR_ENHANCEMENT("ReelFishing3.FlyCast.BackFrame"), 4.0f, 0.0f, 60.0f },
+    { CVAR_ENHANCEMENT("ReelFishing3.FlyCast.ForwardFrame"), 14.0f, 0.0f, 60.0f },
+    { CVAR_ENHANCEMENT("ReelFishing3.FlyCast.SwingSpeed"), 0.8f, 0.1f, 4.0f },
     { CVAR_ENHANCEMENT("ReelFishing3.FlyCast.ReleaseFrame"), 28.5f, 0.0f, 60.0f },
 };
 
