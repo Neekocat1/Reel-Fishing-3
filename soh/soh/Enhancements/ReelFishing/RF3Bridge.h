@@ -163,6 +163,8 @@ float RF3RegionShape_OutsideOutline(int32_t slot, float x, float z);
 // Step 47c: the slot's region current (step 20c-3a): the OoT yaw it flows toward (radians) and its speed (m/s); an
 // unset current is the box's long axis at 0.2 m/s, as the fly drift uses. Returns 0 if the slot has no region.
 int32_t RF3RegionFish_Current(int32_t slot, float* yawRad, float* speedMps);
+// Step 60a: a caught region fish is removed and a new one rolled for its slot. 0 = region gone (release it instead).
+int32_t RF3RegionFish_ReplaceCaught(int32_t slot);
 
 // --- Size display (step 12b) ------------------------------------------------
 

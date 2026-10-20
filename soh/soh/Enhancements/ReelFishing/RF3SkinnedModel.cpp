@@ -97,6 +97,8 @@ void Build(SkinnedModel& m) {
         const char* tex = nullptr;
         int32_t w = 0;
         int32_t h = 0;
+        uint32_t cms = G_TX_NOMIRROR | G_TX_WRAP;
+        uint32_t cmt = G_TX_NOMIRROR | G_TX_WRAP;
     };
     std::vector<Surface> surfaces;
     for (const json& s : j["surfaces"]) {
@@ -113,6 +115,37 @@ void Build(SkinnedModel& m) {
             }
         }
         surfaces.push_back(out);
+    }
+    // Step 60b (user, 2026-10-19: "some of the fish's fins have extra pixels of texture on the very end"): the fins'
+    // texture coordinates run right up to the texture's edge (u to 1.000, v from 0.000, all 40 fish), and wrap mode
+    // blends the opposite edge into the tips. A fish surface whose coordinates all lie inside the texture on an axis
+    // is drawn clamped on that axis. Rods and lures keep wrap.
+    if (j.value("kind", "") == "fish") {
+        for (size_t si = 0; si < surfaces.size(); si++) {
+            Surface& s = surfaces[si];
+            if (s.tex == nullptr) {
+                continue;
+            }
+            bool insideS = true, insideT = true;
+            for (const json& b : j["batches"]) {
+                if (b.value("surface", 0) != static_cast<int32_t>(si)) {
+                    continue;
+                }
+                for (const json& v : b["verts"]) {
+                    const int32_t sc = v[3].get<int32_t>(), tc = v[4].get<int32_t>();
+                    insideS = insideS && sc >= 0 && sc <= s.w * 32;
+                    insideT = insideT && tc >= 0 && tc <= s.h * 32;
+                }
+            }
+            if (insideS) {
+                s.cms = G_TX_NOMIRROR | G_TX_CLAMP;
+                m.clampedS++;
+            }
+            if (insideT) {
+                s.cmt = G_TX_NOMIRROR | G_TX_CLAMP;
+                m.clampedT++;
+            }
+        }
     }
 
     size_t nv = 0, nt = 0, ng = 0;
@@ -161,8 +194,8 @@ void Build(SkinnedModel& m) {
             if (s.tex != nullptr) {
                 gDPSetCombineMode(g++, G_CC_MODULATEIDECALA, G_CC_MODULATEIDECALA);
                 gSPTexture(g++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
-                gDPLoadTextureBlock(g++, s.tex, G_IM_FMT_RGBA, G_IM_SIZ_32b, s.w, s.h, 0, G_TX_NOMIRROR | G_TX_WRAP,
-                                    G_TX_NOMIRROR | G_TX_WRAP, Log2(s.w), Log2(s.h), G_TX_NOLOD, G_TX_NOLOD);
+                gDPLoadTextureBlock(g++, s.tex, G_IM_FMT_RGBA, G_IM_SIZ_32b, s.w, s.h, 0, s.cms, s.cmt, Log2(s.w),
+                                    Log2(s.h), G_TX_NOLOD, G_TX_NOLOD);
             } else {
                 gDPSetCombineMode(g++, G_CC_SHADE, G_CC_SHADE);
                 gSPTexture(g++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF);
@@ -243,10 +276,10 @@ SkinnedModel* Get(const std::string& file, const std::string& what, const std::s
     char line[360];
     std::snprintf(line, sizeof(line),
                   "%s-model-load %s file=%s ok=%d bones=%d verts=%d tris=%d batches=%d textures=%s size_m=%.3f,%.3f,%.3f"
-                  " extra=%s%s%s",
+                  " clamped=%d/%d extra=%s%s%s",
                   what.c_str(), key.c_str(), file.c_str(), m->ok ? 1 : 0, static_cast<int32_t>(m->bones.size()),
                   m->verts, m->tris, m->batches, m->texturesMissing ? "missing" : (m->texPaths.empty() ? "none" : "ok"),
-                  m->sizeM[0], m->sizeM[1], m->sizeM[2], m->extra.dump().substr(0, 120).c_str(),
+                  m->sizeM[0], m->sizeM[1], m->sizeM[2], m->clampedS, m->clampedT, m->extra.dump().substr(0, 120).c_str(),
                   m->why.empty() ? "" : " why=", m->why.c_str());
     Log(line);
     SkinnedModel* out = m.get();

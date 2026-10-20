@@ -5074,9 +5074,15 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
             }
 
             if (sRodCastState == 0) {
+                // Step 60a: a caught region fish is removed and a new one rolled for its slot (RF3RegionFish.cpp);
+                // Actor_Kill clears update, so the release below is skipped.
+                if ((this->actor.update != NULL) && RF3_IS_REGION_FISH(this)) {
+                    RF3RegionFish_ReplaceCaught(this->actor.params - EN_FISH_REGION);
+                }
                 if (this->actor.update != NULL) {
                     if (RF3_IS_REGION_FISH(this)) {
-                        // Step 16e: released back where it lives (Link may stand on land).
+                        // Step 16e: released back where it lives (Link may stand on land). Step 60a: only if its
+                        // region is gone.
                         this->actor.world.pos = this->actor.prevPos = this->actor.home.pos;
                     }
                     this->fishState = this->fishStateNext = 0;

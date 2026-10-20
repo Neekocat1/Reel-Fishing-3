@@ -48,6 +48,8 @@ struct SkinnedModel {
     int32_t tris = 0;
     int32_t batches = 0;
     int32_t texturesMissing = 0;
+    int32_t clampedS = 0; // step 60b: textured surfaces drawn clamped in s / in t (fish only)
+    int32_t clampedT = 0;
     // step 27e-3: per bone, its vertex count and how many of them are on a hook surface (hook, lhook, hari)
     std::vector<int32_t> boneVerts;
     std::vector<int32_t> boneHookVerts;

@@ -179,12 +179,63 @@ bool RegionActive(PlayState* play, const rf3::FishRegion& r, std::string* why) {
     return true;
 }
 
+// Rolls one fish of region ri (species, season-skewed length, spot) into the free slot and spawns it. Returns true if
+// it was spawned. Step 60a: also used to replace a caught fish.
+bool SpawnInSlot(PlayState* play, size_t ri, const rf3::FishRegion& r, int slot) {
+    char line[256];
+    int record = r.records[static_cast<size_t>(Rand01() * r.records.size()) % r.records.size()];
+    const rf3::FishRecord* rec = FindRecord(record);
+    Vec3f pos;
+    if ((rec == nullptr) || !FindSpot(play, r, &pos)) {
+        std::snprintf(line, sizeof(line), "scene %d region %d (%s): no water %.0f+ deep found, fish skipped",
+                      play->sceneNum, (int)ri, r.name.c_str(), kMinDepth);
+        Log(line);
+        return false;
+    }
+    Slot& s = sSlots[slot];
+    s.used = true;
+    s.region = static_cast<int>(ri);
+    s.regionScene = r.scene;
+    s.regionName = r.name;
+    s.regionGoneLogged = false;
+    s.info.minX = r.minX;
+    s.info.maxX = r.maxX;
+    s.info.minZ = r.minZ;
+    s.info.maxZ = r.maxZ;
+    s.info.surfaceY = r.surfaceY;
+    s.info.angle = r.Radians(); // step 16i
+    s.info.record = record;
+    // Step 57d (the user's D1): the length roll leans small in Spring and large in Autumn, by RF3's own
+    // per-species growth (tackle.json "season_sizes"); the record's range is unchanged.
+    const int season = RF3Conditions_Current().season;
+    const auto& means = rf3tackle::Get().seasonMeanMm;
+    const auto mean = means.find(rec->species);
+    const float minMm = rec->params.lengthMinMm;
+    const float maxMm = rec->params.lengthMaxMm;
+    const float lengthK = rf3::SeasonLengthExponent(mean != means.end() ? mean->second.data() : nullptr, season, minMm,
+                                              maxMm);
+    s.info.mm = rf3::SeasonSkewedLength(Rand01(), lengthK, minMm, maxMm);
+    s.info.ootLength = OotLengthFor(rec->species, s.info.mm);
+    Actor* actor = Actor_Spawn(&play->actorCtx, play, ACTOR_FISHING, pos.x, pos.y, pos.z, 0,
+                               static_cast<s16>(Rand01() * 0x10000), 0, kFishParamBase + slot);
+    std::snprintf(line, sizeof(line),
+                  "scene %d region %d (%s) slot %d: record %d (%s %c) %.0f mm, oot %.1f at %.0f %.0f %.0f "
+                  "season=%d k=%.2f%s",
+                  play->sceneNum, (int)ri, r.name.c_str(), slot, record, rec->speciesName, rec->sizeClass,
+                  s.info.mm, s.info.ootLength, pos.x, pos.y, pos.z, season, lengthK, actor ? "" : "  SPAWN FAILED");
+    Log(line);
+    if (actor == nullptr) {
+        s = {};
+        return false;
+    }
+    return true;
+}
+
 // Spawns region ri's fish count into free slots. Returns the fish spawned; *full is set when the slots ran out.
 int SpawnRegion(PlayState* play, size_t ri, const rf3::FishRegion& r, bool* full) {
     int spawned = 0;
     int slot = 0;
     for (int k = 0; k < r.fishCount; k++) {
-        char line[256];
         while ((slot < kSlots) && sSlots[slot].used) {
             slot++;
         }
@@ -193,52 +244,9 @@ int SpawnRegion(PlayState* play, size_t ri, const rf3::FishRegion& r, bool* full
             *full = true;
             return spawned;
         }
-        int record = r.records[static_cast<size_t>(Rand01() * r.records.size()) % r.records.size()];
-        const rf3::FishRecord* rec = FindRecord(record);
-        Vec3f pos;
-        if ((rec == nullptr) || !FindSpot(play, r, &pos)) {
-            std::snprintf(line, sizeof(line), "scene %d region %d (%s): no water %.0f+ deep found, fish skipped",
-                          play->sceneNum, (int)ri, r.name.c_str(), kMinDepth);
-            Log(line);
-            continue;
+        if (SpawnInSlot(play, ri, r, slot)) {
+            spawned++;
         }
-        Slot& s = sSlots[slot];
-        s.used = true;
-        s.region = static_cast<int>(ri);
-        s.regionScene = r.scene;
-        s.regionName = r.name;
-        s.regionGoneLogged = false;
-        s.info.minX = r.minX;
-        s.info.maxX = r.maxX;
-        s.info.minZ = r.minZ;
-        s.info.maxZ = r.maxZ;
-        s.info.surfaceY = r.surfaceY;
-        s.info.angle = r.Radians(); // step 16i
-        s.info.record = record;
-        // Step 57d (the user's D1): the length roll leans small in Spring and large in Autumn, by RF3's own
-        // per-species growth (tackle.json "season_sizes"); the record's range is unchanged.
-        const int season = RF3Conditions_Current().season;
-        const auto& means = rf3tackle::Get().seasonMeanMm;
-        const auto mean = means.find(rec->species);
-        const float minMm = rec->params.lengthMinMm;
-        const float maxMm = rec->params.lengthMaxMm;
-        const float lengthK = rf3::SeasonLengthExponent(mean != means.end() ? mean->second.data() : nullptr, season, minMm,
-                                                  maxMm);
-        s.info.mm = rf3::SeasonSkewedLength(Rand01(), lengthK, minMm, maxMm);
-        s.info.ootLength = OotLengthFor(rec->species, s.info.mm);
-        Actor* actor = Actor_Spawn(&play->actorCtx, play, ACTOR_FISHING, pos.x, pos.y, pos.z, 0,
-                                   static_cast<s16>(Rand01() * 0x10000), 0, kFishParamBase + slot);
-        std::snprintf(line, sizeof(line),
-                      "scene %d region %d (%s) slot %d: record %d (%s %c) %.0f mm, oot %.1f at %.0f %.0f %.0f "
-                      "season=%d k=%.2f%s",
-                      play->sceneNum, (int)ri, r.name.c_str(), slot, record, rec->speciesName, rec->sizeClass,
-                      s.info.mm, s.info.ootLength, pos.x, pos.y, pos.z, season, lengthK, actor ? "" : "  SPAWN FAILED");
-        Log(line);
-        if (actor == nullptr) {
-            s = {};
-            continue;
-        }
-        spawned++;
     }
     return spawned;
 }
@@ -484,6 +492,35 @@ static const rf3::FishRegion* SlotRegion(int32_t slot) {
         s.regionGoneLogged = true;
     }
     return nullptr;
+}
+
+// Step 60a (user, 2026-10-19: "When a fish is caught I want it to be despawned and a new fish spawned in its place"):
+// called by z_fishing.c when a caught region fish would be released. Removes it and rolls a new fish for the same
+// slot and region (species, season-skewed length, a random spot). Returns 0 if the slot's region is gone (the caller
+// then releases the fish as before), else 1 (the fish was removed; a new one spawned unless no water was found).
+extern "C" int32_t RF3RegionFish_ReplaceCaught(int32_t slot) {
+    PlayState* play = gPlayState;
+    const rf3::FishRegion* r = SlotRegion(slot);
+    if ((play == nullptr) || (r == nullptr) || r->records.empty()) {
+        return 0;
+    }
+    const size_t ri = static_cast<size_t>(sSlots[slot].region);
+    const RF3RegionFishInfo old = sSlots[slot].info;
+    const int killed = Fishing_RF3KillRegionSlot(play, slot);
+    sSlots[slot] = {};
+    RF3Approach_Reset(); // as a live respawn: no chaser or lure memory points at the removed fish
+    const bool spawned = SpawnInSlot(play, ri, *r, slot);
+    const rf3::FishRecord* oldRec = FindRecord(old.record);
+    const rf3::FishRecord* newRec = spawned ? FindRecord(sSlots[slot].info.record) : nullptr;
+    char line[256];
+    std::snprintf(line, sizeof(line),
+                  "region-replace scene=%d region=%d (%s) slot=%d killed=%d: record %d (%s) %.0f mm -> %s%d (%s) %.0f mm",
+                  play->sceneNum, (int)ri, r->name.c_str(), slot, killed, old.record,
+                  oldRec ? oldRec->speciesName : "?", old.mm, spawned ? "record " : "none ",
+                  spawned ? sSlots[slot].info.record : -1, newRec ? newRec->speciesName : "-",
+                  spawned ? sSlots[slot].info.mm : 0.0f);
+    Log(line);
+    return 1;
 }
 
 extern "C" int32_t RF3RegionFish_Current(int32_t slot, float* yawRad, float* speedMps) {
