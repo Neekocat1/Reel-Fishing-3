@@ -115,6 +115,7 @@ class Anchor : public Network {
     void HandlePacket_UpdateRoomState(nlohmann::json payload);
     void HandlePacket_UpdateTeamState(nlohmann::json payload);
     void HandlePacket_RF3Catch(nlohmann::json payload); // Reel Fishing III mod (step 56b)
+    void HandlePacket_RF3FishView(nlohmann::json payload); // Reel Fishing III mod (step 61c)
 
   public:
     uint32_t ownClientId;
@@ -144,6 +145,7 @@ class Anchor : public Network {
     inline static const std::string UPDATE_ROOM_STATE = "UPDATE_ROOM_STATE";
     inline static const std::string UPDATE_TEAM_STATE = "UPDATE_TEAM_STATE";
     inline static const std::string RF3_CATCH = "RF3_CATCH"; // Reel Fishing III mod (step 56b)
+    inline static const std::string RF3_FISH_VIEW = "RF3_FISH_VIEW"; // Reel Fishing III mod (step 61c)
 
     static Anchor* Instance;
     std::map<uint32_t, AnchorClient> clients;
@@ -183,6 +185,7 @@ class Anchor : public Network {
     void SendPacket_UpdateRoomState();
     void SendPacket_UpdateTeamState();
     void SendPacket_RF3Catch(const rf3::UnlockCatch& k); // Reel Fishing III mod (step 56b)
+    uint32_t SendPacket_RF3FishView(const nlohmann::json* view); // Reel Fishing III mod (step 61c); null = end
 };
 
 typedef enum {

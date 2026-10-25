@@ -65,7 +65,14 @@ void LoadIndex() {
                   " rods=" + std::to_string(sRodFiles.size()) + (sIndexWhy.empty() ? "" : " why=" + sIndexWhy));
 }
 
+// Step 61b: a co-op ghost's rod (RF3RodModel_DrawFor): this rod instead of the chosen one, and no logging.
+bool sGhostDraw = false;
+int32_t sGhostRod = -1;
+
 void NoteRod(const std::string& state) {
+    if (sGhostDraw) {
+        return;
+    }
     sStatus = state;
     if (state != sLastState) {
         sLastState = state;
@@ -133,7 +140,10 @@ extern "C" int32_t RF3RodModel_Draw(PlayState* play, float bendY, float bendX, c
     }
     int32_t rod = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.RodModelPreview"), -1);
     bool preview = rod >= 0;
-    if (!preview) {
+    if (sGhostDraw) {
+        rod = sGhostRod;
+        preview = false;
+    } else if (!preview) {
         RF3TackleChoice c;
         RF3Tackle_Get(&c);
         rod = c.rod;
@@ -198,6 +208,15 @@ extern "C" int32_t RF3RodModel_Draw(PlayState* play, float bendY, float bendX, c
     }
     RF3Skinned_Draw(play, *m, rot, pos, scale, 1, pre, points);
     return 1;
+}
+
+extern "C" int32_t RF3RodModel_DrawFor(PlayState* play, int32_t rod, float bendY, float bendX, const float* ratios,
+                                       int32_t count, float* tipOut) {
+    sGhostDraw = true;
+    sGhostRod = rod;
+    const int32_t drawn = RF3RodModel_Draw(play, bendY, bendX, ratios, count, tipOut);
+    sGhostDraw = false;
+    return drawn;
 }
 
 // Step 28b: the item-get rod's height offset, world units (user's value in game, 2026-10-12).

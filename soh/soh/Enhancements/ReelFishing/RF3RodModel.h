@@ -18,6 +18,9 @@ struct PlayState;
 // OoT's pole, no model, archive missing).
 int32_t RF3RodModel_Draw(struct PlayState* play, float bendY, float bendX, const float* ratios, int32_t count,
                          float* tipOut);
+// Step 61b: the same for rod `rod` (RROD) instead of the chosen one, without logging: a co-op ghost's rod.
+int32_t RF3RodModel_DrawFor(struct PlayState* play, int32_t rod, float bendY, float bendX, const float* ratios,
+                            int32_t count, float* tipOut);
 // Step 28b: the item-get model of RF3 rod `rod` (RROD 0-9) at the current matrix (the get-item frame): bind pose,
 // centred, horizontal, lengthWorld world units long (the frame's scale is measured). Returns 0 (draw OoT's
 // pole) for OoT's pole (rod 10) or a missing model.

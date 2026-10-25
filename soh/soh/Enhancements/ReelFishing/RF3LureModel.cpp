@@ -14,6 +14,7 @@
 // "lure-motion" on each motion change and "lure-attach" on each hook set.
 
 #include "RF3LureModel.h"
+#include "RF3FishView.h" // step 61b: the co-op view's lure
 
 #include <algorithm>
 #include <array>
@@ -189,6 +190,15 @@ struct LureModel {
 std::map<std::pair<int32_t, int32_t>, std::unique_ptr<LureModel>> sModels; // (kind, index)
 std::map<std::string, std::unique_ptr<LureMotions>> sLureMotions;           // step 27b, by skin file
 LureAnim sLureAnim;
+// Step 61b: what this frame's RF3LureModel_Draw drew, for the co-op fishing view (RF3LureModel_GetDrawn).
+struct DrawnLure {
+    bool valid = false;
+    int32_t kind = -1;
+    int32_t index = -1;
+    bool skinned = false;
+    bool hanging = false;
+};
+DrawnLure sDrawn;
 bool sTieValid = false; // 27c fix: this frame's line tie, for z_fishing.c's hooked line
 float sTie[3] = {};
 // 27e-1: this frame's tie in every state (for the lure-tie log), how far the pose moved it from the bind origin, and
@@ -665,6 +675,9 @@ int32_t ChooseLureMotion(int32_t castState, bool reelHeld, LureAnim& a, float& b
 }
 
 // Advances the lure's motion player one game frame and fills the bones' world rotations and positions (metres).
+void PoseFromAnim(const rf3model::SkinnedModel& m, const LureMotions& sm, const LureAnim& a,
+                  std::vector<rf3model::Mat3>& rot, std::vector<std::array<float, 3>>& pos);
+
 bool LurePose(const rf3model::SkinnedModel& m, int32_t index, int32_t castState, bool reelHeld, uint32_t frame,
               const float* lurePos,
               std::vector<rf3model::Mat3>& rot, std::vector<std::array<float, 3>>& pos) {
@@ -731,6 +744,14 @@ bool LurePose(const rf3model::SkinnedModel& m, int32_t index, int32_t castState,
         a.prevTime += dt;
     }
     a.blend = (a.blendTime > 0.0f) ? std::min(1.0f, a.blend + dt / a.blendTime) : 1.0f;
+    PoseFromAnim(m, *s, a, rot, pos);
+    return true;
+}
+
+// Step 61b: the bones' poses for a motion state: the local lure's (LurePose), or a co-op ghost's from its view.
+void PoseFromAnim(const rf3model::SkinnedModel& m, const LureMotions& sm, const LureAnim& a,
+                  std::vector<rf3model::Mat3>& rot, std::vector<std::array<float, 3>>& pos) {
+    const LureMotions* s = &sm;
     const size_t n = m.bones.size();
     std::vector<std::array<float, 3>> lt(n);
     std::vector<rf3model::Mat3> lr(n);
@@ -776,7 +797,6 @@ bool LurePose(const rf3model::SkinnedModel& m, int32_t index, int32_t castState,
             }
         }
     }
-    return true;
 }
 
 // Step 27e-3 (non-RF3, the user's choice): the bones hidden while the lure hangs from the fish's mouth: the hook bone
@@ -850,8 +870,49 @@ static void DrawModel(PlayState* play, const LureModel* m, float unitsPerMetre, 
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Step 27c: the fish's frame at the mouth point, then the lure moved so its hook bone (role 0) sits there.
+static void PutHanging(const rf3model::SkinnedModel& skin, const float* mouth, const float* frot,
+                       const std::vector<std::array<float, 3>>& bpos, float unitsPerMetre) {
+    MtxF f;
+    for (int32_t c = 0; c < 3; c++) {
+        for (int32_t r = 0; r < 3; r++) {
+            f.mf[c][r] = frot[c * 3 + r];
+        }
+        f.mf[c][3] = 0.0f;
+    }
+    f.mf[3][0] = mouth[0];
+    f.mf[3][1] = mouth[1];
+    f.mf[3][2] = mouth[2];
+    f.mf[3][3] = 1.0f;
+    Matrix_Put(&f);
+    int32_t hb = skin.extra.contains("locators") && skin.extra["locators"].contains("0")
+                     ? skin.extra["locators"]["0"].get<int32_t>()
+                     : -1;
+    if (hb >= 0 && hb < static_cast<int32_t>(bpos.size())) {
+        float s = unitsPerMetre / skin.posScale;
+        // the hook bone's origin in the drawn frame: scale, half turn about x (y, z negate), pre = offset
+        float hx = s * (skin.offset[0] + bpos[hb][0] * skin.posScale);
+        float hy = -s * (skin.offset[1] + bpos[hb][1] * skin.posScale);
+        float hz = -s * (skin.offset[2] + bpos[hb][2] * skin.posScale);
+        Matrix_Translate(-hx, -hy, -hz, MTXMODE_APPLY);
+    }
+}
+
+// Step 27e-3 (non-RF3): the hook in the fish's mouth is hidden: its bones shrink to their origins (the hook bone's
+// origin is its eye, at the mouth point).
+static void HideHook(const rf3model::SkinnedModel& skin, std::vector<rf3model::Mat3>& brot) {
+    for (int32_t b : HookHideBones(skin, HookBoneOf(skin))) {
+        for (auto& row : brot[b]) {
+            for (float& v : row) {
+                v *= kHookHideScale;
+            }
+        }
+    }
+}
+
 extern "C" int32_t RF3LureModel_Draw(PlayState* play, const float* pos, float rotY, float rotX, float zOffset,
                                      int32_t castState, int32_t hookedSlot, uint32_t frame) {
+    sDrawn = DrawnLure{}; // step 61b
     if (!RF3_IsEnabled()) {
         NoteState(sLastDrawState, sStatus, "model-off why=rf3-off");
         return 0;
@@ -891,6 +952,9 @@ extern "C" int32_t RF3LureModel_Draw(PlayState* play, const float* pos, float ro
                   "model-draw kind=%s index=%d units_per_m=%.0f flip=%d preview=%d length_units=%.1f", kKindInfo[kind].name,
                   index, unitsPerMetre, flip ? 1 : 0, PreviewKind() >= 0 ? 1 : 0, LongestUnits(m, unitsPerMetre));
     NoteState(sLastDrawState, sStatus, state);
+    sDrawn.valid = true; // step 61b
+    sDrawn.kind = kind;
+    sDrawn.index = index;
 
     sTieValid = false;
     sTieAnyValid = false;
@@ -908,6 +972,7 @@ extern "C" int32_t RF3LureModel_Draw(PlayState* play, const float* pos, float ro
     if (skin == nullptr && !(castState == 4 || castState == 5)) {
         sLureAnim.hookedSlot = -1;
     }
+    sDrawn.skinned = skin != nullptr; // step 61b
 
     // Step 27c: hooked, the lure hangs by its hook from the fish's mouth point (RF3's 0x00188120).
     bool hanging = false;
@@ -939,32 +1004,11 @@ extern "C" int32_t RF3LureModel_Draw(PlayState* play, const float* pos, float ro
         sLureAnim.hookedSlot = -1;
     }
 
+    sDrawn.hanging = hanging; // step 61b
+
     Matrix_Push();
     if (hanging) {
-        // The fish's frame at the mouth point, then the lure moved so its hook bone (role 0) sits there.
-        MtxF f;
-        for (int32_t c = 0; c < 3; c++) {
-            for (int32_t r = 0; r < 3; r++) {
-                f.mf[c][r] = frot[c * 3 + r];
-            }
-            f.mf[c][3] = 0.0f;
-        }
-        f.mf[3][0] = mouth[0];
-        f.mf[3][1] = mouth[1];
-        f.mf[3][2] = mouth[2];
-        f.mf[3][3] = 1.0f;
-        Matrix_Put(&f);
-        int32_t hb = skin->extra.contains("locators") && skin->extra["locators"].contains("0")
-                         ? skin->extra["locators"]["0"].get<int32_t>()
-                         : -1;
-        if (hb >= 0 && hb < static_cast<int32_t>(bpos.size())) {
-            float s = unitsPerMetre / skin->posScale;
-            // the hook bone's origin in the drawn frame: scale, half turn about x (y, z negate), pre = offset
-            float hx = s * (skin->offset[0] + bpos[hb][0] * skin->posScale);
-            float hy = -s * (skin->offset[1] + bpos[hb][1] * skin->posScale);
-            float hz = -s * (skin->offset[2] + bpos[hb][2] * skin->posScale);
-            Matrix_Translate(-hx, -hy, -hz, MTXMODE_APPLY);
-        }
+        PutHanging(*skin, mouth, frot, bpos, unitsPerMetre);
     } else {
         Matrix_Translate(pos[0], pos[1], pos[2], MTXMODE_NEW);
         Matrix_RotateY(rotY, MTXMODE_APPLY);
@@ -1009,15 +1053,7 @@ extern "C" int32_t RF3LureModel_Draw(PlayState* play, const float* pos, float ro
         }
     }
     if (skin != nullptr && hanging) {
-        // Step 27e-3 (non-RF3): the hook in the fish's mouth is hidden: its bones shrink to their origins (the hook
-        // bone's origin is its eye, at the mouth point). After the tie above, which uses the body bone.
-        for (int32_t b : HookHideBones(*skin, HookBoneOf(*skin))) {
-            for (auto& row : brot[b]) {
-                for (float& v : row) {
-                    v *= kHookHideScale;
-                }
-            }
-        }
+        HideHook(*skin, brot); // step 27e-3; after the tie above, which uses the body bone
     }
     if (skin != nullptr) {
         // same origin as the rigid model: VERT = World * TVRT + offset (pre); RF3SkinnedModel scales and turns it
@@ -1220,6 +1256,115 @@ extern "C" void RF3LureModel_DrawFloat(PlayState* play, const float* baitPos, co
     Matrix_RotateY(rotY, MTXMODE_APPLY); // upright; the model stands above its origin (the line tie at its foot)
     DrawModel(play, m, unitsPerMetre, false);
     Matrix_Pop();
+}
+
+// Step 61b: what this frame's local lure draw drew, and its motion state, into a co-op view (see RF3LureModel.h).
+extern "C" void RF3LureModel_GetDrawn(RF3FishGhost* g) {
+    g->lureKind = sDrawn.valid ? sDrawn.kind : -1;
+    g->lureIndex = sDrawn.valid ? sDrawn.index : -1;
+    g->lureSkinned = sDrawn.valid && sDrawn.skinned;
+    g->lureMotion = sLureAnim.motion;
+    g->lureTime = sLureAnim.time;
+    g->lurePrevMotion = sLureAnim.prevMotion;
+    g->lurePrevTime = sLureAnim.prevTime;
+    g->lureBlend = sLureAnim.blend;
+    g->lureHanging = sDrawn.valid && sDrawn.hanging;
+    g->lureHookPoint = sLureAnim.hookPoint;
+}
+
+// Step 61b: a co-op ghost's lure, fly or bait: the item the angler drew, posed with the angler's motion state, hanging
+// from the ghost fish's mouth point when the angler's did (draw the ghost fish first). No state is kept, nothing logged.
+extern "C" int32_t RF3LureModel_DrawGhost(PlayState* play, const RF3FishGhost* g) {
+    if (!RF3_IsEnabled() || !CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModels"), 1) || g == nullptr) {
+        return 0;
+    }
+    const int32_t kind = g->lureKind;
+    const int32_t index = g->lureIndex;
+    if (kind < 0 || kind > kHook || index < 0 || index >= kKindInfo[kind].count) {
+        return 0;
+    }
+    LureModel* m = Get(kind, index);
+    if (m == nullptr || !m->ok) {
+        return 0;
+    }
+    float unitsPerMetre = CVarGetFloat(kKindInfo[kind].cvar, kKindInfo[kind].defaultScale);
+    bool flip = kind != kBait && kind != kHook && CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModelFlip"), 0);
+    rf3model::SkinnedModel* skin = (g->lureSkinned && kind == kLure) ? GetLureSkin(index) : nullptr;
+    std::vector<rf3model::Mat3> brot;
+    std::vector<std::array<float, 3>> bpos;
+    if (skin != nullptr) {
+        LureMotions* s = GetLureMotions(*skin);
+        if (s != nullptr && s->ok && LurePlayable(*s, g->lureMotion)) {
+            LureAnim a;
+            a.motion = g->lureMotion;
+            a.time = g->lureTime;
+            a.prevMotion = g->lurePrevMotion;
+            a.prevTime = g->lurePrevTime;
+            a.blend = g->lureBlend;
+            PoseFromAnim(*skin, *s, a, brot, bpos);
+        } else {
+            skin = nullptr;
+        }
+    }
+    bool hanging = false;
+    float mouth[3];
+    float frot[9];
+    if (skin != nullptr && g->lureHanging && g->hasFish && (g->castState == 4 || g->castState == 5)) {
+        uint32_t fishFrame = 0;
+        int32_t point = g->lureHookPoint;
+        if (!RF3FishModel_HookInfo(g->slot, point, mouth, frot, &fishFrame)) {
+            point = 0; // the model has no such point: the snout
+        }
+        hanging = RF3FishModel_HookInfo(g->slot, point, mouth, frot, &fishFrame) && g->frame - fishFrame <= 2;
+    }
+    Matrix_Push();
+    if (hanging) {
+        PutHanging(*skin, mouth, frot, bpos, unitsPerMetre);
+    } else {
+        Matrix_Translate(g->lurePos[0], g->lurePos[1], g->lurePos[2], MTXMODE_NEW);
+        Matrix_RotateY(g->lureRotY, MTXMODE_APPLY);
+        if (kind != kBait && kind != kHook) {
+            Matrix_RotateX(g->lureRotX, MTXMODE_APPLY);
+            Matrix_Translate(0.0f, 0.0f, g->lureZOffset * kOotLureScale, MTXMODE_APPLY);
+        }
+    }
+    if (skin != nullptr && hanging) {
+        HideHook(*skin, brot);
+    }
+    if (skin != nullptr) {
+        RF3Skinned_Draw(play, *skin, brot, bpos, unitsPerMetre / skin->posScale, 0, skin->offset, {});
+    } else {
+        DrawModel(play, m, unitsPerMetre, flip);
+    }
+    Matrix_Pop();
+    return 1;
+}
+
+extern "C" int32_t RF3LureModel_DrawFloatGhost(PlayState* play, const RF3TackleChoice* c, const float* at,
+                                               float rotY) {
+    if (!RF3_IsEnabled() || !CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.LureModels"), 1) || c == nullptr) {
+        return 0;
+    }
+    const rf3tackle::Assets& a = rf3tackle::Get();
+    if (!a.loaded || c->box < 0 || c->box >= static_cast<int32_t>(a.boxes.size()) ||
+        a.boxes[c->box].kind != "bait" || a.boxes[c->box].layout == "menu_05") {
+        return 0;
+    }
+    const int32_t index = c->floatIdx;
+    if (index < 0 || index >= kKindInfo[kFloat].count) {
+        return 0;
+    }
+    LureModel* m = Get(kFloat, index);
+    if (m == nullptr || !m->ok) {
+        return 0;
+    }
+    float unitsPerMetre = CVarGetFloat(kKindInfo[kFloat].cvar, kKindInfo[kFloat].defaultScale);
+    Matrix_Push();
+    Matrix_Translate(at[0], at[1], at[2], MTXMODE_NEW);
+    Matrix_RotateY(rotY, MTXMODE_APPLY);
+    DrawModel(play, m, unitsPerMetre, false);
+    Matrix_Pop();
+    return 1;
 }
 
 // Step 40b (DESIGN "Step 40 design"): OoT's own pole lures (the pole box's lures 91 normal, 92 sinking), which have no

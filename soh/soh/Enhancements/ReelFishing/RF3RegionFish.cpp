@@ -21,6 +21,7 @@
 #include "soh/cvar_prefixes.h"
 #include "RF3Bridge.h"
 #include "RF3Conditions.h"   // step 57d: the season
+#include "RF3FishView.h"     // step 61b: ghost fish slots
 #include "RF3FishTable.h"
 #include "RF3Sim.h"          // step 57d: the length skew
 #include "RF3TackleAssets.h" // step 57d: RF3's season sizes
@@ -452,6 +453,9 @@ void RegisterRF3RegionFish() {
 static RegisterShipInitFunc initRF3RegionFish(RegisterRF3RegionFish, { CVAR_ENHANCEMENT("ReelFishing3.Enabled") });
 
 extern "C" int32_t RF3RegionFish_Get(int32_t slot, RF3RegionFishInfo* out) {
+    if (slot >= RF3_FISHVIEW_GHOST_SLOT) { // step 61b: a co-op ghost's fish
+        return RF3FishView_GhostFishInfo(slot, out);
+    }
     if ((slot < 0) || (slot >= kSlots) || !sSlots[slot].used) {
         return 0;
     }

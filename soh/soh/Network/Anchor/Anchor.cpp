@@ -171,6 +171,8 @@ void Anchor::ProcessIncomingPacketQueue() {
                 HandlePacket_UpdateDungeonItems(payload);
             else if (packetType == RF3_CATCH) // Reel Fishing III mod (step 56b): a teammate's RF3 catch
                 HandlePacket_RF3Catch(payload);
+            else if (packetType == RF3_FISH_VIEW) // Reel Fishing III mod (step 61c): another player's rod and fish
+                HandlePacket_RF3FishView(payload);
         } catch (const std::exception& e) {
             SPDLOG_ERROR("[Anchor] Exception while processing incoming packet {}", e.what());
             SPDLOG_ERROR("[Anchor] Packet: {}", payload.dump());

@@ -16,6 +16,7 @@
 #include "soh/Enhancements/ReelFishing/RF3Bridge.h"
 #include "soh/Enhancements/ReelFishing/RF3LureModel.h"
 #include "soh/Enhancements/ReelFishing/RF3FishModel.h"
+#include "soh/Enhancements/ReelFishing/RF3FishView.h"
 #include "soh/Enhancements/ReelFishing/RF3RodModel.h"
 #include "soh/Enhancements/ReelFishing/RF3FishMove.h"
 #include "soh/Enhancements/ReelFishing/RF3FishSwim.h" // step 47c
@@ -2088,6 +2089,9 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
                 ? (sFishingHookedFish->actor.params - EN_FISH_REGION)
                 : -1,
             play->gameplayFrames);
+        // Step 61a: the co-op fishing view's lure.
+        RF3FishView_SetLure(&sLurePos.x, sLureRot.y + sLure1Rotate, sLureRot.x, sLurePosZOffset, sLureEquipped,
+                            sRF3LureModelShown, sRF3NoLure);
         Matrix_Scale(0.0039999997f, 0.0039999997f, 0.0039999997f, MTXMODE_APPLY);
         Matrix_Translate(0.0f, 0.0f, sLurePosZOffset, MTXMODE_APPLY);
         Matrix_RotateZ(M_PI / 2, MTXMODE_APPLY);
@@ -2239,6 +2243,16 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
         RF3LureModel_LogLineEnd(&lineDrawnEnd.x, sRodCastState, play->gameplayFrames);
     }
 
+    // Step 61a: the co-op fishing view's line, as drawn above: straight pieces (rod -> float -> end) in the fight and at
+    // rest with a float, else OoT's drawn segments from `spooled` on.
+    if (((sRodCastState == 4) && ((sLineHooked != 0) || (sLureEquipped != 2))) || (rf3FloatOn && (sRodCastState == 3))) {
+        RF3FishView_SetLine(&sRodTipPos.x, &rf3Float.x, rf3FloatOn ? 1 : 0, &lineDrawnEnd.x, rf3FloatOn ? 0 : -1);
+    } else if (spooled < LINE_SEG_COUNT) {
+        RF3FishView_SetLine(&sRodTipPos.x, &linePos[spooled].x, LINE_SEG_COUNT - spooled, &lineDrawnEnd.x, -1);
+    } else {
+        RF3FishView_SetLine(&sRodTipPos.x, &linePos[0].x, 0, &lineDrawnEnd.x, -1);
+    }
+
     Matrix_Pop();
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
 
@@ -2369,6 +2383,8 @@ void Fishing_DrawRod(PlayState* play) {
     // (the loop below runs 0 times when the RF3 rod was drawn; CLOSE_DISPS must stay at the end).
     s32 rf3RodDrawn =
         RF3RodModel_Draw(play, sRodBendRotY, spC0, sRodBendRatios, ARRAY_COUNT(sRodBendRatios), &sRodTipPos.x);
+    // Step 61a: the co-op fishing view's rod (RF3FishView.cpp).
+    RF3FishView_SetRod(sRodBendRotY, spC0, D_80B7A6C0, player->unk_858, sRodCastState, sLinkAge, rf3RodDrawn);
 
     Matrix_Translate(0.0f, 0.0f, -1300.0f, MTXMODE_APPLY);
 
@@ -2402,6 +2418,169 @@ void Fishing_DrawRod(PlayState* play) {
         }
     }
 
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// --- Reel Fishing III mod (step 61b): a co-op fishing view's ghost, draw only ---------------------------------------
+// (docs/DESIGN.md "Step 61 design"; RF3FishView.cpp). Fishing_DrawRod's rod frame and turns in the ghost's hand matrix
+// (no state read or changed), the line smoothed through its points, the lure, float and fish.
+
+// Catmull-Rom between the line points (4 pieces per span; 2-3 points: straight pieces). first: the ghost rod's tip.
+static void Fishing_RF3GhostLine(PlayState* play, const RF3FishGhost* g, Vec3f* first) {
+    Vec3f p[RF3_FISHVIEW_LINE_POINTS];
+    s32 n = g->lineCount;
+    s32 k;
+    s32 s;
+
+    for (k = 0; k < n; k++) {
+        p[k].x = g->line[k][0];
+        p[k].y = g->line[k][1];
+        p[k].z = g->line[k][2];
+    }
+    if (n < 2) {
+        return;
+    }
+    p[0] = *first;
+    if (n <= 3) {
+        for (k = 0; k < n - 1; k++) {
+            Fishing_RF3LinePiece(play, &p[k], &p[k + 1]);
+        }
+        return;
+    }
+    for (k = 0; k < n - 1; k++) {
+        Vec3f* p0 = &p[(k > 0) ? (k - 1) : 0];
+        Vec3f* p1 = &p[k];
+        Vec3f* p2 = &p[k + 1];
+        Vec3f* p3 = &p[(k + 2 < n) ? (k + 2) : (n - 1)];
+        Vec3f prev = *p1;
+
+        for (s = 1; s <= 4; s++) {
+            f32 t = s / 4.0f;
+            f32 t2 = t * t;
+            f32 t3 = t2 * t;
+            Vec3f q;
+
+            q.x = 0.5f * ((2.0f * p1->x) + (-p0->x + p2->x) * t + (2.0f * p0->x - 5.0f * p1->x + 4.0f * p2->x - p3->x) * t2 +
+                          (-p0->x + 3.0f * p1->x - 3.0f * p2->x + p3->x) * t3);
+            q.y = 0.5f * ((2.0f * p1->y) + (-p0->y + p2->y) * t + (2.0f * p0->y - 5.0f * p1->y + 4.0f * p2->y - p3->y) * t2 +
+                          (-p0->y + 3.0f * p1->y - 3.0f * p2->y + p3->y) * t3);
+            q.z = 0.5f * ((2.0f * p1->z) + (-p0->z + p2->z) * t + (2.0f * p0->z - 5.0f * p1->z + 4.0f * p2->z - p3->z) * t2 +
+                          (-p0->z + 3.0f * p1->z - 3.0f * p2->z + p3->z) * t3);
+            Fishing_RF3LinePiece(play, &prev, &q);
+            prev = q;
+        }
+    }
+}
+
+void Fishing_RF3DrawGhost(PlayState* play, const RF3FishGhost* g) {
+    s16 i;
+    Vec3f tip;
+    s32 rf3Rod;
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Push();
+
+    // The rod, as Fishing_DrawRod places it in the hand.
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPDisplayList(POLY_OPA_DISP++, gFishingRodMaterialDL);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 155, 0, 255);
+    Matrix_Mult((MtxF*)g->hand, MTXMODE_NEW);
+    if (g->linkAge != LINK_AGE_CHILD) {
+        Matrix_Translate(0.0f, 400.0f, 0.0f, MTXMODE_APPLY);
+    } else {
+        Matrix_Translate(0.0f, 230.0f, 0.0f, MTXMODE_APPLY);
+    }
+    if (g->castState == 5) {
+        Matrix_RotateY(0.56f * M_PI, MTXMODE_APPLY);
+    } else {
+        Matrix_RotateY(0.41f * M_PI, MTXMODE_APPLY);
+    }
+    Matrix_RotateX(-M_PI / 5.0000003f, MTXMODE_APPLY);
+    Matrix_RotateZ((g->handZ * 0.5f) + 3.0f * M_PI / 20.0f, MTXMODE_APPLY);
+    Matrix_RotateX((g->rotX + 20.0f) * 0.01f * M_PI, MTXMODE_APPLY);
+    Matrix_Scale(0.70000005f, 0.70000005f, 0.70000005f, MTXMODE_APPLY);
+
+    tip.x = g->line[0][0];
+    tip.y = g->line[0][1];
+    tip.z = g->line[0][2];
+    rf3Rod = g->rf3Rod && RF3RodModel_DrawFor(play, g->tackle.rod, g->bendY, g->bendX, sRodBendRatios,
+                                              ARRAY_COUNT(sRodBendRatios), &tip.x);
+    if (!rf3Rod) {
+        Matrix_Translate(0.0f, 0.0f, -1300.0f, MTXMODE_APPLY);
+        for (i = 0; i < 22; i++) {
+            Matrix_RotateY(sRodBendRatios[i] * g->bendY * 0.5f, MTXMODE_APPLY);
+            Matrix_RotateX(sRodBendRatios[i] * g->bendX * 0.5f, MTXMODE_APPLY);
+            Matrix_Push();
+            Matrix_Scale(sRodScales[i], sRodScales[i], 0.52f, MTXMODE_APPLY);
+            gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            if (i < 5) {
+                gDPLoadTextureBlock(POLY_OPA_DISP++, gFishingRodSegmentBlackTex, G_IM_FMT_RGBA, G_IM_SIZ_16b, 16, 8, 0,
+                                    G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, 4, 3, G_TX_NOLOD, G_TX_NOLOD);
+            } else if ((i < 8) || ((i % 2) == 0)) {
+                gDPLoadTextureBlock(POLY_OPA_DISP++, gFishingRodSegmentWhiteTex, G_IM_FMT_RGBA, G_IM_SIZ_16b, 16, 8, 0,
+                                    G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, 4, 3, G_TX_NOLOD, G_TX_NOLOD);
+            } else {
+                gDPLoadTextureBlock(POLY_OPA_DISP++, gFishingRodSegmentStripTex, G_IM_FMT_RGBA, G_IM_SIZ_16b, 16, 8, 0,
+                                    G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, 4, 3, G_TX_NOLOD, G_TX_NOLOD);
+            }
+            gSPDisplayList(POLY_OPA_DISP++, gFishingRodSegmentDL);
+            Matrix_Pop();
+            Matrix_Translate(0.0f, 0.0f, 500.0f, MTXMODE_APPLY);
+            if (i == 21) {
+                Matrix_MultVec3f(&sRodTipOffset, &tip);
+            }
+        }
+    }
+
+    // The line, from the ghost rod's tip.
+    POLY_XLU_DISP = Gfx_SetupDL(POLY_XLU_DISP, 0x14);
+    gDPSetCombineMode(POLY_XLU_DISP++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 255, 255, 255, 55);
+    Fishing_RF3GhostLine(play, g, &tip);
+
+    // The hooked fish, as Fishing_DrawFishImpl places a region fish, in the ghost's own fish slot. Before the lure: a
+    // hooked lure hangs from this fish's mouth point.
+    if (g->hasFish) {
+        RF3FishDrawInput in;
+        f32 mouth[3];
+
+        Gfx_SetupDL_25Opa(play->state.gfxCtx);
+        Matrix_Translate(g->fishPos[0], g->fishPos[1], g->fishPos[2], MTXMODE_NEW);
+        Matrix_RotateY((g->fishRot[1] / 32768.0f) * M_PI, MTXMODE_APPLY);
+        Matrix_RotateX((g->fishRot[0] / 32768.0f) * M_PI, MTXMODE_APPLY);
+        Matrix_RotateZ((g->fishRot[2] / 32768.0f) * M_PI, MTXMODE_APPLY);
+        in.slot = g->slot;
+        in.bendA = g->bendA;
+        in.bendB = g->bendB;
+        in.speedXZ = g->speedXZ;
+        in.yaw = g->yaw;
+        in.hooked = 1;
+        in.frame = g->frame;
+        RF3FishModel_DrawRegion(play, &in, mouth);
+    }
+
+    // The lure: the RF3 item the angler drew, with its motion; else OoT's float lure, unless the line is empty (a
+    // used-up bait: user, 61b, "the hook turns into oot's default lure during a fight on the mirror"). A bait set's
+    // float.
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    if (g->hasLure && g->rf3Lure) {
+        RF3LureModel_DrawGhost(play, g);
+    } else if (g->hasLure && !g->noLure && (g->lureEquipped != FS_LURE_SINKING)) {
+        Matrix_Translate(g->lurePos[0], g->lurePos[1], g->lurePos[2], MTXMODE_NEW);
+        Matrix_RotateY(g->lureRotY, MTXMODE_APPLY);
+        Matrix_RotateX(g->lureRotX, MTXMODE_APPLY);
+        Matrix_Scale(0.0039999997f, 0.0039999997f, 0.0039999997f, MTXMODE_APPLY);
+        Matrix_Translate(0.0f, 0.0f, g->lureZOffset, MTXMODE_APPLY);
+        Matrix_RotateZ(M_PI / 2, MTXMODE_APPLY);
+        Matrix_RotateY(M_PI / 2, MTXMODE_APPLY);
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, gFishingLureFloatDL);
+    }
+    if ((g->floatPoint >= 0) && (g->floatPoint < g->lineCount)) {
+        RF3LureModel_DrawFloatGhost(play, &g->tackle, g->line[g->floatPoint], g->lureRotY);
+    }
+
+    Matrix_Pop();
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
@@ -5471,9 +5650,18 @@ static void Fishing_DrawFishImpl(Actor* thisx, PlayState* play) {
         in.yaw = this->actor.shape.rot.y;
         in.hooked = (sFishingHookedFish == this) && ((sRodCastState == 4) || (sRodCastState == 5));
         in.frame = play->gameplayFrames;
+        if (in.hooked) {
+            // Step 61a: the co-op fishing view's fish (hooked, or landed and held up: cast state 5).
+            s16 rot[3] = { (s16)(this->unk_160 + this->actor.shape.rot.x), (s16)(this->unk_162 + this->actor.shape.rot.y),
+                           (s16)(this->unk_164 + this->actor.shape.rot.z) };
+            RF3FishView_SetFish(in.slot, &this->actor.world.pos.x, rot, in.yaw, in.bendA, in.bendB, in.speedXZ, this->fishState,
+                                in.frame);
+        }
         if (RF3FishModel_DrawRegion(play, &in, &this->fishMouthPos.x)) {
             return;
         }
+    } else if ((sFishingHookedFish == this) && ((sRodCastState == 4) || (sRodCastState == 5))) {
+        RF3FishView_SetPondFish(this->fishState); // step 61a: logged only (choice C2 A)
     }
 
     Matrix_Scale(this->actor.scale.x, this->actor.scale.y, this->actor.scale.z, MTXMODE_APPLY);
@@ -7168,6 +7356,7 @@ void Fishing_DrawOwner(Actor* thisx, PlayState* play) {
         Fishing_UpdateLinePos(sReelLinePos);
         Fishing_UpdateLine(play, &sRodTipPos, sReelLinePos, sReelLineRot, sReelLineUnk);
         Fishing_DrawLureAndLine(play, sReelLinePos, sReelLineRot);
+        RF3FishView_DrawMirror(play); // step 61b: the solo mirror's ghost (debug window), when on
 
         sStickAdjXPrev = input->rel.stick_x;
         sStickAdjYPrev = input->rel.stick_y;
@@ -7352,6 +7541,7 @@ static void Fishing_RF3DrawPortable(Actor* thisx, PlayState* play) {
     Fishing_UpdateLinePos(sReelLinePos);
     Fishing_UpdateLine(play, &sRodTipPos, sReelLinePos, sReelLineRot, sReelLineUnk);
     Fishing_DrawLureAndLine(play, sReelLinePos, sReelLineRot);
+    RF3FishView_DrawMirror(play); // step 61b: the solo mirror's ghost (debug window), when on
 
     sStickAdjXPrev = input->rel.stick_x;
     sStickAdjYPrev = input->rel.stick_y;

@@ -39,6 +39,7 @@
 #include "RF3Bridge.h"
 #include "RF3FishMove.h"
 #include "RF3FishSwim.h" // step 47d
+#include "RF3FishView.h" // step 61b: ghost fish
 #include "RF3SkinnedModel.h"
 
 extern "C" {
@@ -897,9 +898,17 @@ int32_t ChooseRequest(const RF3FishDrawInput& in, SlotAnim& a, int32_t yawRate, 
         return forced;
     }
     if (in.hooked) {
-        RF3FightStatus f;
-        RF3Fight_GetStatus(&f);
-        int32_t mode = f.active ? f.mode : 0;
+        // Step 61b: a co-op ghost's fish plays its angler's fight (mode and turn code from the view).
+        int32_t mode = 0;
+        if (!RF3FishView_GhostFightMode(in.slot, &mode)) {
+            RF3FightStatus f;
+            RF3Fight_GetStatus(&f);
+            mode = f.active ? f.mode : 0;
+        }
+        auto motionCode = [&in]() {
+            int32_t code = -1;
+            return RF3FishView_GhostMotionCode(in.slot, &code) ? code : RF3FishMove_MotionCode(in.slot);
+        };
         why = "hooked mode=" + std::to_string(mode);
         blend = 0.2f; // RF3's fight states ask with 0.2 s (HIT 0.02, FOLLOW 0.5)
         switch (mode) {
@@ -915,7 +924,7 @@ int32_t ChooseRequest(const RF3FishDrawInput& in, SlotAnim& a, int32_t yawRate, 
                 return a.modeTime < 1.0f ? kRawSwimFast : (a.modeTime < 2.0f ? kCodeSwimLarge : kCodeSwimMedium);
             case 11: { // FOLLOW: step 30b-2, the movement's turn on the spot (63-66) or held turn (25/26), else towed
                 blend = 0.5f;
-                int32_t code = RF3FishMove_MotionCode(in.slot);
+                int32_t code = motionCode();
                 if (code >= 0) {
                     why += " follow-turn";
                     return code;
@@ -923,7 +932,7 @@ int32_t ChooseRequest(const RF3FishDrawInput& in, SlotAnim& a, int32_t yawRate, 
                 return kCodeTowed;
             }
             case 12: { // STIFFEN: step 30b-1, the movement's turn motion (RF3FishMove: 25/26/65/66 from AWAY, else 28)
-                int32_t code = RF3FishMove_MotionCode(in.slot);
+                int32_t code = motionCode();
                 if (code >= 0) {
                     why += " stiffen-turn";
                     return code;
@@ -1016,7 +1025,7 @@ bool MotionPose(const rf3model::SkinnedModel& m, int32_t record, const RF3FishDr
 
     // fight mode clock (AWAY's accelerating swim)
     int32_t mode = -1;
-    if (in.hooked) {
+    if (in.hooked && !RF3FishView_GhostFightMode(in.slot, &mode)) { // step 61b: a ghost plays its angler's fight
         RF3FightStatus f;
         RF3Fight_GetStatus(&f);
         mode = f.active ? f.mode : 0;

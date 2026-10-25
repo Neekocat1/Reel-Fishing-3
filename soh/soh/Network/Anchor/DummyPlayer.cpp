@@ -1,5 +1,6 @@
 #include "Anchor.h"
 #include "soh/Enhancements/nametag.h"
+#include "soh/Enhancements/ReelFishing/RF3FishView.h" // Reel Fishing III mod (step 61c)
 
 extern "C" {
 #include "macros.h"
@@ -245,6 +246,9 @@ void DummyPlayer_Draw(Actor* actor, PlayState* play) {
     Player_Draw((Actor*)player, play);
     gSaveContext.linkAge = originalAge;
     gSaveContext.equips.buttonItems[0] = originalButtonItem0;
+
+    // Reel Fishing III mod (step 61c): this player's rod, line, lure and hooked fish, at the hand Player_Draw just set.
+    RF3FishView_DrawRemote(play, clientId, &player->mf_9E0.mf[0][0]);
 }
 
 void DummyPlayer_Destroy(Actor* actor, PlayState* play) {

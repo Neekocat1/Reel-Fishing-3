@@ -12,6 +12,7 @@
 #include "RF3Conditions.h" // step 57c-3
 #include "RF3Items.h"
 #include "RF3FishModel.h"
+#include "RF3FishView.h" // step 61b
 #include "RF3RodModel.h"
 #include "RF3LureModel.h"
 #include "RF3TackleAssets.h"
@@ -286,6 +287,27 @@ static void DrawTackle() {
     }
 }
 
+// Step 61b (DESIGN "Step 61 design", choice C7 A): the co-op fishing view's solo mirror. Your own view, a few frames
+// late, drawn as a ghost beside you: the copy other players will see in 61c. Log: rf3_fishview.txt.
+static void DrawFishView() {
+    if (!ImGui::CollapsingHeader("Co-op fishing view (step 61)")) {
+        return;
+    }
+    ImGui::TextWrapped("View: %s", RF3FishView_Status());
+    bool mirror = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishViewMirror"), 0) != 0;
+    if (ImGui::Checkbox("Mirror my view as a ghost (solo test)", &mirror)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishViewMirror"), mirror ? 1 : 0);
+    }
+    float offset = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishViewMirrorOffset"), 150.0f);
+    if (ImGui::SliderFloat("Ghost distance to the side (units, - = other side)", &offset, -400.0f, 400.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.FishViewMirrorOffset"), offset);
+    }
+    int delay = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishViewMirrorDelay"), 0);
+    if (ImGui::SliderInt("Ghost delay (ms, imitates lag)", &delay, 0, 500)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishViewMirrorDelay"), delay);
+    }
+}
+
 // Step 20c-3d: the fly cast's false-casting animation (frames of Link's throw), saved as CVars.
 static void DrawFlyCast() {
     if (!ImGui::CollapsingHeader("Fly cast animation (step 20c-3d)")) {
@@ -518,6 +540,7 @@ void RF3DebugWindow::DrawElement() {
     DrawStock();
     DrawTackle();
     DrawFlyCast();
+    DrawFishView(); // step 61b
     DrawLureModel();
     DrawFishModel();
     DrawRodModel();

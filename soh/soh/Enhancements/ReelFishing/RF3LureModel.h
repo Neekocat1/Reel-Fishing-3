@@ -33,6 +33,17 @@ int32_t RF3LureModel_Draw(struct PlayState* play, const float* pos, float rotY, 
 // hooked fish on the line.
 void RF3LureModel_DrawFloat(struct PlayState* play, const float* baitPos, const float* rodTip, float waterY, float rotY,
                             int32_t castState);
+// Step 61b: the co-op fishing view (RF3FishView.h). GetDrawn: what this frame's RF3LureModel_Draw drew (item kind and
+// index, with bones or not, its motion state, hanging from the fish's mouth point) into the view. DrawGhost: a ghost's
+// lure from those, posed with that motion state and hanging from the ghost fish (drawn first) when the angler's was;
+// returns 1 if drawn. FloatGhost: a bait set's float (tackle: an RF3TackleChoice) upright with its foot at `at`.
+// None of them keeps state or logs.
+struct RF3FishGhost;
+struct RF3TackleChoice;
+void RF3LureModel_GetDrawn(struct RF3FishGhost* g);
+int32_t RF3LureModel_DrawGhost(struct PlayState* play, const struct RF3FishGhost* g);
+int32_t RF3LureModel_DrawFloatGhost(struct PlayState* play, const struct RF3TackleChoice* tackle, const float* at,
+                                    float rotY);
 // Step 27c fix: if this frame's lure draw hung the lure from the fish's mouth, its line tie (world) in out; returns 1.
 // z_fishing.c draws the hooked line to it; the game logic keeps the fish's snout (fishMouthPos).
 int32_t RF3LureModel_LineTie(float* out);
