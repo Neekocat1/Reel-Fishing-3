@@ -107,13 +107,31 @@ const FishView* GhostView(int32_t slot) {
     return nullptr;
 }
 
-// 61c: sends this frame's view (or, with nullptr, the end of it) to the players in this scene. Returns how many.
-uint32_t SendRemote(const nlohmann::json* view) {
+void Log(const std::string& line);
+
+// 61c: sends this frame's view (or, with nullptr, the end of it) to the players in `scene`. Returns how many.
+uint32_t SendRemote(const nlohmann::json* view, int16_t scene) {
     Anchor* anchor = Anchor::Instance;
-    if ((anchor == nullptr) || !anchor->isConnected) {
+    if ((anchor == nullptr) || !anchor->isConnected || (scene < 0)) {
         return 0;
     }
-    return anchor->SendPacket_RF3FishView(view);
+    return anchor->SendPacket_RF3FishView(view, scene);
+}
+
+// 61d (D1; 2026-10-24 test: a walk into the pond left the old scene's players waiting for the 1 s stale drop): the
+// scene the view was last sent in, so its end reaches the players who saw it.
+int16_t sSentScene = -1;
+
+void SendStop(const char* why) {
+    if (sSentScene < 0) {
+        return;
+    }
+    const uint32_t peers = SendRemote(nullptr, sSentScene);
+    if (peers > 0) {
+        Log("fish-view-send stop scene=" + std::to_string(sSentScene) + " peers=" + std::to_string(peers) +
+            " why=" + why);
+    }
+    sSentScene = -1;
 }
 
 float R1(float v) {
@@ -298,11 +316,12 @@ void PushMirror(const FishView* v) {
 void DropStaleRemotes(uint32_t tick) {
     for (auto& [id, r] : sRemotes) {
         if (r.valid && (tick - r.tick > kRemoteStaleTicks)) {
-            r.valid = false;
             char line[128];
-            std::snprintf(line, sizeof(line), "fish-view-remote stale client=%u slot=%d received=%u", id, r.slot,
-                          r.received);
+            std::snprintf(line, sizeof(line), "fish-view-remote stale client=%u slot=%d received=%u freed", id,
+                          r.slot, r.received);
             Log(line);
+            r.valid = false;
+            r.slot = -1; // 61d (D2): the ghost slot is free again
         }
     }
 }
@@ -317,10 +336,7 @@ void OnFrame() {
             std::snprintf(line, sizeof(line), "fish-view stop frames=%u bytesMax=%zu bytesAvg=%.0f", sFrames, sBytesMax,
                           sFrames ? static_cast<double>(sBytesSum) / sFrames : 0.0);
             Log(line);
-            const uint32_t peers = SendRemote(nullptr); // 61c: the others drop our view now
-            if (peers > 0) {
-                Log("fish-view-send stop peers=" + std::to_string(peers));
-            }
+            SendStop("rod-away"); // 61c: the others drop our view now
             sActive = false;
             sLastKey.clear();
             sStatus = "no view (rod away)";
@@ -368,7 +384,11 @@ void OnFrame() {
     const nlohmann::json j = ToJson(v);
     const size_t bytes = j.dump().size();
     sBytesLast = bytes;
-    const uint32_t peers = SendRemote(&j); // 61c: to the players in this scene (choice C5 A: every game frame)
+    if (sSentScene != gPlayState->sceneNum) {
+        SendStop("scene-change"); // 61d: the rod stayed out across a scene change
+    }
+    const uint32_t peers = SendRemote(&j, gPlayState->sceneNum); // 61c: this scene's players (C5 A: every frame)
+    sSentScene = gPlayState->sceneNum;
     if ((peers > 0) && ((sSendFrames++ % 20) == 0)) {
         Log("fish-view-send peers=" + std::to_string(peers) + " bytes=" + std::to_string(bytes) + " " + KeyOf(v));
     }
@@ -569,11 +589,12 @@ void RF3FishView_Receive(uint32_t clientId, int32_t sceneNum, const nlohmann::js
     char line[200];
     if (view.is_null()) {
         if (r.valid) {
-            std::snprintf(line, sizeof(line), "fish-view-remote stop client=%u slot=%d received=%u", clientId, r.slot,
-                          r.received);
+            std::snprintf(line, sizeof(line), "fish-view-remote stop client=%u slot=%d received=%u freed", clientId,
+                          r.slot, r.received);
             Log(line);
         }
         r.valid = false;
+        r.slot = -1; // 61d (D2): the ghost slot is free again
         return;
     }
     FishView v;

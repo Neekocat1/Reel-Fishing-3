@@ -20,6 +20,7 @@
 #include "soh/ShipInit.hpp"
 #include "soh/cvar_prefixes.h"
 #include "RF3Bridge.h"
+#include "RF3Sound.h" // step 63d
 #include "RF3TackleScreen.h"
 
 extern "C" {
@@ -195,8 +196,10 @@ extern "C" void RF3Pause_UpdateToggle(PlayState* play) {
     if (sCUpTapPending && !CHECK_BTN_ALL(input->cur.button, BTN_CUP)) {
         sCUpTapPending = false;
         sPageActive = !sPageActive;
-        Audio_PlaySfxGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        // Step 63d: RF3's menu opening (sys 3, as its triangle at the spot, 0x0017C410); its closing is silent.
+        if (sPageActive) {
+            RF3Sound_Play(2, "sys", 3, 1.0f, 1.0f);
+        }
     }
 }
 

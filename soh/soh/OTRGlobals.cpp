@@ -32,6 +32,7 @@
 #include "Enhancements/speechsynthesizer/SpeechSynthesizer.h"
 #include "Enhancements/controls/SohInputEditorWindow.h"
 #include "Enhancements/audio/AudioCollection.h"
+#include "Enhancements/ReelFishing/RF3Sound.h" // Reel Fishing III mod (step 63b)
 #include "Enhancements/debugconsole.h"
 #include "Enhancements/randomizer/randomizer.h"
 #include "Enhancements/randomizer/randomizer_entrance_tracker.h"
@@ -1069,6 +1070,8 @@ void OTRAudio_Thread() {
             AudioMgr_CreateNextAudioBuffer(audio_buffer + i * (num_audio_samples * NUM_AUDIO_CHANNELS),
                                            num_audio_samples);
         }
+        // Reel Fishing III mod (step 63b): RF3's own sounds, added to OoT's mix (RF3Sound.cpp).
+        RF3Sound_Mix(audio_buffer, num_audio_samples * AUDIO_FRAMES_PER_UPDATE, 32000);
 
         AudioPlayer_Play((u8*)audio_buffer,
                          num_audio_samples * (sizeof(int16_t) * NUM_AUDIO_CHANNELS * AUDIO_FRAMES_PER_UPDATE));

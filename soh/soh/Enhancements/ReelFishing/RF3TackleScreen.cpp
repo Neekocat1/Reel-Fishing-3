@@ -35,6 +35,7 @@
 #include "RF3Bridge.h"
 #include "RF3Conditions.h" // step 57c-4
 #include "RF3PausePage.h"
+#include "RF3Sound.h" // step 63d
 #include "RF3TackleAssets.h"
 #include "RF3LureModel.h"
 
@@ -115,9 +116,14 @@ int StickStep(Repeat& r, int value) {
     return (r.frames >= kRepeatDelay && (r.frames - kRepeatDelay) % kRepeatEvery == 0) ? dir : 0;
 }
 
-void Sfx(u16 id) {
-    Audio_PlaySfxGeneral(id, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                         &gSfxDefaultReverb);
+void WriteLog(const std::string& text);
+
+// Step 63d (DESIGN "63d"): RF3's own tackle menu sound `number` of its sys bank, on its channel 2, in place of OoT's
+// menu sounds (RF3 0x001C4EF0-0x001C5B50): 6 cursor-like moves, 2 a value set, 3 opening, 7 closing, 1 Finish,
+// 4 refused. Logged to rf3_menu.txt.
+void MenuSfx(int number, const char* why) {
+    RF3Sound_Play(2, "sys", number, 1.0f, 1.0f);
+    WriteLog("menu-sfx sys/" + std::to_string(number) + " " + why);
 }
 
 void WriteLog(const std::string& text) {
@@ -1264,14 +1270,14 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
             if (sHelpOpen) {
                 if (l || CHECK_BTN_ALL(input->press.button, BTN_B)) {
                     sHelpOpen = false;
-                    Sfx(NA_SE_SY_CANCEL);
+                    MenuSfx(7, "help-close");
                     RequestLog("help-close");
                 }
                 return;
             }
             if (l) {
                 sHelpOpen = true;
-                Sfx(NA_SE_SY_DECIDE);
+                MenuSfx(3, "help-open");
                 RequestLog("help-open");
                 return;
             }
@@ -1293,7 +1299,7 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
             if (lx != 0 && next >= 0 && next < count) {
                 sPreview = sEdit == RK_LINE ? listBox->lines[next].index : next;
                 sListMoves++;
-                Sfx(NA_SE_SY_CURSOR);
+                MenuSfx(2, "bar-step");
             }
         } else {
             // Step 35b: stick left/right turns RF3's type page (L1/R1), one page per push.
@@ -1305,7 +1311,7 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
                 sPreview = pageEntries.empty() ? -1 : pageEntries[0].index;
                 sListTop = 0;
                 sListMoves++;
-                Sfx(NA_SE_SY_CURSOR);
+                MenuSfx(6, "list-page");
                 RequestLog("page");
             }
             std::vector<MenuEntry> entries = CurrentEntries(*listBox);
@@ -1316,7 +1322,7 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
                 sPreview = entries[next].index;
                 sListMoves++;
                 ScrollToPreview(entries);
-                Sfx(NA_SE_SY_CURSOR);
+                MenuSfx(6, "list-move");
                 RequestLog("move");
             }
         }
@@ -1331,12 +1337,12 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
                 case RK_SIZE: ok = RF3Tackle_SetSize(c.box, sPreview, "screen-size"); break;
                 default: break;
             }
-            Sfx(ok ? NA_SE_SY_DECIDE : NA_SE_SY_ERROR);
+            MenuSfx(ok ? 2 : 4, ok ? "kept" : "refused");
             CloseList(ok ? "kept" : "refused");
             return;
         }
         if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
-            Sfx(NA_SE_SY_CANCEL);
+            MenuSfx(7, "list-cancel");
             CloseList("cancelled"); // the pause menu's own B (save prompt) is held off while a list is open
             return;
         }
@@ -1348,7 +1354,7 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
         int row = sRow + (y > 0 ? -1 : 1); // stick up = the row above
         if (row >= 0 && row < static_cast<int>(RowsFor(listBox).size())) {
             sRow = row;
-            Sfx(NA_SE_SY_CURSOR);
+            MenuSfx(6, "row");
             RequestLog("cursor");
         }
     }
@@ -1366,7 +1372,7 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
         }
         if (next != c.box && RF3Tackle_SetBox(next, "screen-box")) {
             sRow = DefaultRow(CurrentBox()); // the new box may have another layout and other rows
-            Sfx(NA_SE_SY_DECIDE);
+            MenuSfx(6, "box");
             RequestLog("box");
         }
     }
@@ -1384,7 +1390,7 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
         }
         int next = (at + t + n) % n;
         if (RF3Tackle_SetTarget(box->targets[next].record, "screen-target")) {
-            Sfx(NA_SE_SY_CURSOR);
+            MenuSfx(6, "target");
             RequestLog("target");
         }
     }
@@ -1393,7 +1399,7 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
         RF3Tackle_Get(&c);
         RowKind kind = CurrentRowKind();
         if (kind == RK_FINISH) {
-            Sfx(NA_SE_SY_DECIDE);
+            MenuSfx(1, "finish");
             RequestLog("finish");
             RF3Pause_CloseFishingPage();
         } else if (kind == RK_LINE || kind == RK_DEPTH || kind == RK_SIZE) {
@@ -1405,7 +1411,7 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
             sPreview = kind == RK_LINE ? c.line : (kind == RK_DEPTH ? c.depth : c.size);
             sListMoves = 0;
             sRepX = {};
-            Sfx(NA_SE_SY_DECIDE);
+            MenuSfx(3, "bar-open");
             RequestLog(std::string(kRowKindNames[kind]) + "-bar-open");
         } else {
             // Step 35b: RF3's item menu, opened on the chosen item's type page.
@@ -1424,7 +1430,7 @@ extern "C" void RF3TackleScreen_HandleInput(PlayState* play) {
             sRepY = {};
             sListTop = 0;
             ScrollToPreview(entries);
-            Sfx(NA_SE_SY_DECIDE);
+            MenuSfx(3, "list-open");
             RequestLog(std::string(kRowKindNames[kind]) + "-list-open");
         }
     }

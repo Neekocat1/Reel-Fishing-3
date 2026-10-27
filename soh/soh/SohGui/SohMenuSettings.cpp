@@ -323,6 +323,19 @@ void SohMenu::AddMenuSettings() {
         .Callback([](WidgetInfo& info) {
             Audio_SetGameVolume(SEQ_PLAYER_SFX, ((float)CVarGetInteger(CVAR_SETTING("Volume.SFX"), 100) / 100.0f));
         });
+    // Reel Fishing III mod (step 63b-2, user: "Add a rf3 volume slider in the volume menu under sfx"): RF3's own
+    // sounds (RF3Sound.cpp), on top of the master volume only (step 63c); 100% = RF3's own levels.
+    AddWidget(path, "RF3 Sound Volume: %d %%", WIDGET_CVAR_SLIDER_INT)
+        .CVar(CVAR_ENHANCEMENT("ReelFishing3.SoundVolumePct"))
+        .RaceDisable(false)
+        .Options(IntSliderOptions()
+                     .Tooltip("Reel Fishing III's own sounds, on top of the master volume (not the sound effects "
+                              "volume). 100% is RF3's own level.")
+                     .Min(0)
+                     .Max(200)
+                     .DefaultValue(100)
+                     .ShowButtons(true)
+                     .Format(""));
     AddWidget(path, "Audio API (Needs reload)", WIDGET_AUDIO_BACKEND).RaceDisable(false);
 
     // Graphics Settings

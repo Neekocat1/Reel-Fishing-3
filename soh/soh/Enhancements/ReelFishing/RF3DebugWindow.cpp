@@ -13,6 +13,8 @@
 #include "RF3Items.h"
 #include "RF3FishModel.h"
 #include "RF3FishView.h" // step 61b
+#include "RF3Vibration.h" // step 62c
+#include "RF3Sound.h"     // step 63b
 #include "RF3RodModel.h"
 #include "RF3LureModel.h"
 #include "RF3TackleAssets.h"
@@ -287,6 +289,63 @@ static void DrawTackle() {
     }
 }
 
+// Step 63b (DESIGN "Step 63 design"): RF3's sounds through the mod's mixer, one button each (mods/rf3_sounds.o2r).
+// fis sounds play on channel 10, sys sounds on 2, streams on 3, as RF3 uses them (looped ones play until stopped).
+static void DrawSoundButtons(const char* label, const int* numbers, int count, int channel, bool stream,
+                             const char* bank) {
+    ImGui::TextUnformatted(label);
+    for (int i = 0; i < count; i++) {
+        if (i % 12 != 0) {
+            ImGui::SameLine();
+        }
+        ImGui::PushID(channel * 1000 + numbers[i]);
+        char text[8];
+        std::snprintf(text, sizeof(text), "%d", numbers[i]);
+        if (ImGui::Button(text, ImVec2(34, 0))) {
+            if (stream) {
+                RF3Sound_PlayStream(channel, numbers[i], 1.0f, 1.0f);
+            } else {
+                RF3Sound_Play(channel, bank, numbers[i], 1.0f, 1.0f);
+            }
+        }
+        ImGui::PopID();
+    }
+}
+
+static void DrawSounds() {
+    if (!ImGui::CollapsingHeader("RF3 sounds (step 63b)")) {
+        return;
+    }
+    ImGui::TextWrapped("Last: %s", RF3Sound_Status());
+    int volume = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.SoundVolumePct"), 100); // also in Settings > Audio
+    if (ImGui::SliderInt("RF3 sound volume (%, 100 = RF3's own)", &volume, 0, 200)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.SoundVolumePct"), volume);
+    }
+    if (ImGui::Button("Stop all")) {
+        RF3Sound_StopAll();
+    }
+    // Step 63c-5a: the mixer's own output for tools/rf3_audiocmp.py.
+    bool recording = RF3Sound_IsRecording() != 0;
+    if (ImGui::Checkbox("Record RF3 mix (logs/rf3_mix_<date>.wav + .csv)", &recording)) {
+        RF3Sound_SetRecording(recording ? 1 : 0);
+    }
+    ImGui::SameLine();
+    ImGui::TextUnformatted(RF3Sound_RecordingStatus());
+    static int fis[54], sys[15];
+    for (int i = 0; i < 54; i++) {
+        fis[i] = i;
+    }
+    for (int i = 0; i < 15; i++) {
+        sys[i] = i;
+    }
+    static const int streams[] = { 5,  6,  7,  8,  9,  10, 13, 14, 15, 16, 26, 27, 31, 32, 35, 36,
+                                   65, 73, 74, 79, 80, 81, 82, 85, 86, 87, 88, 89, 90, 91, 92 };
+    DrawSoundButtons("fis (fishing), channel 10:", fis, 54, 10, false, "fis");
+    DrawSoundButtons("sys (menus), channel 2:", sys, 15, 2, false, "sys");
+    DrawSoundButtons("fis streams, channel 3:", streams, static_cast<int>(sizeof(streams) / sizeof(streams[0])), 3,
+                     true, nullptr);
+}
+
 // Step 61b (DESIGN "Step 61 design", choice C7 A): the co-op fishing view's solo mirror. Your own view, a few frames
 // late, drawn as a ghost beside you: the copy other players will see in 61c. Log: rf3_fishview.txt.
 static void DrawFishView() {
@@ -537,10 +596,12 @@ void RF3DebugWindow::DrawElement() {
 
     ImGui::Text("Reel Fishing III mechanics: %s", RF3_IsEnabled() ? "ON" : "OFF");
     ImGui::Text("Fishing rod owned (this save file): %s", RF3Rod_IsOwned() ? "yes" : "no"); // step 15a
+    ImGui::Text("RF3 vibration: %s", RF3Vib_Status()); // step 62c
     DrawStock();
     DrawTackle();
     DrawFlyCast();
     DrawFishView(); // step 61b
+    DrawSounds();   // step 63b
     DrawLureModel();
     DrawFishModel();
     DrawRodModel();

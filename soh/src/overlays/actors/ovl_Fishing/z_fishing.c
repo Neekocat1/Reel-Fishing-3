@@ -17,6 +17,7 @@
 #include "soh/Enhancements/ReelFishing/RF3LureModel.h"
 #include "soh/Enhancements/ReelFishing/RF3FishModel.h"
 #include "soh/Enhancements/ReelFishing/RF3FishView.h"
+#include "soh/Enhancements/ReelFishing/RF3SoundFx.h"
 #include "soh/Enhancements/ReelFishing/RF3RodModel.h"
 #include "soh/Enhancements/ReelFishing/RF3FishMove.h"
 #include "soh/Enhancements/ReelFishing/RF3FishSwim.h" // step 47c
@@ -2882,7 +2883,11 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                 sLurePosDelta.x *= 0.9f;
                 sLurePosDelta.z *= 0.9f;
                 if (!sIsOwnersHatHooked) {
-                    Sfx_PlaySfxCentered(NA_SE_IT_FISHING_REEL_HIGH - SFX_FLAG);
+                    if (RF3_IsEnabled()) {
+                        RF3SoundFx_Reeling(); // step 63c: RF3's reel loop instead of OoT's
+                    } else {
+                        Sfx_PlaySfxCentered(NA_SE_IT_FISHING_REEL_HIGH - SFX_FLAG);
+                    }
                 }
             }
 
@@ -3204,7 +3209,11 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     if (!RF3Lure_IsActive()) {
                         sRodLineSpooled += 1.5f;
                     }
-                    Sfx_PlaySfxCentered(NA_SE_IT_FISHING_REEL_HIGH - SFX_FLAG);
+                    if (RF3_IsEnabled()) {
+                        RF3SoundFx_Reeling(); // step 63c
+                    } else {
+                        Sfx_PlaySfxCentered(NA_SE_IT_FISHING_REEL_HIGH - SFX_FLAG);
+                    }
                     Math_ApproachF(&sReelLinePosStep, 1000.0f, 1.0f, 2.0f);
                 } else {
                     rf3ReelUnits = sRodReelingSpeed * 5.0f;
@@ -3216,7 +3225,11 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     if (!RF3Lure_IsActive()) {
                         sRodLineSpooled += sRodReelingSpeed;
                     }
-                    Sfx_PlaySfxCentered(NA_SE_IT_FISHING_REEL_SLOW - SFX_FLAG);
+                    if (RF3_IsEnabled()) {
+                        RF3SoundFx_Reeling(); // step 63c
+                    } else {
+                        Sfx_PlaySfxCentered(NA_SE_IT_FISHING_REEL_SLOW - SFX_FLAG);
+                    }
                     Math_ApproachF(&sReelLinePosStep, 1000.0f, 1.0f, 0.2f);
                 }
 
@@ -3304,7 +3317,11 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                 } else {
                     sRodLineSpooled += sRodReelingSpeed;
                 }
-                Sfx_PlaySfxCentered(NA_SE_IT_FISHING_REEL_SLOW - SFX_FLAG);
+                if (RF3_IsEnabled()) {
+                    RF3SoundFx_Reeling(); // step 63c (the fight has its own reel sounds: RF3SoundFx.cpp)
+                } else {
+                    Sfx_PlaySfxCentered(NA_SE_IT_FISHING_REEL_SLOW - SFX_FLAG);
+                }
             }
 
             if ((sLureTimer & 0x1F) == 0) {
@@ -3513,6 +3530,10 @@ void Fishing_FishLeapSfx(Fishing* this, u8 outOfWater) {
         }
     }
 
+    // Step 63c: in an RF3 fight the hooked fish's splashes are RF3's own streams (RF3SoundFx.cpp).
+    if (RF3_IsEnabled() && (sFishingHookedFish == this) && ((sRodCastState == 4) || (sRodCastState == 5))) {
+        return;
+    }
     Audio_PlayActorSound2(&this->actor, sfxId);
 }
 
@@ -3569,9 +3590,7 @@ static f32 sRF3FishSpeed = 0.0f;
 static f32 sRF3PrevTargetDist = -1.0f; // last frame's target distance, -1 = new fight
 static f32 sRF3RodBend = 0.0f;         // smoothed rod bend angle from tension
 static u8 sRF3FeedbackTimer = 0;
-static f32 sRF3ReelFreq = 1.0f; // static: the audio code keeps this pointer for continuous sounds
 static u8 sRF3HookPending = false; // step 9: RF3 set the hook; OoT's hook-set block applies its effects
-static u8 sRF3WindowRumbled = false; // step 9b: the hook-set window rumble has started
 static u8 sRF3SweepTimer = 0;   // step 8h: game frames until STRUGGLE's sweep changes side
 static u8 sRF3SweepSide = 0;    // step 8h: STRUGGLE's current side of the line (0/1)
 static s16 sRF3TurnScale = 0;   // step 8h: turn scale for Fishing_UpdateFish this frame, 0 = OoT's own
@@ -3584,7 +3603,6 @@ static void Fishing_RF3ResetVisuals(Fishing* this) {
     sRF3RodBend = D_80B7A6BC;
     sRF3FeedbackTimer = 0;
     sRF3HookPending = false;
-    sRF3WindowRumbled = false;
     sRF3SweepTimer = 0;
     sRF3TurnScale = 0;
 }
@@ -3640,15 +3658,9 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
     sRF3TurnScale = 0;
     if (!rf3Out.hooked) {
         // Strike phase (HIT): OoT keeps the fish at the lure; nothing to steer yet.
-        // Step 9b: the only rumble during the strike marks the hook-set window, so the
-        // player can feel when to set the hook. OoT's random fight rumble is held off.
+        // OoT's random fight rumble is held off. Step 62c: the hook-set window's rumble is RF3's own pattern 0
+        // (RF3Vibration.cpp, started by the bridge), in place of step 9b's single 220 pulse.
         sRumbleDelay = 2;
-        if (rf3Out.hookWindowOpen && !sRF3WindowRumbled) {
-            // Full strength for the window's length, then a decrease of 255 stops it at once
-            // (the rumble update holds for the duration, then subtracts the rate each frame).
-            func_800A9F6C(0.0f, 220, (u8)CLAMP(rf3Out.hookWindowFrames, 1, 255), 255);
-            sRF3WindowRumbled = true;
-        }
         if (RF3_IS_REGION_FISH(this) && RF3FishModel_WillPlayMotions(this->actor.params - EN_FISH_REGION)) {
             // Step 49e-2: an RF3 fish moves by RF3's HIT here (49e put it after this return, so it never ran)
             RF3RegionFishInfo hitInfo;
@@ -3877,17 +3889,10 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
     }
     Math_ApproachF(&sRF3RodBend, bendTarget, 0.5f, 0.08f);
     D_80B7A6BC = sRF3RodBend;
-    // Rumble: OoT's random fight rumble is held off; pulse harder as tension rises past 40%.
+    // Rumble: OoT's random fight rumble is held off. Step 62c (choice V2 A): RF3 has no tension rumble, so step 8d's
+    // pulses past 40% are gone; the fight vibrates only at RF3's moments (RF3Vibration.cpp).
     sRumbleDelay = 2;
-    if ((load > 0.4f) && ((sRF3FeedbackTimer % 10) == 0)) {
-        func_800A9F6C(0.0f, (u8)(60.0f + (195.0f * (load - 0.4f) / 0.6f)), 10, 5);
-    }
-    // Warning: above 80% the reel screams, higher-pitched toward the limit.
-    if (load > 0.8f) {
-        sRF3ReelFreq = 0.8f + ((load - 0.8f) * 3.0f);
-        Audio_PlaySfxGeneral(NA_SE_IT_FISHING_REEL_HIGH - SFX_FLAG, &gSfxDefaultPos, 4, &sRF3ReelFreq,
-                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-    }
+    // Step 63c: above 80% RF3 plays its line-strain stream (RF3SoundFx.cpp), in place of step 8d's reel scream.
 
     // OoT's reel no longer pulls the fish in; refit the line to the fish every frame.
     sRodReelingSpeed = 0.0f;
@@ -4695,7 +4700,9 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
             } else if (distToTarget < 10.0f) {
                 if (sLurePos.y > (WATER_SURFACE_Y(play) - 10.0f)) {
                     Audio_PlayActorSound2(&this->actor, NA_SE_EV_JUMP_OUT_WATER);
-                    Sfx_PlaySfxCentered(NA_SE_PL_CATCH_BOOMERANG);
+                    if (!RF3_IsEnabled()) { // step 63c: RF3's bite sound instead (RF3Fight_StartStrike)
+                        Sfx_PlaySfxCentered(NA_SE_PL_CATCH_BOOMERANG);
+                    }
                 }
 
                 Fishing_SplashBySize(this, play, false);
@@ -4778,10 +4785,14 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                         rumbleStrength = 255.0f;
                     }
 
-                    func_800A9F6C(0.0f, rumbleStrength, 120, 5);
+                    if (!RF3_IsEnabled()) { // step 62c: in RF3 mode the hook set plays RF3's pattern 1 instead
+                        func_800A9F6C(0.0f, rumbleStrength, 120, 5);
+                    }
                     sRumbleDelay = 40;
                     sRodHitTimer = 10;
-                    Sfx_PlaySfxCentered(NA_SE_IT_FISHING_HIT);
+                    if (!RF3_IsEnabled()) { // step 63c: RF3's hook-set sound instead (RF3SoundFx.cpp)
+                        Sfx_PlaySfxCentered(NA_SE_IT_FISHING_HIT);
+                    }
                 }
             }
 
@@ -4840,7 +4851,9 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                             } else {
                                 rumbleStrength8 = 180;
                             }
-                            func_800A9F6C(0.0f, rumbleStrength8, 90, 2);
+                            if (!RF3_IsEnabled()) { // step 62c: RF3's fight has no such burst
+                                func_800A9F6C(0.0f, rumbleStrength8, 90, 2);
+                            }
                             this->timerArray[0] = 20;
                             this->timerArray[1] = 100;
                             this->timerArray[2] = 20;
@@ -5046,7 +5059,7 @@ static void Fishing_UpdateFishImpl(Actor* thisx, PlayState* play2) {
                     if (rf3Outcome == RF3_OUTCOME_LINEBREAK) {
                         // Step 8e: the line snaps. OoT's rod-snap bend plus a twang.
                         sRodHitTimer = 10;
-                        Sfx_PlaySfxCentered(NA_SE_IT_BOW_FLICK);
+                        // Step 63c: RF3's line-break sound (RF3SoundFx.cpp) in place of OoT's bow flick.
                         RF3Stock_LoseCurrent(); // step 21e: the fish takes the lure, until the next scene
                                                 // change
                         if (RF3Tackle_LureMissing()) {

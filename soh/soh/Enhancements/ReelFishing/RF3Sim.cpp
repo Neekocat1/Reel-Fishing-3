@@ -1849,4 +1849,109 @@ Mode FightSim::UpdateResist(const FrameInput& in) {
     return noInput ? Mode::Away : Mode::Struggle;
 }
 
+// --- Step 62: RF3's controller vibration (RF3-MECHANICS 8) -------------------------------------------------------
+
+namespace {
+
+// RF3's pattern table (0x0024D850): per pattern, the small motor's and the large motor's keyframes [data].
+constexpr VibKey kVib0Small[] = { { 0.2f, 1 }, { kVibLoop, 0 } };
+constexpr VibKey kVib0Large[] = { { 1.0f, 50 }, { kVibLoop, 0 } };
+constexpr VibKey kVib1Large[] = { { 1.0f, 150 }, { kVibLoop, 0 } };
+constexpr VibKey kVib2Small[] = { { 1.0f, 1 }, { kVibLoop, 0 } };
+constexpr VibKey kVib2Large[] = { { 0.5f, 200 }, { kVibLoop, 0 } };
+constexpr VibKey kVib3Small[] = { { 0.75f, 0 }, { 0.75f, 1 }, { kVibLoop, 0 } };
+constexpr VibKey kVib3Large[] = { { 0.5f, 50 }, { 0.5f, 125 }, { 0.5f, 200 }, { kVibLoop, 0 } };
+constexpr VibKey kVib4Small[] = { { 0.2f, 1 }, { 0.2f, 0 }, { 0.2f, 1 }, { 0.2f, 0 }, { 0.2f, 0 }, { kVibLoop, 0 } };
+constexpr VibKey kVib4Large[] = { { 0.2f, 100 }, { 0.2f, 0 }, { 0.2f, 100 }, { 0.2f, 0 }, { 0.2f, 150 },
+                                  { kVibLoop, 0 } };
+constexpr const VibKey* kVibTables[kVibPatternCount][2] = {
+    { kVib0Small, kVib0Large }, { nullptr, kVib1Large }, { kVib2Small, kVib2Large },
+    { kVib3Small, kVib3Large }, { kVib4Small, kVib4Large },
+};
+
+bool IsMarker(float seconds) {
+    return seconds == kVibEnd || seconds == kVibLoop;
+}
+
+} // namespace
+
+void VibPlayer::Start(int pattern, float seconds, bool ramp) {
+    Stop();
+    if (pattern < 0 || pattern >= kVibPatternCount || seconds <= 0.0f) {
+        return;
+    }
+    mPattern = pattern;
+    mLeft = seconds;
+    mRamp = ramp;
+    mActive = true;
+    for (int i = 0; i < 2; i++) {
+        mMotor[i].table = kVibTables[pattern][i];
+        mMotor[i].on = mMotor[i].table != nullptr;
+    }
+}
+
+void VibPlayer::Stop() {
+    mActive = false;
+    mPattern = -1;
+    mMotor[0] = Motor();
+    mMotor[1] = Motor();
+}
+
+// As RF3's 0x0014E690: each motor's clock moves on by dt, passing keyframes whose seconds it has used up (a loop
+// marker goes back to the first, an end marker stops the motor); the level is the keyframe's, or on the large motor
+// with the ramp flag the way toward the next keyframe's level. Then the pattern's own seconds count down.
+void VibPlayer::Step(float dt, int* smallLevel, int* largeLevel) {
+    int level[2] = { 0, 0 };
+    if (!mActive) {
+        *smallLevel = *largeLevel = 0;
+        return;
+    }
+    int ended = 0;
+    for (int i = 0; i < 2; i++) {
+        Motor& m = mMotor[i];
+        if (!m.on) {
+            ended++;
+            continue;
+        }
+        m.clock += dt;
+        const VibKey* k = &m.table[m.key];
+        while (k != nullptr && m.clock > k->seconds) {
+            m.clock -= k->seconds;
+            m.key++;
+            k = &m.table[m.key];
+            if (k->seconds == kVibLoop) {
+                m.key = 0;
+                k = &m.table[0];
+            } else if (k->seconds == kVibEnd) {
+                k = nullptr;
+            }
+        }
+        if (k == nullptr) {
+            m.on = false;
+            ended++;
+            continue;
+        }
+        level[i] = k->level;
+        if (i == 1 && mRamp) {
+            const VibKey* next = &m.table[m.key + 1];
+            if (next->seconds == kVibLoop) {
+                next = &m.table[0];
+            } else if (IsMarker(next->seconds)) {
+                next = k;
+            }
+            level[i] = k->level + static_cast<int>((next->level - k->level) * (m.clock / k->seconds));
+        }
+    }
+    *smallLevel = level[0];
+    *largeLevel = level[1];
+    mLeft -= dt;
+    if (mLeft <= 0.0f || ended > 1) {
+        Stop();
+    }
+}
+
+int VibPlayer::OotStrength(int smallLevel, int largeLevel) {
+    return std::clamp(std::max(largeLevel, smallLevel != 0 ? kVibSmallStrength : 0), 0, 255);
+}
+
 } // namespace rf3

@@ -569,6 +569,56 @@ inline constexpr float kModelLengthFactor = 0.99f;
 // (RF3 0x0019CF40; RF3-MECHANICS 1.10, DESIGN step 8g).
 inline constexpr float kDistanceLeadLengths = 3.0f;
 
+// Step 62 (DESIGN "Step 62 design", RF3-MECHANICS 8): RF3's controller vibration. Five patterns, each a keyframe table
+// per motor (small: 0/1, large: 0-255), started at five fight moments and stepped each frame as RF3's player
+// 0x0014E690 does: a keyframe's level holds for its seconds, a table ends or loops, and with the ramp flag (which
+// every fight call sets) the large motor moves linearly toward the next keyframe's level.
+enum VibPattern {
+    kVibHookWindow = 0, // HIT: the hook-set window, for the window's length
+    kVibHookSet = 1,    // HIT: the hook is set, 1 s
+    kVibPattern2 = 2,   // no fight use found
+    kVibLanding = 3,    // BUKKONUKI and CATCH entered, 1 s
+    kVibStruggle = 4,   // STRUGGLE entered, for the struggle's length
+    kVibPatternCount = 5,
+};
+// A keyframe: the level held (ramped toward the next one on the large motor) for `seconds`. A table ends with
+// seconds kVibEnd (that motor stops) or kVibLoop (back to its first keyframe).
+struct VibKey {
+    float seconds;
+    int16_t level;
+};
+inline constexpr float kVibEnd = -1.0f;
+inline constexpr float kVibLoop = -2.0f;
+
+class VibPlayer {
+  public:
+    // Starts `pattern` for `seconds` (RF3 0x00190050 / 0x0014E5A0); a pattern already playing is replaced.
+    void Start(int pattern, float seconds, bool ramp = true);
+    void Stop();
+    bool Active() const { return mActive; }
+    int Pattern() const { return mActive ? mPattern : -1; }
+    // Advances dt seconds and gives the motors' levels for this step (0 once stopped). It stops itself when its
+    // seconds run out or both motors' tables have ended.
+    void Step(float dt, int* smallLevel, int* largeLevel);
+    // Step 62 choice V1 A: RF3's two motors as one OoT rumble strength (0-255): the large motor's level, at least
+    // kVibSmallStrength while the small motor is on [assumed mapping].
+    static int OotStrength(int smallLevel, int largeLevel);
+
+  private:
+    struct Motor {
+        const VibKey* table = nullptr; // nullptr: this pattern doesn't use the motor
+        int key = 0;
+        float clock = 0.0f;
+        bool on = false;
+    };
+    Motor mMotor[2];
+    float mLeft = 0.0f;
+    bool mActive = false;
+    bool mRamp = true;
+    int mPattern = -1;
+};
+inline constexpr int kVibSmallStrength = 120;
+
 } // namespace rf3
 
 #endif

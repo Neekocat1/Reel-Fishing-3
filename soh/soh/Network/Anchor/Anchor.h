@@ -185,7 +185,8 @@ class Anchor : public Network {
     void SendPacket_UpdateRoomState();
     void SendPacket_UpdateTeamState();
     void SendPacket_RF3Catch(const rf3::UnlockCatch& k); // Reel Fishing III mod (step 56b)
-    uint32_t SendPacket_RF3FishView(const nlohmann::json* view); // Reel Fishing III mod (step 61c); null = end
+    // Reel Fishing III mod (step 61c): to the players in sceneNum; null view = end (61d: sent to the scene it was in)
+    uint32_t SendPacket_RF3FishView(const nlohmann::json* view, s16 sceneNum);
 };
 
 typedef enum {

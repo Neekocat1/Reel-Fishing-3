@@ -18,6 +18,8 @@
 #include "RF3FishTable.h"
 #include "RF3TackleRules.h"
 #include "RF3TackleAssets.h"
+#include "RF3Vibration.h" // step 62c
+#include "RF3SoundFx.h"   // step 63c
 
 namespace {
 
@@ -35,6 +37,7 @@ int32_t sFightFishIndex = -1;
 bool sForceCatch = false; // debug: land the hooked fish on the next update (RF3Fight_ForceCatch)
 float sFightOotLength = 0.0f; // step 14d: OoT length the fight started with, to match the kept fish
 const rf3::FishRecord* sFightRecord = nullptr;
+bool sOutcomeSounded = false; // step 63c: the fight's outcome sound was played
 
 // Step 14b: each OoT fish's RF3 species (index = actor params - 100), rolled at pond load.
 constexpr int kMaxSpeciesFish = 32;
@@ -187,6 +190,8 @@ extern "C" void RF3Fight_StartStrike(int32_t fishIndex, float fishLength) {
     sForceCatch = false;
     sFight->StartStrike();
     sFight->SetBodyLength(sFightLengthMm / 1000.0f); // AWAY surge (DESIGN step 8f)
+    sOutcomeSounded = false;
+    RF3SoundFx_Strike(); // step 63c: RF3's bite sound
 }
 
 extern "C" int32_t RF3Fight_ForceCatch(void) {
@@ -222,14 +227,38 @@ extern "C" int32_t RF3Fight_Update(const RF3FightInput* in, RF3FightOutput* out)
     frame.lureDepth = in->lureDepthUnits / RF3_UNITS_PER_METRE; // used only by HIT
     // OoT's game logic runs at 20 Hz (R_UPDATE_RATE = 3); RF3 steps are 1/60 s.
     int steps = std::clamp(static_cast<int>(in->substeps), 1, 6);
+    // Step 62c: RF3's vibration moments, as the sim passes them (RF3Vibration.cpp).
+    auto windowOpen = [](const rf3::FightSim& f) {
+        const float t = f.GetStateTime();
+        return f.GetMode() == rf3::Mode::Hit && !f.IsHooked() && t >= f.GetFish().hookWindowStart &&
+               t <= f.GetFish().hookWindowEnd;
+    };
     for (int i = 0; i < steps && sFight->GetOutcome() == rf3::Outcome::None; i++) {
+        const rf3::Mode prevMode = sFight->GetMode();
+        const bool prevHooked = sFight->IsHooked();
+        const bool prevWindow = windowOpen(*sFight);
         sFight->Update(frame);
+        RF3Vib_FightStep(static_cast<int32_t>(prevMode), static_cast<int32_t>(sFight->GetMode()),
+                         !prevHooked && sFight->IsHooked(), !prevWindow && windowOpen(*sFight),
+                         sFight->GetFish().hookWindowEnd - sFight->GetFish().hookWindowStart,
+                         sFight->GetStateDuration());
+        RF3SoundFx_FightStep(static_cast<int32_t>(prevMode), static_cast<int32_t>(sFight->GetMode()),
+                             static_cast<int32_t>(sFight->GetLastRun()), !prevHooked && sFight->IsHooked(),
+                             sFight->GetHook(), sFightRecord ? sFightRecord->record : -1); // steps 63c, 63c-3
         if (sFight->IsHooked() && i + 1 < steps) {
             frame.fishDistance = sFight->GetDistance(); // later sub-steps: the fish follows the target
         }
     }
     if (sFight->GetOutcome() != rf3::Outcome::None) {
         sForceCatch = false;
+    }
+    // Step 63c: RF3's fight sounds for this frame, and the outcome's once.
+    const float load = sFight->GetTensionLimit() > 0.0f ? sFight->GetTension() / sFight->GetTensionLimit() : 0.0f;
+    RF3SoundFx_FightFrame(static_cast<int32_t>(sFight->GetMode()), sFight->IsHooked() ? 1 : 0, frame.reel ? 1 : 0, load,
+                          sFightRecord ? sFightRecord->record : -1, steps / 60.0f);
+    if (sFight->GetOutcome() != rf3::Outcome::None && !sOutcomeSounded) {
+        sOutcomeSounded = true;
+        RF3SoundFx_FightOutcome(static_cast<int32_t>(sFight->GetOutcome()));
     }
     sLastFrame = frame;
     sLastFishDepthUnits = in->waterY - in->fishY;
@@ -254,6 +283,9 @@ extern "C" int32_t RF3Fight_Update(const RF3FightInput* in, RF3FightOutput* out)
 }
 
 extern "C" void RF3Fight_End(void) {
+    RF3Vib_FightEnded(); // step 62c: a landing pattern plays out, anything else stops
+    RF3SoundFx_FightEnded(); // step 63c
+    sOutcomeSounded = false;
     if (sFight.has_value()) {
         FillStatus(&sEndedStatus);
         sEndedStatus.active = 0;
