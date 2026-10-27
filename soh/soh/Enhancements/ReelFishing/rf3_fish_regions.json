@@ -100,6 +100,8 @@
       "angle": 0.0,
       "conditions": [],
       "currentReach": 5.0,
+      "currentSpeed": 0.20000000298023224,
+      "currentYaw": -180.0,
       "fishCount": 4,
       "holes": [],
       "maxX": 794.7000122070313,
@@ -2190,10 +2192,10 @@
       "currentYaw": 0.0,
       "fishCount": 6,
       "holes": [],
-      "maxX": -590.1932983398438,
-      "maxZ": -360.12200927734375,
-      "minX": -1540.3851318359375,
-      "minZ": -1563.0128173828125,
+      "maxX": -590.2000122070313,
+      "maxZ": -360.1000061035156,
+      "minX": -1540.4000244140625,
+      "minZ": -1563.0,
       "name": "Scene 89 region 3",
       "outline": [
         [

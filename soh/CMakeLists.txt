@@ -611,6 +611,16 @@ add_custom_command(
     COMMENT "Copying asset ymls..."
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/yml $<TARGET_FILE_DIR:soh>/assets
 )
+# Reel Fishing III mod (step 64): the fish regions go with every build, copied next to soh.exe whenever they change
+# (a target of its own in ALL, run after soh on every build, so a regions-only edit is copied without relinking). On
+# the machine with the source tree the game reads and saves the source copy (RF3Regions.cpp FishRegionsPath); a
+# build run elsewhere uses this one.
+add_custom_target(RF3FishRegions ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_SOURCE_DIR}/soh/soh/Enhancements/ReelFishing/rf3_fish_regions.json
+            $<TARGET_FILE_DIR:soh>/rf3_fish_regions.json
+    COMMENT "Copying the Reel Fishing III fish regions..."
+)
 ################################################################################
 # Dependencies
 ################################################################################

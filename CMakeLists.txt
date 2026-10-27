@@ -388,6 +388,11 @@ if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Windows")
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/soh/assets/yml/" DESTINATION assets COMPONENT ship)
 endif()
 
+# Reel Fishing III mod (step 64): the fish regions ship next to the executable.
+if(CMAKE_SYSTEM_NAME MATCHES "Windows|Linux")
+install(FILES "${CMAKE_SOURCE_DIR}/soh/soh/Enhancements/ReelFishing/rf3_fish_regions.json" DESTINATION . COMPONENT ship)
+endif()
+
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     find_package(ImageMagick COMPONENTS convert)
     if (ImageMagick_FOUND)
