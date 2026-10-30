@@ -165,6 +165,10 @@ float RF3RegionShape_OutsideOutline(int32_t slot, float x, float z);
 int32_t RF3RegionFish_Current(int32_t slot, float* yawRad, float* speedMps);
 // Step 60a: a caught region fish is removed and a new one rolled for its slot. 0 = region gone (release it instead).
 int32_t RF3RegionFish_ReplaceCaught(int32_t slot);
+// Step 75: the water surface at (x, z) in gPlayState's scene in any room. OoT's WaterBox_GetSurface1 sees only the
+// boxes of Link's current room (or room 0x3F, every room). Of several boxes there, the surface nearest nearY wins.
+// *room = the box's room (0x3F = every room); may be null.
+int32_t RF3Water_SurfaceAnyRoom(float x, float z, float nearY, float* surface, int32_t* room);
 
 // --- Size display (step 12b) ------------------------------------------------
 

@@ -8303,12 +8303,13 @@ static void Fishing_RF3RegionTarget(Fishing* this) {
 static s32 Fishing_RF3PointInWater(f32 x, f32 z) {
     if (sRF3CurRegion != NULL) {
         f32 surface;
-        WaterBox* waterBox;
 
         if (sRF3MovePlay == NULL) {
             return false;
         }
-        if (!WaterBox_GetSurface1(sRF3MovePlay, &sRF3MovePlay->colCtx, x, z, &surface, &waterBox) ||
+        // Step 75: its own water, in any room. OoT's lookup sees only Link's room, so a fish in a loaded neighbour room
+        // found land everywhere and stopped.
+        if (!RF3Water_SurfaceAnyRoom(x, z, sRF3CurRegion->surfaceY, &surface, NULL) ||
             (fabsf(surface - sRF3CurRegion->surfaceY) > 20.0f)) {
             return false;
         }
@@ -8489,6 +8490,20 @@ s32 Fishing_RF3KillRegionSlot(PlayState* play, s32 slot) {
         actor = actor->next;
     }
     return count;
+}
+
+// Step 75: is the slot's fish still there? OoT deletes it with its room (Room_FinishRoomChange); a killed one has no
+// update function left.
+s32 Fishing_RF3RegionSlotAlive(PlayState* play, s32 slot) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_NPC].head;
+
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_FISHING) && (actor->params == EN_FISH_REGION + slot) && (actor->update != NULL)) {
+            return true;
+        }
+        actor = actor->next;
+    }
+    return false;
 }
 
 s32 Fishing_RF3KillRegionFish(PlayState* play) {

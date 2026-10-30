@@ -36,6 +36,7 @@ extern "C" {
 extern PlayState* gPlayState;
 s32 Fishing_RF3KillRegionFish(PlayState* play); // z_fishing.c
 s32 Fishing_RF3KillRegionSlot(PlayState* play, s32 slot); // step 45a
+s32 Fishing_RF3RegionSlotAlive(PlayState* play, s32 slot); // step 75
 s32 Fishing_RF3LineBusy(void);
 }
 
@@ -57,10 +58,19 @@ struct Slot {
     int regionScene = -1;
     std::string regionName;
     bool regionGoneLogged = false;
+    int room = -1; // step 75: the room of its water (0x3F = every room)
     RF3RegionFishInfo info = {};
 };
 Slot sSlots[kSlots];
 bool sSpawnPending = false;
+// Step 75: OoT deletes a region fish with its room. Every kRoomCheckFrames the dead slots are freed, and a region with
+// no live fish tries to spawn: once per room Link is in (sTriedRoom, per region index), or again after a slot of it
+// was freed (sRetry).
+constexpr int kRoomCheckFrames = 5;
+constexpr int kAnyRoom = 0x3F;
+int sRoomCheckWait = 0;
+std::vector<int> sTriedRoom;
+std::vector<bool> sRetry;
 // Step 45a: per region index, the flags of its conditions that count at Link's age, as last seen.
 struct Watch {
     bool watched = false;     // a region of this scene with counting conditions
@@ -126,8 +136,16 @@ float OotLengthFor(int species, float mm) {
     return std::clamp(oot, 15.0f, 90.0f);
 }
 
-// A spot inside the box with water at least kMinDepth deep. Returns false if none was found.
-bool FindSpot(PlayState* play, const rf3::FishRegion& r, Vec3f* pos) {
+// Step 75: a room whose actors exist now: Link's, the one being left during a room change, or 0x3F (every room).
+bool RoomLoaded(PlayState* play, int room) {
+    return (room == kAnyRoom) || (room == play->roomCtx.curRoom.num) || (room == play->roomCtx.prevRoom.num);
+}
+
+// A spot inside the box with water at least kMinDepth deep. Returns false if none was found. Step 75: *room = its
+// water's room; water in a room that isn't loaded doesn't count (its fish would be deleted with it), and
+// *unloadedRoom is then that room (-1 if there was none).
+bool FindSpot(PlayState* play, const rf3::FishRegion& r, Vec3f* pos, int* room, int* unloadedRoom) {
+    *unloadedRoom = -1;
     for (int t = 0; t < kSpotTries; t++) {
         float x, z; // a random point of the box, turned into the world (step 16i)
         r.ToWorld(r.minX + Rand01() * (r.maxX - r.minX), r.minZ + Rand01() * (r.maxZ - r.minZ), &x, &z);
@@ -135,10 +153,15 @@ bool FindSpot(PlayState* play, const rf3::FishRegion& r, Vec3f* pos) {
             continue; // step 46b: outside the outline, or in a hole
         }
         float surface;
-        WaterBox* waterBox;
-        if (!WaterBox_GetSurface1(play, &play->colCtx, x, z, &surface, &waterBox)) {
+        int32_t waterRoom = kAnyRoom;
+        if (!RF3Water_SurfaceAnyRoom(x, z, r.surfaceY, &surface, &waterRoom)) {
             continue;
         }
+        if (!RoomLoaded(play, waterRoom)) {
+            *unloadedRoom = waterRoom;
+            continue;
+        }
+        *room = waterRoom;
         CollisionPoly* poly;
         Vec3f probe = { x, surface + 10.0f, z };
         float floor = BgCheck_EntityRaycastFloor1(&play->colCtx, &poly, &probe);
@@ -208,8 +231,9 @@ bool RegionActive(PlayState* play, const rf3::FishRegion& r, std::string* why) {
 }
 
 // Rolls one fish of region ri (species, season-skewed length, spot) into the free slot and spawns it. Returns true if
-// it was spawned. Step 60a: also used to replace a caught fish.
-bool SpawnInSlot(PlayState* play, size_t ri, const rf3::FishRegion& r, int slot) {
+// it was spawned. Step 60a: also used to replace a caught fish. Step 75: *waitsForRoom (if given) is set when its
+// water is only in a room that isn't loaded.
+bool SpawnInSlot(PlayState* play, size_t ri, const rf3::FishRegion& r, int slot, bool* waitsForRoom = nullptr) {
     char line[320];
     // Step 73: a weighted pick (every weight 1 = the even pick it was)
     const int total = r.TotalWeight();
@@ -224,9 +248,21 @@ bool SpawnInSlot(PlayState* play, size_t ri, const rf3::FishRegion& r, int slot)
     }
     const rf3::FishRecord* rec = FindRecord(record);
     Vec3f pos;
-    if ((rec == nullptr) || !FindSpot(play, r, &pos)) {
-        std::snprintf(line, sizeof(line), "scene %d region %d (%s): no water %.0f+ deep found, fish skipped",
-                      play->sceneNum, (int)ri, r.name.c_str(), kMinDepth);
+    int room = kAnyRoom;
+    int unloadedRoom = -1;
+    if ((rec == nullptr) || !FindSpot(play, r, &pos, &room, &unloadedRoom)) {
+        if (unloadedRoom >= 0) {
+            // step 75: it spawns when Link is in that room (WatchRooms)
+            std::snprintf(line, sizeof(line), "scene %d region %d (%s): its water is in room %d, not loaded (Link in "
+                          "room %d), fish wait", play->sceneNum, (int)ri, r.name.c_str(), unloadedRoom,
+                          play->roomCtx.curRoom.num);
+            if (waitsForRoom != nullptr) {
+                *waitsForRoom = true;
+            }
+        } else {
+            std::snprintf(line, sizeof(line), "scene %d region %d (%s): no water %.0f+ deep found, fish skipped",
+                          play->sceneNum, (int)ri, r.name.c_str(), kMinDepth);
+        }
         Log(line);
         return false;
     }
@@ -256,12 +292,18 @@ bool SpawnInSlot(PlayState* play, size_t ri, const rf3::FishRegion& r, int slot)
     s.info.ootLength = OotLengthFor(rec->species, s.info.mm);
     Actor* actor = Actor_Spawn(&play->actorCtx, play, ACTOR_FISHING, pos.x, pos.y, pos.z, 0,
                                static_cast<s16>(Rand01() * 0x10000), 0, kFishParamBase + slot);
+    // Step 75: the fish belongs to its water's room, as OoT's own actors do, and is deleted with it; water of every
+    // room (0x3F) keeps it in every room.
+    s.room = room;
+    if (actor != nullptr) {
+        actor->room = (room == kAnyRoom) ? -1 : static_cast<s8>(room);
+    }
     std::snprintf(line, sizeof(line),
                   "scene %d region %d (%s) slot %d: record %d (%s %c) %.0f mm, oot %.1f at %.0f %.0f %.0f "
-                  "season=%d k=%.2f weight=%d/%d%s",
+                  "season=%d k=%.2f weight=%d/%d room=%d%s",
                   play->sceneNum, (int)ri, r.name.c_str(), slot, record, rec->speciesName, rec->sizeClass,
                   s.info.mm, s.info.ootLength, pos.x, pos.y, pos.z, season, lengthK, r.WeightOf(record), total,
-                  actor ? "" : "  SPAWN FAILED");
+                  (room == kAnyRoom) ? -1 : room, actor ? "" : "  SPAWN FAILED");
     Log(line);
     if (actor == nullptr) {
         s = {};
@@ -283,8 +325,11 @@ int SpawnRegion(PlayState* play, size_t ri, const rf3::FishRegion& r, bool* full
             *full = true;
             return spawned;
         }
-        if (SpawnInSlot(play, ri, r, slot)) {
+        bool waitsForRoom = false;
+        if (SpawnInSlot(play, ri, r, slot, &waitsForRoom)) {
             spawned++;
+        } else if (waitsForRoom) {
+            break; // step 75: every fish would wait for that room; one line is enough
         }
     }
     return spawned;
@@ -305,8 +350,8 @@ bool WaterReady(PlayState* play, const rf3::FishRegion& r, float* y) {
             continue; // step 46b: only the shape's own water
         }
         float surface;
-        WaterBox* waterBox;
-        if (WaterBox_GetSurface1(play, &play->colCtx, x, z, &surface, &waterBox)) {
+        // step 75: its own room's water, wherever Link is
+        if (RF3Water_SurfaceAnyRoom(x, z, r.surfaceY, &surface, nullptr)) {
             *y = surface;
             if (std::fabs(surface - r.surfaceY) <= kWaterTolerance) {
                 return true;
@@ -465,7 +510,78 @@ int SpawnForScene(PlayState* play) {
         spawned += SpawnRegion(play, ri, r, &full);
     }
     SnapshotWatch(play); // step 45a
+    sTriedRoom.assign(regions.size(), play->roomCtx.curRoom.num); // step 75: tried in Link's room just now
+    sRetry.assign(regions.size(), false);
+    sRoomCheckWait = 0;
     return spawned;
+}
+
+// Step 75 (DESIGN step 75): every kRoomCheckFrames. OoT deletes a region fish with its room (Room_FinishRoomChange):
+// its slot is freed here. A region of the scene with no live fish then spawns once its water's room is loaded: tried
+// once per room Link is in, and again after one of its slots was freed.
+void WatchRooms(PlayState* play) {
+    const std::vector<rf3::FishRegion>& regions = rf3::FishRegions();
+    if ((sWatchScene != play->sceneNum) || (sWatch.size() != regions.size()) || (++sRoomCheckWait < kRoomCheckFrames)) {
+        return;
+    }
+    sRoomCheckWait = 0;
+    if (Fishing_RF3LineBusy()) {
+        return; // a fight or a landing: leave the slots alone until the line is free
+    }
+    if (sTriedRoom.size() != regions.size()) { // the editor changed the region list
+        sTriedRoom.assign(regions.size(), play->roomCtx.curRoom.num);
+        sRetry.assign(regions.size(), false);
+    }
+    char line[256];
+    std::vector<int> live(regions.size(), 0);
+    bool freed = false;
+    for (int slot = 0; slot < kSlots; slot++) {
+        Slot& s = sSlots[slot];
+        if (!s.used) {
+            continue;
+        }
+        if (!Fishing_RF3RegionSlotAlive(play, slot)) {
+            std::snprintf(line, sizeof(line),
+                          "region-fish-gone scene=%d region=%d (%s) slot=%d room=%d (Link in room %d)", play->sceneNum,
+                          s.region, s.regionName.c_str(), slot, (s.room == kAnyRoom) ? -1 : s.room,
+                          play->roomCtx.curRoom.num);
+            Log(line);
+            if ((s.region >= 0) && (static_cast<size_t>(s.region) < regions.size())) {
+                sRetry[s.region] = true;
+            }
+            s = {};
+            freed = true;
+            continue;
+        }
+        if ((s.region >= 0) && (static_cast<size_t>(s.region) < live.size())) {
+            live[s.region]++;
+        }
+    }
+    if (freed) {
+        RF3Approach_Reset(); // as the respawns do: no chaser or lure memory points at a deleted fish
+    }
+    const int room = play->roomCtx.curRoom.num;
+    for (size_t ri = 0; ri < regions.size(); ri++) {
+        const rf3::FishRegion& r = regions[ri];
+        const Watch& w = sWatch[ri];
+        if ((r.scene != play->sceneNum) || r.records.empty() || (r.fishCount <= 0) || (live[ri] > 0) || w.killPending ||
+            w.spawnNext) {
+            continue; // not this scene's, has fish, or step 45a is respawning it
+        }
+        if ((sTriedRoom[ri] == room) && !sRetry[ri]) {
+            continue;
+        }
+        sTriedRoom[ri] = room;
+        sRetry[ri] = false;
+        if (std::string why; !RegionActive(play, r, &why)) {
+            continue;
+        }
+        bool full = false;
+        const int n = SpawnRegion(play, ri, r, &full);
+        std::snprintf(line, sizeof(line), "region-room-spawn scene=%d region=%d (%s) room=%d spawned=%d",
+                      play->sceneNum, (int)ri, r.name.c_str(), room, n);
+        Log(line);
+    }
 }
 
 void RegisterRF3RegionFish() {
@@ -482,6 +598,7 @@ void RegisterRF3RegionFish() {
             SpawnForScene(gPlayState);
         } else if (gPlayState != nullptr) {
             WatchFlags(gPlayState); // step 45a
+            WatchRooms(gPlayState); // step 75
         }
     });
 }
@@ -489,6 +606,39 @@ void RegisterRF3RegionFish() {
 } // namespace
 
 static RegisterShipInitFunc initRF3RegionFish(RegisterRF3RegionFish, { CVAR_ENHANCEMENT("ReelFishing3.Enabled") });
+
+// Step 75: WaterBox_GetSurfaceImpl (z_bgcheck.c) without its room test: the same boxes, the same "properties &
+// 0x80000" skip, the same strict x/z bounds. Rooms can stack water at different heights at one (x, z) (OoT's room test
+// hid the others), so of the boxes that hold it, the one whose surface is nearest nearY wins.
+extern "C" int32_t RF3Water_SurfaceAnyRoom(float x, float z, float nearY, float* surface, int32_t* room) {
+    PlayState* play = gPlayState;
+    if (play == nullptr) {
+        return 0;
+    }
+    CollisionHeader* colHeader = play->colCtx.colHeader;
+    if ((colHeader == nullptr) || (colHeader->numWaterBoxes == 0) || (colHeader->waterBoxes == nullptr) ||
+        (colHeader->waterBoxes == PHYSICAL_TO_VIRTUAL(gSegments[0]))) {
+        return 0;
+    }
+    const WaterBox* best = nullptr;
+    for (WaterBox* box = colHeader->waterBoxes; box < colHeader->waterBoxes + colHeader->numWaterBoxes; box++) {
+        if ((box->properties & 0x80000) != 0) {
+            continue;
+        }
+        if ((box->xMin < x) && (x < box->xMin + box->xLength) && (box->zMin < z) && (z < box->zMin + box->zLength) &&
+            ((best == nullptr) || (std::fabs(box->ySurface - nearY) < std::fabs(best->ySurface - nearY)))) {
+            best = box;
+        }
+    }
+    if (best == nullptr) {
+        return 0;
+    }
+    *surface = best->ySurface;
+    if (room != nullptr) {
+        *room = static_cast<int32_t>((best->properties >> 13) & 0x3F);
+    }
+    return 1;
+}
 
 extern "C" int32_t RF3RegionFish_Get(int32_t slot, RF3RegionFishInfo* out) {
     if (slot >= RF3_FISHVIEW_GHOST_SLOT) { // step 61b: a co-op ghost's fish

@@ -68,33 +68,24 @@
       "randoArea": "RR_LH_FISHING_ISLAND",
       "records": [
         {
-          "name": "Bluegill n",
-          "record": 20,
+          "name": "Largemouth Bass n",
+          "record": 15,
           "weight": 4
         },
         {
-          "name": "Char n",
-          "record": 1,
-          "weight": 7
-        },
-        {
-          "name": "Yamame Trout n",
-          "record": 5,
-          "weight": 3
-        },
-        {
-          "name": "Largemouth Bass n",
-          "record": 15,
-          "weight": 12
-        },
-        {
-          "name": "Florida Bass n",
-          "record": 17
-        },
-        {
-          "name": "Rainbow Trout n",
-          "record": 22,
+          "name": "Bluegill n",
+          "record": 20,
           "weight": 2
+        },
+        {
+          "name": "Largemouth Bass s",
+          "record": 14,
+          "weight": 5
+        },
+        {
+          "name": "Bluegill s",
+          "record": 19,
+          "weight": 8
         }
       ],
       "scene": 87,
@@ -135,16 +126,18 @@
       "randoArea": "RR_HC_MOAT",
       "records": [
         {
-          "name": "Char n",
-          "record": 1
+          "name": "Red Carp b",
+          "record": 41,
+          "weight": 2
         },
         {
-          "name": "Char s",
-          "record": 0
+          "name": "Black Carp b",
+          "record": 42,
+          "weight": 2
         },
         {
-          "name": "Bitterling n",
-          "record": 13
+          "name": "Carp b",
+          "record": 39
         }
       ],
       "scene": 95,
@@ -278,12 +271,19 @@
       "randoArea": "RR_KOKIRI_FOREST",
       "records": [
         {
-          "name": "Bluegill s",
-          "record": 19
+          "name": "D.B.C. Carp s",
+          "record": 10,
+          "weight": 4
         },
         {
-          "name": "Pale Chub n",
-          "record": 12
+          "name": "Bluegill s",
+          "record": 19,
+          "weight": 2
+        },
+        {
+          "name": "Largemouth Bass s",
+          "record": 14,
+          "weight": 2
         }
       ],
       "scene": 85,
@@ -370,12 +370,28 @@
       "randoArea": "RR_LAKE_HYLIA",
       "records": [
         {
-          "name": "Largemouth Bass s",
-          "record": 14
+          "name": "Florida Bass n",
+          "record": 17,
+          "weight": 5
         },
         {
-          "name": "Char s",
-          "record": 0
+          "name": "Rainbow Trout s",
+          "record": 21,
+          "weight": 3
+        },
+        {
+          "name": "Rainbow Trout n",
+          "record": 22,
+          "weight": 3
+        },
+        {
+          "name": "Bluegill s",
+          "record": 19,
+          "weight": 6
+        },
+        {
+          "name": "Largemouth Bass s",
+          "record": 14
         }
       ],
       "scene": 87,
@@ -478,20 +494,24 @@
       "randoArea": "RR_LH_FROM_WATER_TEMPLE",
       "records": [
         {
-          "name": "Char n",
-          "record": 1
-        },
-        {
-          "name": "Char b",
-          "record": 2
+          "name": "Rainbow Trout b",
+          "record": 23,
+          "weight": 5
         },
         {
           "name": "Largemouth Bass b",
-          "record": 16
+          "record": 16,
+          "weight": 2
         },
         {
           "name": "Florida Bass b",
-          "record": 18
+          "record": 18,
+          "weight": 2
+        },
+        {
+          "name": "Rainbow Trout n",
+          "record": 22,
+          "weight": 2
         }
       ],
       "scene": 87,
@@ -546,12 +566,18 @@
       "randoArea": "RR_HYRULE_FIELD",
       "records": [
         {
-          "name": "D.B.C. Carp s",
-          "record": 10
+          "name": "Pale Chub n",
+          "record": 12,
+          "weight": 3
         },
         {
-          "name": "Rainbow Trout s",
-          "record": 21
+          "name": "Dace n",
+          "record": 9,
+          "weight": 4
+        },
+        {
+          "name": "Rainbow Trout n",
+          "record": 22
         }
       ],
       "scene": 81,
@@ -628,24 +654,23 @@
       "randoArea": "RR_HYRULE_FIELD",
       "records": [
         {
-          "name": "D.B.C. Carp s",
-          "record": 10
-        },
-        {
           "name": "B.C. Roach n",
-          "record": 35
+          "record": 35,
+          "weight": 3
         },
         {
-          "name": "Carp b",
-          "record": 39
+          "name": "B.C. Roach b",
+          "record": 36,
+          "weight": 3
         },
         {
           "name": "Grass Carp b",
           "record": 40
         },
         {
-          "name": "D.B.C. Carp n",
-          "record": 11
+          "name": "Carp b",
+          "record": 39,
+          "weight": 3
         }
       ],
       "scene": 81,
@@ -706,20 +731,18 @@
       "randoArea": "RR_ZORAS_RIVER",
       "records": [
         {
+          "name": "Yamame Trout n",
+          "record": 5,
+          "weight": 5
+        },
+        {
           "name": "Dace n",
-          "record": 9
+          "record": 9,
+          "weight": 4
         },
         {
-          "name": "Pale Chub n",
-          "record": 12
-        },
-        {
-          "name": "Yamame Trout s",
-          "record": 4
-        },
-        {
-          "name": "Bullhead n",
-          "record": 8
+          "name": "Char n",
+          "record": 1
         }
       ],
       "scene": 84,
@@ -784,20 +807,19 @@
       "randoArea": "RR_ZORAS_RIVER",
       "records": [
         {
+          "name": "Char s",
+          "record": 0,
+          "weight": 3
+        },
+        {
           "name": "Char n",
-          "record": 1
+          "record": 1,
+          "weight": 3
         },
         {
-          "name": "Char b",
-          "record": 2
-        },
-        {
-          "name": "Yamame Trout n",
-          "record": 5
-        },
-        {
-          "name": "Cherry Salmon n",
-          "record": 33
+          "name": "Dace n",
+          "record": 9,
+          "weight": 4
         }
       ],
       "scene": 84,
@@ -915,28 +937,18 @@
       "randoArea": "RR_ZORAS_DOMAIN",
       "records": [
         {
-          "name": "Char s",
-          "record": 0
+          "name": "Char b",
+          "record": 2,
+          "weight": 8
+        },
+        {
+          "name": "Monster Char l",
+          "record": 3
         },
         {
           "name": "Char n",
-          "record": 1
-        },
-        {
-          "name": "Splake n",
-          "record": 7
-        },
-        {
-          "name": "Splake s",
-          "record": 6
-        },
-        {
-          "name": "Steelhead Trout n",
-          "record": 30
-        },
-        {
-          "name": "Cherry Salmon n",
-          "record": 33
+          "record": 1,
+          "weight": 9
         }
       ],
       "scene": 88,
@@ -1110,36 +1122,19 @@
       "randoArea": "RR_ZORAS_FOUNTAIN",
       "records": [
         {
-          "name": "Brown Trout n",
-          "record": 24
-        },
-        {
-          "name": "Rainbow Trout s",
-          "record": 21
-        },
-        {
-          "name": "Rainbow Trout n",
-          "record": 22
-        },
-        {
-          "name": "Steelhead Trout n",
-          "record": 30
-        },
-        {
-          "name": "Char s",
-          "record": 0
-        },
-        {
-          "name": "Char n",
-          "record": 1
+          "name": "Cherry Salmon n",
+          "record": 33,
+          "weight": 3
         },
         {
           "name": "Cherry Salmon b",
-          "record": 34
+          "record": 34,
+          "weight": 2
         },
         {
-          "name": "Cherry Salmon n",
-          "record": 33
+          "name": "Char n",
+          "record": 1,
+          "weight": 2
         }
       ],
       "scene": 89,
@@ -1375,24 +1370,22 @@
       "randoArea": "RR_ZORAS_FOUNTAIN",
       "records": [
         {
-          "name": "Char b",
-          "record": 2
+          "name": "Steelhead Trout b",
+          "record": 31,
+          "weight": 3
         },
         {
           "name": "King Salmon b",
-          "record": 26
+          "record": 26,
+          "weight": 2
         },
         {
-          "name": "Steelhead Trout b",
-          "record": 31
+          "name": "Giant King Salmon l",
+          "record": 27
         },
         {
           "name": "Steelhead Trout n",
           "record": 30
-        },
-        {
-          "name": "Char n",
-          "record": 1
         }
       ],
       "scene": 89,
@@ -1443,40 +1436,24 @@
       "randoArea": "RR_GV_LOWER_STREAM",
       "records": [
         {
-          "name": "Rainbow Trout s",
-          "record": 21
-        },
-        {
-          "name": "Rainbow Trout n",
-          "record": 22
-        },
-        {
-          "name": "Char s",
-          "record": 0
-        },
-        {
-          "name": "Char n",
-          "record": 1
-        },
-        {
-          "name": "Steelhead Trout n",
-          "record": 30
-        },
-        {
-          "name": "Brown Trout n",
-          "record": 24
-        },
-        {
-          "name": "Rainbow Trout b",
-          "record": 23
-        },
-        {
           "name": "Pink Salmon s",
-          "record": 28
+          "record": 28,
+          "weight": 2
         },
         {
           "name": "Pink Salmon n",
-          "record": 29
+          "record": 29,
+          "weight": 2
+        },
+        {
+          "name": "Steelhead Trout n",
+          "record": 30,
+          "weight": 3
+        },
+        {
+          "name": "Rainbow Trout n",
+          "record": 22,
+          "weight": 2
         }
       ],
       "scene": 90,
@@ -1525,24 +1502,14 @@
       "randoArea": "RR_THE_LOST_WOODS",
       "records": [
         {
-          "name": "Char s",
-          "record": 0
-        },
-        {
-          "name": "Char n",
-          "record": 1
-        },
-        {
           "name": "Yamame Trout s",
-          "record": 4
+          "record": 4,
+          "weight": 5
         },
         {
-          "name": "Yamame Trout n",
-          "record": 5
-        },
-        {
-          "name": "Bullhead n",
-          "record": 8
+          "name": "Dace n",
+          "record": 9,
+          "weight": 4
         }
       ],
       "scene": 91,
@@ -1629,12 +1596,14 @@
       "randoArea": "RR_DEKU_TREE_BASEMENT_LOWER",
       "records": [
         {
-          "name": "Dace n",
-          "record": 9
+          "name": "Bullhead n",
+          "record": 8,
+          "weight": 3
         },
         {
-          "name": "Bullhead n",
-          "record": 8
+          "name": "Dace n",
+          "record": 9,
+          "weight": 3
         }
       ],
       "scene": 0,
@@ -1713,16 +1682,14 @@
       "randoArea": "RR_JABU_JABUS_BELLY_LIFT_ROOM",
       "records": [
         {
-          "name": "Pale Chub n",
-          "record": 12
-        },
-        {
           "name": "Bitterling n",
-          "record": 13
+          "record": 13,
+          "weight": 3
         },
         {
           "name": "Bluegill s",
-          "record": 19
+          "record": 19,
+          "weight": 2
         }
       ],
       "scene": 2,
@@ -1781,24 +1748,19 @@
       "randoArea": "RR_FOREST_TEMPLE_NW_COURTYARD_LOWER",
       "records": [
         {
-          "name": "Char s",
-          "record": 0
+          "name": "Splake s",
+          "record": 6,
+          "weight": 3
         },
         {
           "name": "Char n",
-          "record": 1
+          "record": 1,
+          "weight": 3
         },
         {
-          "name": "Brown Trout n",
-          "record": 24
-        },
-        {
-          "name": "Splake s",
-          "record": 6
-        },
-        {
-          "name": "Splake n",
-          "record": 7
+          "name": "Dace n",
+          "record": 9,
+          "weight": 3
         }
       ],
       "scene": 3,
@@ -1895,24 +1857,19 @@
       "randoArea": "RR_FOREST_TEMPLE_NE_COURTYARD_LOWER",
       "records": [
         {
-          "name": "Char s",
-          "record": 0
+          "name": "Splake n",
+          "record": 7,
+          "weight": 3
         },
         {
           "name": "Char n",
-          "record": 1
+          "record": 1,
+          "weight": 3
         },
         {
-          "name": "Splake s",
-          "record": 6
-        },
-        {
-          "name": "Splake n",
-          "record": 7
-        },
-        {
-          "name": "Brown Trout n",
-          "record": 24
+          "name": "Dace n",
+          "record": 9,
+          "weight": 3
         }
       ],
       "scene": 3,
@@ -2028,24 +1985,23 @@
       ],
       "records": [
         {
-          "name": "Steelhead Trout n",
-          "record": 30
-        },
-        {
-          "name": "Steelhead Trout b",
-          "record": 31
+          "name": "Brown Trout b",
+          "record": 25,
+          "weight": 2
         },
         {
           "name": "Bighead Carp n",
           "record": 38
         },
         {
-          "name": "Brown Trout b",
-          "record": 25
+          "name": "Steelhead Trout n",
+          "record": 30,
+          "weight": 2
         },
         {
-          "name": "Brown Trout n",
-          "record": 24
+          "name": "Rainbow Trout n",
+          "record": 22,
+          "weight": 2
         }
       ],
       "scene": 5,
@@ -2165,24 +2121,19 @@
       ],
       "records": [
         {
-          "name": "Brown Trout b",
-          "record": 25
-        },
-        {
           "name": "Brown Trout n",
-          "record": 24
+          "record": 24,
+          "weight": 3
         },
         {
           "name": "Steelhead Trout n",
-          "record": 30
+          "record": 30,
+          "weight": 2
         },
         {
-          "name": "Steelhead Trout b",
-          "record": 31
-        },
-        {
-          "name": "Bighead Carp n",
-          "record": 38
+          "name": "Rainbow Trout n",
+          "record": 22,
+          "weight": 2
         }
       ],
       "scene": 5,
@@ -2244,15 +2195,13 @@
       "records": [
         {
           "name": "Silver Carp n",
-          "record": 37
+          "record": 37,
+          "weight": 4
         },
         {
           "name": "Carp b",
-          "record": 39
-        },
-        {
-          "name": "Grass Carp b",
-          "record": 40
+          "record": 39,
+          "weight": 3
         }
       ],
       "scene": 89,
@@ -2307,12 +2256,14 @@
       ],
       "records": [
         {
-          "name": "D.B.C. Carp s",
-          "record": 10
+          "name": "D.B.C. Carp n",
+          "record": 11,
+          "weight": 4
         },
         {
           "name": "Bluegill s",
-          "record": 19
+          "record": 19,
+          "weight": 2
         }
       ],
       "scene": 92,
