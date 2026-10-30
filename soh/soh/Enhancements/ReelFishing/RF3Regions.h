@@ -24,6 +24,7 @@ int RandoAreaFromName(const std::string& name); // RR_* value, -1 if empty or un
 // Step 36c (user, 2026-10-14): when a region's fish are there. Age: Link's age the region is for. A condition is a
 // game flag that must be set (or unset), counted only at its age: e.g. Lake Hylia's water is low as an adult until
 // EVENTCHKINF_RAISED_LAKE_HYLIA_WATER is set. kind "event" = eventChkInf, "switch" = the scene's switch flag.
+// Step 65b: kind "oasis" = the Desert Colossus oasis is full (Song of Storms; it empties on every scene load); no flag.
 enum class RegionAge { Both, Child, Adult };
 const char* RegionAgeName(RegionAge age); // "both", "child", "adult"
 RegionAge RegionAgeFromName(const std::string& name);

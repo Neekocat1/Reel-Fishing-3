@@ -126,6 +126,13 @@ struct SwimState {
     // step 49e: HIT
     bool kuhDone = false;    // +0x21C
     float holdLeft = 0.0f;   // s still holding for "Kuh!" (+0x220: until the motion ends)
+    // step 70a: the once-a-second "rf3-big-hover" line of a rank 4+ fish
+    float sinceBigLog = 99.0f;
+    bool bigLogged = false;
+    float bigLogPos[3] = { 0, 0, 0 };
+    float turnVel = 0.0f; // step 70e: a rank 4+ fish's hover yaw speed now (rad per tick)
+    int bigFwd = 0;  // step 70d: frames since the last line that moved along the heading, and against it
+    int bigBack = 0;
 };
 
 std::map<int32_t, SwimState> sStates;
@@ -142,6 +149,15 @@ std::map<int32_t, Body> sBodies;
 bool sPushOff = true;
 constexpr float kPushGhostSeconds = 1.0f; // 0x00198860(1.0)
 
+// Step 70e (user, 2026-10-30: the big fish's turn "seems super fast and snappy" next to their swim animation): a rank
+// 4+ hover turns with an eased yaw speed instead of RF3's fixed 3 deg (current-facing) or 0.5 deg a tick. The speed
+// builds up over kBigTurnRampS, is capped at sBigTurnDegS (CVar ReelFishing3.BigFishTurn) and falls off within the
+// last cap / kBigTurnEase of the turn. Not RF3. [assumed values]
+constexpr float kBigTurnDefaultDegS = 20.0f;
+constexpr float kBigTurnRampS = 0.4f;
+constexpr float kBigTurnEase = 0.04f; // yaw speed per tick = 4 % of the yaw still to turn, under the cap
+float sBigTurnDegS = kBigTurnDefaultDegS;
+
 struct Ctx {
     const RF3FishSwimInput& in;
     SwimState& s;
@@ -151,6 +167,15 @@ struct Ctx {
     float H;        // body height, units
     float speciesTick; // the species speed, units per tick
 };
+
+// Step 70c (user, 2026-10-30: "make the big fish move at 3x their current speed"): a rank 4+ fish only hovers, and at
+// RF3's 0.05 x species speed it looks still (70a log: about 3.5 units/s). A deliberate departure from RF3.
+constexpr float kBigHoverDriftScale = 3.0f;
+
+// The hover's drift per tick (0x0019FD10: 0.05 x the species speed), x3 for rank 4+ (step 70c).
+float HoverDrift(const Ctx& c) {
+    return c.speciesTick * kHoverDrift * (c.in.species.rank >= 4 ? kBigHoverDriftScale : 1.0f);
+}
 
 void Request(SwimState& s, int32_t code, float blend) {
     if (s.code != code) {
@@ -199,6 +224,37 @@ int TurnToward(SwimState& s, float yaw, float pitch, float* rf3YawLeft) {
     return flags;
 }
 
+// Step 70e: TurnToward for a rank 4+ hover, eased (see kBigTurnRampS). Same flags; 0 once it has settled.
+int BigTurnToward(SwimState& s, float yaw, float pitch, float* rf3YawLeft) {
+    const float cap = sBigTurnDegS * (kPi / 180.0f) * kTick;
+    const float accel = cap * kTick / kBigTurnRampS;
+    int flags = 0;
+    float dp = pitch - s.pitch;
+    float rp = cap / 4.0f;
+    if (dp > rp) {
+        flags |= 1;
+        s.pitch += rp;
+    } else if (dp < -rp) {
+        flags |= 2;
+        s.pitch -= rp;
+    } else {
+        s.pitch = pitch;
+    }
+    float dy = WrapAngle(yaw - s.yaw);
+    if (rf3YawLeft != nullptr) {
+        *rf3YawLeft = -dy;
+    }
+    const float want = std::clamp(dy * kBigTurnEase, -cap, cap);
+    s.turnVel += std::clamp(want - s.turnVel, -accel, accel);
+    if (std::fabs(dy) < 0.75f * kPi / 180.0f && std::fabs(s.turnVel) < 2.0f * accel) {
+        s.turnVel = 0.0f; // settled, under 0.75 deg off: stop there rather than snap
+    } else {
+        s.yaw = WrapAngle(s.yaw + s.turnVel);
+        flags |= (s.turnVel < 0.0f) ? 4 : 8;
+    }
+    return flags;
+}
+
 void YawPitchOf(const float d[3], float* yaw, float* pitch) {
     *yaw = std::atan2(d[0], d[2]);
     *pitch = std::atan2(d[1], std::sqrt(d[0] * d[0] + d[2] * d[2]));
@@ -206,11 +262,12 @@ void YawPitchOf(const float d[3], float* yaw, float* pitch) {
 
 // A target (0x00199AD0): distM away (at least 3 L), yaw = heading +- yawSpread, pitch +- pitchSpread (absolute);
 // levelled when out of the depth band; toward home when beyond the home radius; then the region's shape.
-void PickTarget(Ctx& c, float distM, float yawSpread, float pitchSpread) {
+// centerYaw: the heading the spread is around (step 70d's big fish); the fish's own heading when NaN
+void PickTarget(Ctx& c, float distM, float yawSpread, float pitchSpread, float centerYaw = NAN) {
     SwimState& s = c.s;
     const RF3FishSwimInput& in = c.in;
     float dist = std::max(distM * c.U, 3.0f * c.L);
-    float yaw = WrapAngle(s.yaw - yawSpread * Roll()); // RF3 sense + = right = OoT -
+    float yaw = WrapAngle((std::isnan(centerYaw) ? s.yaw : centerYaw) - yawSpread * Roll()); // RF3 sense + = right = OoT -
     float pitch = -pitchSpread * Roll();               // RF3 y down: + = nose down
     float d[3];
     Dir(yaw, pitch, d);
@@ -261,14 +318,31 @@ void Enter(Ctx& c, int32_t mode, RF3FishSwimOutput* out, int32_t why) {
         // 0x0019FA60 sets the slow hover turn only on the random-heading path; fish that face the current keep the
         // base turn (the recording: their hovers all end on the same heading)
         s.turnRate = c.in.species.facesCurrent ? kBaseTurn : kHoverTurn;
-        PickTarget(c, 1.0f, kPi, kPi / 4.0f);
+        const bool big = c.in.species.rank >= 4;
+        const bool intoFlow = c.in.species.facesCurrent && c.in.currentSpeedMps > 0.0f;
+        if (big) {
+            // step 70d (the user's choice, not RF3): big fish drift only forwards (HoverTick), so the heading comes
+            // first and the target is put in front of it (+-45 deg) instead of anywhere around
+            s.wantYaw = intoFlow ? WrapAngle(c.in.currentYaw + kPi) : WrapAngle(s.yaw - (kPi / 4.0f) * Roll());
+            s.wantPitch = intoFlow ? 0.0f : -(5.0f * kPi / 180.0f) * Roll();
+            PickTarget(c, 1.0f, kPi / 4.0f, kPi / 4.0f, s.wantYaw);
+        } else {
+            PickTarget(c, 1.0f, kPi, kPi / 4.0f);
+        }
         float d[3] = { s.target[0] - c.pos[0], s.target[1] - c.pos[1], s.target[2] - c.pos[2] };
         float len = Length3(d);
         for (int k = 0; k < 3; k++) {
             s.moveDir[k] = len > 0.001f ? d[k] / len : 0.0f;
         }
         // the wanted heading (0x001998F0, or against the flow for fish that face the current)
-        if (c.in.species.facesCurrent && c.in.currentSpeedMps > 0.0f) {
+        if (big) {
+            // step 70d: face the target; fish that face the current do only when the home radius pulled the target
+            // behind them, or they would sit at the upstream edge of their home
+            const float toTarget = std::atan2(d[0], d[2]);
+            if (len > 0.001f && (!intoFlow || std::fabs(WrapAngle(toTarget - s.wantYaw)) > kPi / 2.0f)) {
+                s.wantYaw = toTarget;
+            }
+        } else if (intoFlow) {
             s.wantYaw = WrapAngle(c.in.currentYaw + kPi);
             s.wantPitch = 0.0f;
         } else {
@@ -462,15 +536,30 @@ void Move(Ctx& c, const float d[3], float len) {
 // One hover tick (0x0019FD10). Returns true when the hover is over.
 bool HoverTick(Ctx& c) {
     SwimState& s = c.s;
-    float step = c.speciesTick * kHoverDrift;
+    float step = HoverDrift(c); // step 70c: x3 for rank 4+
     float d[3] = { s.target[0] - c.pos[0], s.target[1] - c.pos[1], s.target[2] - c.pos[2] };
-    if (Length3(d) > step) {
+    const float dist = Length3(d);
+    const bool big = c.in.species.rank >= 4;
+    float dir[3] = { s.moveDir[0], s.moveDir[1], s.moveDir[2] };
+    if (big && dist > step) {
+        // step 70d: big fish drift along their heading, slowed by how far off it the target is, never backwards;
+        // the height still goes toward the target
+        float h[3];
+        Dir(s.yaw, 0.0f, h);
+        const float flat = std::sqrt(d[0] * d[0] + d[2] * d[2]);
+        const float ahead = flat > 0.001f ? (h[0] * d[0] + h[2] * d[2]) / flat : 0.0f;
+        step *= std::max(0.0f, ahead);
+        dir[0] = h[0] * flat / dist;
+        dir[1] = d[1] / dist;
+        dir[2] = h[2] * flat / dist;
+    }
+    if (dist > step && step > 0.0f) {
         float n[3];
         // the probe reaches the drift step + L/2, from behind
         int32_t other = -1;
-        int hit = ProbeAll(c, s.moveDir, step + 0.5f * c.L, n, &other);
+        int hit = ProbeAll(c, dir, step + 0.5f * c.L, n, &other);
         if (hit == 0) {
-            Move(c, s.moveDir, step);
+            Move(c, dir, step);
         } else if (hit == 3) {
             // step 47e: another fish: retarget 10 L straight away from it and drift that way (0x0019FD10)
             for (int k = 0; k < 3; k++) {
@@ -478,14 +567,22 @@ bool HoverTick(Ctx& c) {
                 s.target[k] = c.pos[k] + n[k] * 10.0f * c.L;
             }
             LogPush(c, other, "hover-away");
-            Move(c, s.moveDir, step);
+            if (big) {
+                // step 70d: turn away first; the forward drift follows once the new target is in front
+                s.wantYaw = std::atan2(n[0], n[2]);
+                s.turnDone = false;
+            } else {
+                Move(c, s.moveDir, step);
+            }
         } else {
             s.turnDone = true; // RF3: a probe hit stops the turn too
+            s.turnVel = 0.0f;  // step 70e: no stale speed into the next hover's turn
         }
     }
     if (!s.turnDone) {
         float left = 0.0f;
-        int flags = TurnToward(s, s.wantYaw, s.wantPitch, &left);
+        int flags = big ? BigTurnToward(s, s.wantYaw, s.wantPitch, &left) // step 70e
+                        : TurnToward(s, s.wantYaw, s.wantPitch, &left);
         if (flags == 0) {
             s.turnDone = true;
             RequestRaw(s, 2, 0.3f);
@@ -801,6 +898,10 @@ extern "C" void RF3FishSwim_SetPushOff(int32_t on) {
     sPushOff = on != 0;
 }
 
+extern "C" void RF3FishSwim_SetBigTurn(float degPerS) {
+    sBigTurnDegS = (degPerS > 0.0f) ? degPerS : kBigTurnDefaultDegS;
+}
+
 extern "C" int32_t RF3FishSwim_BodiesOverlap(int32_t a, int32_t b) {
     auto ia = sBodies.find(a);
     auto ib = sBodies.find(b);
@@ -884,12 +985,46 @@ extern "C" void RF3FishSwim_Step(const RF3FishSwimInput* inp, RF3FishSwimOutput*
         out->target[k] = s.target[k];
     }
     RF3FishSwim_Body(in.slot, c.pos, s.yaw, s.pitch, in.lengthM, in.frame); // step 47e: where it is now
+    // Step 70a: a rank 4+ fish only hovers (mode 0 over and over). Once a second: where it is, its drift target, and
+    // how far it moved in that second, to see whether it moves at all.
+    s.sinceBigLog += kTick * static_cast<float>(ticks);
+    if (s.rank >= 4 && s.mode == RF3_SWIM_HOVER && !out->modeChanged) {
+        const float along = out->step[0] * std::sin(s.yaw) + out->step[2] * std::cos(s.yaw);
+        s.bigFwd += (along > 1e-4f) ? 1 : 0;
+        s.bigBack += (along < -1e-4f) ? 1 : 0;
+    }
+    if ((in.log != nullptr) && (s.rank >= 4) && (s.sinceBigLog >= 1.0f)) {
+        float moved = 0.0f;
+        float toTarget = 0.0f;
+        for (int k = 0; k < 3; k++) {
+            moved += (c.pos[k] - s.bigLogPos[k]) * (c.pos[k] - s.bigLogPos[k]);
+            toTarget += (s.target[k] - c.pos[k]) * (s.target[k] - c.pos[k]);
+        }
+        const float homeDx = c.pos[0] - in.home[0];
+        const float homeDz = c.pos[2] - in.home[2];
+        char line[320];
+        std::snprintf(line, sizeof(line),
+                      "slot=%d rf3-big-hover rank=%d mode=%d t=%.2fs pos=(%.0f,%.0f,%.0f) target=(%.0f,%.0f,%.0f) "
+                      "toTarget=%.1f homeDist=%.0f moved1s=%.1f drift=%.3f/tick homeRadiusM=%.1f fwd=%d back=%d turn=%.1fdeg/s",
+                      in.slot, s.rank, s.mode, s.t, c.pos[0], c.pos[1], c.pos[2], s.target[0], s.target[1],
+                      s.target[2], std::sqrt(toTarget), std::sqrt(homeDx * homeDx + homeDz * homeDz),
+                      s.bigLogged ? std::sqrt(moved) : 0.0f, HoverDrift(c), in.species.homeRadiusM, s.bigFwd,
+                      s.bigBack, s.turnVel / kTick * (180.0f / kPi));
+        s.bigFwd = 0;
+        s.bigBack = 0;
+        in.log(line);
+        for (int k = 0; k < 3; k++) {
+            s.bigLogPos[k] = c.pos[k];
+        }
+        s.bigLogged = true;
+        s.sinceBigLog = 0.0f;
+    }
     out->yaw = s.yaw;
     out->pitch = s.pitch;
     out->mode = s.mode;
     out->modeTime = s.t;
     out->hoverLen = s.hoverLen;
-    out->speed = (s.mode == RF3_SWIM_HOVER) ? c.speciesTick * kHoverDrift : s.speed;
+    out->speed = (s.mode == RF3_SWIM_HOVER) ? HoverDrift(c) : s.speed;
     out->code = s.code;
     out->rawAnim = s.raw;
     out->blend = s.blend;

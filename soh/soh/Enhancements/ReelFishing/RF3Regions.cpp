@@ -109,7 +109,8 @@ bool LoadFishRegions(std::string* error) {
             r.age = RegionAgeFromName(j.value("age", std::string("both"))); // step 36c
             for (const nlohmann::json& c : j.value("conditions", nlohmann::json::array())) {
                 RegionCondition cond;
-                cond.kind = c.value("kind", std::string("event")) == "switch" ? "switch" : "event";
+                const std::string kind = c.value("kind", std::string("event"));
+                cond.kind = (kind == "switch" || kind == "oasis") ? kind : "event"; // step 65b: "oasis"
                 cond.flag = std::max(0, c.value("flag", 0));
                 cond.set = c.value("set", true);
                 cond.age = RegionAgeFromName(c.value("age", std::string("both")));

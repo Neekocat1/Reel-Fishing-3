@@ -367,6 +367,60 @@ static void DrawFishView() {
     }
 }
 
+// Step 67: how an OoT-model pond fish (Hylian Bass, Loach) looks in STRUGGLE, tuned live. Log: rf3_models.txt
+// "pond-struggle-sweep" at each side change.
+static void DrawPondStruggle() {
+    if (!ImGui::CollapsingHeader("Pond fish struggle (step 67)")) {
+        return;
+    }
+    float sweep = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleSweep"), 30.0f);
+    if (ImGui::SliderFloat("Sweep across the line (units; was 80)", &sweep, 0.0f, 120.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleSweep"), sweep);
+    }
+    int frames = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleFrames"), 15);
+    if (ImGui::SliderInt("Game frames per side (20 = 1 s; was 10)", &frames, 1, 60)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleFrames"), frames);
+    }
+    float speed = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleSpeed"), 3.0f);
+    if (ImGui::SliderFloat("Swim speed (was 6)", &speed, 0.5f, 10.0f, "%.1f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleSpeed"), speed);
+    }
+    float beat = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleBeat"), 1.2f);
+    if (ImGui::SliderFloat("Tail beat speed (was 1.6)", &beat, 0.2f, 3.0f, "%.2f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleBeat"), beat);
+    }
+    float amp = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleAmp"), 3500.0f);
+    if (ImGui::SliderFloat("Tail beat size (was 6000)", &amp, 500.0f, 8000.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleAmp"), amp);
+    }
+    int turn = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleTurn"), 2);
+    if (ImGui::SliderInt("Turn speed x (was 3)", &turn, 1, 5)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleTurn"), turn);
+    }
+    if (ImGui::Button("Reset to the step 67 defaults")) {
+        CVarClear(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleSweep"));
+        CVarClear(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleFrames"));
+        CVarClear(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleSpeed"));
+        CVarClear(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleBeat"));
+        CVarClear(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleAmp"));
+        CVarClear(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleTurn"));
+    }
+}
+
+// Step 70e: the big (rank 4+) fish's hover turn speed, saved as a CVar.
+static void DrawBigFishTurn() {
+    if (!ImGui::CollapsingHeader("Big fish turn (step 70e)")) {
+        return;
+    }
+    float turn = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.BigFishTurn"), 20.0f);
+    if (ImGui::SliderFloat("Top turn speed (deg/s; RF3 180 or 30)", &turn, 5.0f, 90.0f, "%.0f")) {
+        CVarSetFloat(CVAR_ENHANCEMENT("ReelFishing3.BigFishTurn"), turn);
+    }
+    if (ImGui::Button("Reset to the step 70e default (20)")) {
+        CVarClear(CVAR_ENHANCEMENT("ReelFishing3.BigFishTurn"));
+    }
+}
+
 // Step 20c-3d: the fly cast's false-casting animation (frames of Link's throw), saved as CVars.
 static void DrawFlyCast() {
     if (!ImGui::CollapsingHeader("Fly cast animation (step 20c-3d)")) {
@@ -600,6 +654,8 @@ void RF3DebugWindow::DrawElement() {
     DrawStock();
     DrawTackle();
     DrawFlyCast();
+    DrawPondStruggle(); // step 67
+    DrawBigFishTurn();  // step 70e
     DrawFishView(); // step 61b
     DrawSounds();   // step 63b
     DrawLureModel();

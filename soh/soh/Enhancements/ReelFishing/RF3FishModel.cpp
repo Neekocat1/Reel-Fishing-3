@@ -912,9 +912,20 @@ int32_t ChooseRequest(const RF3FishDrawInput& in, SlotAnim& a, int32_t yawRate, 
         why = "hooked mode=" + std::to_string(mode);
         blend = 0.2f; // RF3's fight states ask with 0.2 s (HIT 0.02, FOLLOW 0.5)
         switch (mode) {
-            case 2: // HIT
+            case 2: { // HIT
+                // Step 65c: what RF3FishSwim's HIT asks for: its swim before the hook window's centre, "Kuh!" (28)
+                // at it (0x001A1820). A fish without that state (a co-op ghost) plays "Kuh!" from the start as before.
+                int32_t swimCode = -1;
+                int32_t swimRaw = -1;
+                float swimBlend = 0.2f;
+                if (RF3FishSwim_Motion(in.slot, in.frame, &swimCode, &swimRaw, &swimBlend) && (swimCode >= 0)) {
+                    blend = (swimCode == kCodeKuh) ? 0.02f : swimBlend;
+                    why += " hit-swim";
+                    return (swimRaw >= 0) ? (kRawBase + swimRaw) : swimCode;
+                }
                 blend = 0.02f;
                 return kCodeKuh;
+            }
             case 8: // RESIST
                 return kCodeThrash;
             case 9: // STRUGGLE

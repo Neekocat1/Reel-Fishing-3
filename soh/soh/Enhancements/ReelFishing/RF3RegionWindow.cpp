@@ -88,8 +88,12 @@ struct ConditionPreset {
 };
 const ConditionPreset kConditionPresets[] = {
     { "Lake Hylia raised (adult)", { "event", EVENTCHKINF_RAISED_LAKE_HYLIA_WATER, true, rf3::RegionAge::Adult } },
+    // Step 65a: low as an adult before the Water Temple, and whenever the rando water control lowers it (it clears
+    // the event too, LakeHyliaWaterControl.cpp)
+    { "Lake Hylia lowered (adult)", { "event", EVENTCHKINF_RAISED_LAKE_HYLIA_WATER, false, rf3::RegionAge::Adult } },
     { "Kakariko well not drained", { "event", EVENTCHKINF_DRAINED_WELL_IN_KAKARIKO, false, rf3::RegionAge::Both } },
     { "Rando water control: lake not lowered (switch 0x3E)", { "switch", 0x3E, false, rf3::RegionAge::Both } },
+    { "Colossus oasis full (Song of Storms)", { "oasis", 0, true, rf3::RegionAge::Both } }, // step 65b
 };
 const char* kAgeLabels[] = { "both", "child", "adult" };
 
@@ -117,21 +121,25 @@ void DrawSpawnConditions(rf3::FishRegion& r) {
     for (size_t i = 0; i < r.conditions.size(); i++) {
         rf3::RegionCondition& c = r.conditions[i];
         ImGui::PushID(static_cast<int>(i));
-        int kind = c.kind == "switch" ? 1 : 0;
-        const char* kinds[] = { "event", "switch" };
+        int kind = c.kind == "switch" ? 1 : (c.kind == "oasis" ? 2 : 0);
+        const char* kinds[] = { "event", "switch", "oasis" }; // step 65b: "oasis" has no flag
         ImGui::SetNextItemWidth(90);
-        if (ImGui::Combo("##kind", &kind, kinds, 2)) {
+        if (ImGui::Combo("##kind", &kind, kinds, 3)) {
             c.kind = kinds[kind];
             rf3::RegionsDirty() = true;
         }
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(110);
-        if (ImGui::InputInt("##flag", &c.flag, 1, 16, ImGuiInputTextFlags_CharsHexadecimal)) {
-            c.flag = std::max(0, c.flag);
-            rf3::RegionsDirty() = true;
+        if (c.kind == "oasis") {
+            ImGui::TextDisabled("Colossus oasis full");
+        } else {
+            ImGui::SetNextItemWidth(110);
+            if (ImGui::InputInt("##flag", &c.flag, 1, 16, ImGuiInputTextFlags_CharsHexadecimal)) {
+                c.flag = std::max(0, c.flag);
+                rf3::RegionsDirty() = true;
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("0x%X", c.flag);
         }
-        ImGui::SameLine();
-        ImGui::TextDisabled("0x%X", c.flag);
         ImGui::SameLine();
         if (ImGui::Checkbox("set", &c.set)) {
             rf3::RegionsDirty() = true;

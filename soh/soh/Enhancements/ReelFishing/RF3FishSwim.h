@@ -107,6 +107,8 @@ int32_t RF3FishSwim_Motion(int32_t slot, uint32_t frame, int32_t* code, int32_t*
 void RF3FishSwim_Body(int32_t slot, const float pos[3], float yaw, float pitch, float lengthM, uint32_t frame);
 // Step 47e: push-off on or off (CVar ReelFishing3.FishPushOff; the harness compares both)
 void RF3FishSwim_SetPushOff(int32_t on);
+// Step 70e: the rank 4+ hover turn's top speed, deg/s (CVar ReelFishing3.BigFishTurn); <= 0 = the default
+void RF3FishSwim_SetBigTurn(float degPerS);
 // Step 47e: do these two slots' bodies overlap now (RF3's two-sphere test, as seen by slot a)?
 int32_t RF3FishSwim_BodiesOverlap(int32_t a, int32_t b);
 // RF3's random generator is seeded per run (the harness sets it for repeatable runs)

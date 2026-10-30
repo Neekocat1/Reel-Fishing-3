@@ -42,7 +42,8 @@ constexpr int kRods = 11; // RF3's 10 + OoT's pole (10)
 // A fish that can be caught somewhere: its record's species, longest length and rod mask, and the areas to reach.
 // Step 42: what a region's flag condition (step 36c) becomes in logic.
 // Step 51: WaterTempleLevel = a Water Temple water-level switch; `levels` is the levels it allows (kWt* bits).
-enum class CondLogic { Always, Never, WaterTempleClear, DrainWell, WaterTempleLevel };
+// Step 65b: ColossusOasis = the oasis filled by Song of Storms (fishing it needs no way into the water).
+enum class CondLogic { Always, Never, WaterTempleClear, DrainWell, WaterTempleLevel, ColossusOasis };
 struct SourceCond {
     rf3::RegionAge age = rf3::RegionAge::Both; // the age it counts at
     CondLogic logic = CondLogic::Never;
@@ -112,7 +113,9 @@ constexpr uint8_t kWtLow = 1, kWtMid = 2, kWtHigh = 4, kWtAll = 7;
 SourceCond LogicOf(const rf3::RegionCondition& c, int scene) {
     SourceCond sc;
     sc.age = c.age;
-    if (c.kind == "event" && c.flag == kRaisedLake) {
+    if (c.kind == "oasis") { // step 65b: empty on every entry, so "not full" always holds
+        sc.logic = c.set ? CondLogic::ColossusOasis : CondLogic::Always;
+    } else if (c.kind == "event" && c.flag == kRaisedLake) {
         sc.logic = c.set ? CondLogic::WaterTempleClear : CondLogic::Always;
     } else if (c.kind == "switch" && c.flag == kWaterSwitch && scene == SCENE_LAKE_HYLIA) {
         sc.logic = c.set ? CondLogic::WaterTempleClear : CondLogic::Always;
@@ -148,6 +151,7 @@ std::string CondLogicName(const SourceCond& c) {
         case CondLogic::WaterTempleClear: return "water-temple-clear";
         case CondLogic::DrainWell: return "drain-well";
         case CondLogic::WaterTempleLevel: return "wt(" + WtLevelsName(c.levels) + ")";
+        case CondLogic::ColossusOasis: return "song-of-storms";
         default: return "never";
     }
 }
@@ -157,6 +161,7 @@ bool CondHolds(CondLogic l) {
         case CondLogic::Always: return true;
         case CondLogic::WaterTempleClear: return logic->Get(LOGIC_WATER_TEMPLE_CLEAR);
         case CondLogic::DrainWell: return logic->Get(LOGIC_DRAIN_WELL);
+        case CondLogic::ColossusOasis: return logic->CanUse(RG_SONG_OF_STORMS);
         default: return false;
     }
 }

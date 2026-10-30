@@ -381,10 +381,10 @@
       "angle": 0.0,
       "conditions": [
         {
-          "age": "both",
-          "flag": 62,
-          "kind": "switch",
-          "set": true
+          "age": "adult",
+          "flag": 105,
+          "kind": "event",
+          "set": false
         }
       ],
       "currentReach": 5.0,
@@ -2252,6 +2252,66 @@
       ],
       "scene": 89,
       "surfaceY": 20.0
+    },
+    {
+      "age": "both",
+      "angle": 0.0,
+      "conditions": [
+        {
+          "age": "both",
+          "flag": 0,
+          "kind": "oasis",
+          "set": true
+        }
+      ],
+      "currentReach": 5.0,
+      "currentSpeed": 0.0,
+      "currentYaw": 0.0,
+      "fishCount": 3,
+      "holes": [],
+      "maxX": 1036.4154052734375,
+      "maxZ": 2472.645263671875,
+      "minX": 592.025390625,
+      "minZ": 1973.6871337890625,
+      "name": "Scene 92 region 1",
+      "outline": [
+        [
+          1001.2999877929688,
+          2392.5
+        ],
+        [
+          1036.4000244140625,
+          2201.800048828125
+        ],
+        [
+          904.2999877929688,
+          1973.699951171875
+        ],
+        [
+          619.0,
+          2013.699951171875
+        ],
+        [
+          592.0,
+          2286.699951171875
+        ],
+        [
+          810.4000244140625,
+          2472.60009765625
+        ]
+      ],
+      "records": [
+        {
+          "name": "D.B.C. Carp s",
+          "record": 10
+        },
+        {
+          "name": "Bluegill s",
+          "record": 19
+        }
+      ],
+      "scene": 92,
+      "surfaceY": 0.0
     }
   ],
   "version": 1

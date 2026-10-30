@@ -149,7 +149,25 @@ bool AgeMatches(rf3::RegionAge age) {
     return age == rf3::RegionAge::Both || (age == rf3::RegionAge::Adult) == adult;
 }
 
+// Step 65b: the Colossus oasis is full. BgSpot11Oasis starts at y -100 on every scene load and rises to 0 after Song of
+// Storms is played inside it [code]; its actor is read, not the water box, which keeps the last visit's height until
+// the actor's init resets it.
+bool OasisFull(PlayState* play) {
+    if (play->sceneNum != SCENE_DESERT_COLOSSUS) {
+        return false;
+    }
+    for (Actor* a = play->actorCtx.actorLists[ACTORCAT_BG].head; a != nullptr; a = a->next) {
+        if (a->id == ACTOR_BG_SPOT11_OASIS) {
+            return a->world.pos.y >= -0.01f;
+        }
+    }
+    return false;
+}
+
 bool FlagSet(PlayState* play, const rf3::RegionCondition& c) {
+    if (c.kind == "oasis") {
+        return OasisFull(play);
+    }
     return c.kind == "switch" ? Flags_GetSwitch(play, c.flag) != 0 : Flags_GetEventChkInf(c.flag) != 0;
 }
 

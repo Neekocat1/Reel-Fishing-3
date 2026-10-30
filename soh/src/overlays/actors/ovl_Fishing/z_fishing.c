@@ -2656,6 +2656,160 @@ static void Fishing_RF3Cancel(void) {
     sFishingPlayerCinematicState = 3;
 }
 
+// Step 71a (user, 2026-10-30): an RF3 rod's lure is recalled when it touches land, instead of OoT's lure dragging over
+// the ground. OoT's pole (box 10) keeps OoT's behaviour, as RF3Lure_Begin does.
+static s32 Fishing_RF3RecallsOnLand(void) {
+    return RF3_IsEnabled() && (RF3Tackle_PoleLure() < 0);
+}
+
+// Step 71a: the cast ends and the line comes back, as the rod button's cancel does with no fish on. why: 0 = the cast
+// landed on ground, 1 = on the pond's counter, 2 = an in-water lure reached land.
+static void Fishing_RF3RecallFromLand(s32 why) {
+    RF3Rod_LogEvent("rf3-recall-land", why);
+    RF3Lure_End();
+    sRodLineSpooled = 195.0f;
+    sRodCastState = 0;
+    D_80B7E148 = 520.0f;
+    sFishingPlayerCinematicState = 3;
+}
+
+// Step 71b: the drift the resting lure really got this frame (after sliding), for the chasing fish (29h-3).
+static f32 sRF3LureDriftX = 0.0f;
+static f32 sRF3LureDriftZ = 0.0f;
+static u32 sRF3LureDriftFrame = 0;
+static u32 sRF3DriftSlideLogFrame = 0;
+#define RF3_DRIFT_WALL_MARGIN 5.0f // step 71b: the lure keeps this far from a wall [assumed]
+#define RF3_DRIFT_SHORE_PROBE 10.0f // step 71b: how far around the lure the shore's direction is sampled [assumed]
+
+// Step 71b: is there water above the ground at (x, z)? The pond: inside its 920 radius. Portable: as
+// Fishing_RF3ProbeUnderLure, at that point.
+static s32 Fishing_RF3WaterAt(PlayState* play, f32 x, f32 z) {
+    CollisionPoly* poly;
+    WaterBox* waterBox;
+    Vec3f probe;
+    f32 surface;
+    f32 floorY;
+
+    if (!sRF3Portable) {
+        return !Fishing_RF3OnLand(SQ(x) + SQ(z));
+    }
+    probe.x = x;
+    probe.y = sLurePos.y + 50.0f;
+    probe.z = z;
+    floorY = BgCheck_EntityRaycastFloor1(&play->colCtx, &poly, &probe);
+    return WaterBox_GetSurface1(play, &play->colCtx, x, z, &surface, &waterBox) && (surface > floorY);
+}
+
+// Step 71b: can the lure move by (dx, dz)? 0 = yes, 1 = a wall (its horizontal normal in *nx/*nz), 2 = land there.
+static s32 Fishing_RF3DriftBlocked(PlayState* play, f32 dx, f32 dz, f32* nx, f32* nz) {
+    CollisionPoly* poly;
+    Vec3f from = sLurePos;
+    Vec3f to;
+    Vec3f hit;
+    s32 bgId;
+    f32 len = sqrtf(SQ(dx) + SQ(dz));
+
+    to.x = sLurePos.x + dx + (dx / len) * RF3_DRIFT_WALL_MARGIN;
+    to.y = sLurePos.y;
+    to.z = sLurePos.z + dz + (dz / len) * RF3_DRIFT_WALL_MARGIN;
+    if (BgCheck_EntityLineTest1(&play->colCtx, &from, &to, &hit, &poly, true, false, false, true, &bgId)) {
+        f32 px = COLPOLY_GET_NORMAL(poly->normal.x);
+        f32 pz = COLPOLY_GET_NORMAL(poly->normal.z);
+        f32 pl = sqrtf(SQ(px) + SQ(pz));
+
+        *nx = (pl > 0.001f) ? (px / pl) : 0.0f;
+        *nz = (pl > 0.001f) ? (pz / pl) : 0.0f;
+        return 1;
+    }
+    if (!Fishing_RF3WaterAt(play, sLurePos.x + dx, sLurePos.z + dz)) {
+        return 2;
+    }
+    return 0;
+}
+
+// Step 71b (user, 2026-10-30): the current's drift for the resting lure, kept in the water. A move into a wall or onto
+// land goes along it instead: the drift minus its part into the wall's normal, or into the shore (estimated from the
+// land among 8 points around the lure); failing that x or z alone; failing that no move this frame.
+static void Fishing_RF3DriftLure(PlayState* play, f32 dx, f32 dz) {
+    f32 nx = 0.0f;
+    f32 nz = 0.0f;
+    f32 tryX[3];
+    f32 tryZ[3];
+    s32 blocked;
+    s32 i;
+
+    sRF3LureDriftX = sRF3LureDriftZ = 0.0f;
+    sRF3LureDriftFrame = play->gameplayFrames;
+    if ((SQ(dx) + SQ(dz)) < SQ(0.0001f)) {
+        return;
+    }
+    blocked = Fishing_RF3DriftBlocked(play, dx, dz, &nx, &nz);
+    if (blocked == 0) {
+        sLurePos.x += dx;
+        sLurePos.z += dz;
+        sRF3LureDriftX = dx;
+        sRF3LureDriftZ = dz;
+        return;
+    }
+    if (blocked == 2) { // the shore's normal points from the land toward the lure
+        nx = nz = 0.0f;
+        for (i = 0; i < 8; i++) {
+            f32 ax = Math_CosF(i * (M_PI / 4.0f));
+            f32 az = Math_SinF(i * (M_PI / 4.0f));
+
+            if (!Fishing_RF3WaterAt(play, sLurePos.x + ax * RF3_DRIFT_SHORE_PROBE, sLurePos.z + az * RF3_DRIFT_SHORE_PROBE)) {
+                nx -= ax;
+                nz -= az;
+            }
+        }
+        if (sqrtf(SQ(nx) + SQ(nz)) > 0.001f) {
+            f32 nl = sqrtf(SQ(nx) + SQ(nz));
+            nx /= nl;
+            nz /= nl;
+        }
+    }
+    {
+        f32 into = (dx * nx) + (dz * nz);
+
+        tryX[0] = dx - (into * nx); // along the wall or shore
+        tryZ[0] = dz - (into * nz);
+    }
+    tryX[1] = dx; // then one axis at a time, the longer first
+    tryZ[1] = 0.0f;
+    tryX[2] = 0.0f;
+    tryZ[2] = dz;
+    if (fabsf(dz) > fabsf(dx)) {
+        tryX[1] = 0.0f;
+        tryZ[1] = dz;
+        tryX[2] = dx;
+        tryZ[2] = 0.0f;
+    }
+    for (i = 0; i < 3; i++) {
+        f32 ux;
+        f32 uz;
+
+        if ((SQ(tryX[i]) + SQ(tryZ[i])) < SQ(0.0001f)) {
+            continue;
+        }
+        if (Fishing_RF3DriftBlocked(play, tryX[i], tryZ[i], &ux, &uz) == 0) {
+            sLurePos.x += tryX[i];
+            sLurePos.z += tryZ[i];
+            sRF3LureDriftX = tryX[i];
+            sRF3LureDriftZ = tryZ[i];
+            break;
+        }
+    }
+    if ((play->gameplayFrames - sRF3DriftSlideLogFrame) >= 20) { // about once a second while blocked
+        char line[160];
+
+        sRF3DriftSlideLogFrame = play->gameplayFrames;
+        snprintf(line, sizeof(line), "lure-drift-slide by=%s moved=%.3f of=%.3f lure=(%.0f,%.0f,%.0f)",
+                 (blocked == 1) ? "wall" : "land", sqrtf(SQ(sRF3LureDriftX) + SQ(sRF3LureDriftZ)),
+                 sqrtf(SQ(dx) + SQ(dz)), sLurePos.x, sLurePos.y, sLurePos.z);
+        RF3FishMove_Log(line);
+    }
+}
+
 void Fishing_UpdateLure(Fishing* this, PlayState* play) {
     f32 spE4;
     f32 spE0;
@@ -2755,9 +2909,13 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
     }
 
     // Step 20a-6: with RF3 on, the rod button cancels (lure in the water or on land, or a fish on). It replaces
-    // OoT's rod-button wiggle and its pull on a lure on land.
-    if (RF3_IsEnabled() && ((sRodCastState == 2) || (sRodCastState == 3) || (sRodCastState == 4)) &&
+    // OoT's rod-button wiggle and its pull on a lure on land. Step 72 (user, 2026-10-30): also while the lure is still
+    // flying (state 1, which starts only after the charging press is let go).
+    if (RF3_IsEnabled() && ((sRodCastState >= 1) && (sRodCastState <= 4)) &&
         CHECK_BTN_ALL(play->state.input[0].press.button, sRF3RodBtn)) {
+        if (sRodCastState == 1) {
+            RF3Rod_LogEvent("rf3-cancel-flight", (s32)(sLurePos.y - WATER_SURFACE_Y(play))); // units above the water
+        }
         Fishing_RF3Cancel();
     }
 
@@ -2931,6 +3089,10 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     if (Fishing_IsAboveCounter(&sLurePos)) {
                         sRodCastState = 3;
                         sReelLinePosStep = 0.0f;
+                        if (Fishing_RF3RecallsOnLand()) {
+                            Fishing_RF3RecallFromLand(1); // step 71a
+                            break;
+                        }
                     }
                 }
 
@@ -2940,6 +3102,10 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     sLurePosDelta.x = sLurePosDelta.y = sLurePosDelta.z = 0.0f;
                     sRodCastState = 3;
                     sReelLinePosStep = 0.0;
+                    if (Fishing_RF3RecallsOnLand()) {
+                        Fishing_RF3RecallFromLand(0); // step 71a
+                        break;
+                    }
                 } else {
                     Math_ApproachF(&D_80B7E148, 0.0f, 1.0f, 0.05f);
                     Sfx_PlaySfxAtPos(&sSoundPos, NA_SE_EN_FANTOM_FLOAT - SFX_FLAG);
@@ -3249,8 +3415,7 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
                     f32 curX, curZ;
                     if (RF3Current_At(!sRF3Portable, play->sceneNum, sLurePos.x, sLurePos.z, &curX, &curZ)) {
                         f32 share = RF3Lure_DriftScale() * (RF3_SUBSTEPS / 60.0f);
-                        sLurePos.x += curX * share;
-                        sLurePos.z += curZ * share;
+                        Fishing_RF3DriftLure(play, curX * share, curZ * share); // step 71b: slides along walls
                     }
                 }
             } else {
@@ -3261,6 +3426,10 @@ void Fishing_UpdateLure(Fishing* this, PlayState* play) {
 
             if (RF3Lure_IsActive()) { // step 20a-5
                 if (Fishing_RF3OnLand(SQ(sLurePos.x) + SQ(sLurePos.z))) {
+                    if (Fishing_RF3RecallsOnLand()) {
+                        Fishing_RF3RecallFromLand(2); // step 71a: not OoT's lure on the ground
+                        break;
+                    }
                     RF3Lure_End();
                 } else {
                     Fishing_RF3LureDepthApply(play, input);
@@ -3716,15 +3885,27 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
             // straight): on the line at the fight distance, no sweep; RF3FishModel rolls it (bank).
             radial = (gap > 20.0f) ? rf3Out.targetDistUnits : dist;
         } else {
-            // Step 8h: a wide sweep across the line, changing side every 0.5 s, so it reads
-            // as a fight. 8g's �40 units every 0.25 s was too small and too fast to see.
+            // Step 8h: a sweep across the line, changing side on a timer, so it reads as a fight.
+            // Step 67 (user: "a little too over the top"): closer to RF3's (on the line, no sweep) but a
+            // little more active; the numbers are CVars, tuned in the RF3 debug window (was 80 units / 10 frames).
             if (sRF3SweepTimer == 0) {
+                char line[160];
+
                 sRF3SweepSide ^= 1;
-                sRF3SweepTimer = 10;
+                sRF3SweepTimer = (u8)CLAMP(CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleFrames"), 15), 1, 100);
+                snprintf(line, sizeof(line),
+                         "pond-struggle-sweep side=%d sweep=%.0f frames=%d speed=%.1f beat=%.2f amp=%.0f turn=%d",
+                         sRF3SweepSide, CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleSweep"), 30.0f),
+                         sRF3SweepTimer, CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleSpeed"), 3.0f),
+                         CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleBeat"), 1.2f),
+                         CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleAmp"), 3500.0f),
+                         CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleTurn"), 2));
+                RF3FishMove_Log(line);
             }
             sRF3SweepTimer--;
             radial = (gap > 20.0f) ? rf3Out.targetDistUnits : dist;
-            across = sRF3SweepSide ? 80.0f : -80.0f;
+            across = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleSweep"), 30.0f);
+            across = sRF3SweepSide ? across : -across;
         }
         this->fishTargetPos.x = player->actor.world.pos.x + (ux * radial) - (uz * across);
         this->fishTargetPos.z = player->actor.world.pos.z + (uz * radial) + (ux * across);
@@ -3780,7 +3961,8 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
 
         Math_ApproachF(&sRF3FishSpeed, CLAMP(radialSpeed + (MAX(behind, 0.0f) * 0.02f), 0.3f, 2.5f), 1.0f, 0.2f);
     } else if ((rf3Out.mode == 9) && !rf3Motions) {
-        Math_ApproachF(&sRF3FishSpeed, 6.0f, 1.0f, 1.0f); // STRUGGLE: fast sweep (step 8h)
+        // STRUGGLE: the sweep's speed (step 8h: 6; step 67: a CVar)
+        Math_ApproachF(&sRF3FishSpeed, CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleSpeed"), 3.0f), 1.0f, 1.0f);
     } else {
         Math_ApproachF(&sRF3FishSpeed, CLAMP(radialSpeed + (gap * 0.03f) + drift, 0.3f, 4.0f), 1.0f, 0.1f);
     }
@@ -3789,10 +3971,11 @@ static s32 Fishing_RF3Fight(Fishing* this, PlayState* play, Input* input, u8* ho
     // Step 8h: tail beat by state (OoT's procedural swim: unk_190 = beat speed, unk_194 =
     // amplitude), set after OoT's own state-5 values. STRUGGLE also turns fast so the sweep shows.
     if ((rf3Out.mode == 9) && !rf3Motions) {
-        this->unk_190 = 1.6f;
-        this->unk_194 = 6000.0f;
+        // step 67: CVars (step 8h: beat 1.6, amplitude 6000, turn x3)
+        this->unk_190 = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleBeat"), 1.2f);
+        this->unk_194 = CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleAmp"), 3500.0f);
         this->rotationStep = 16384.0f;
-        sRF3TurnScale = 3;
+        sRF3TurnScale = (s16)CLAMP(CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.PondStruggleTurn"), 2), 1, 5);
     } else if ((rf3Out.mode == 10) || (rf3Out.mode == 11)) {
         this->unk_190 = 0.6f;
         this->unk_194 = 1500.0f;
@@ -7884,16 +8067,13 @@ static s32 Fishing_RF3ApproachMove(Fishing* this, PlayState* play) {
     // never reached it).
     f32 driftX = 0.0f;
     f32 driftZ = 0.0f;
-    if (RF3Lure_IsActive() && (sRodCastState == 3)) {
-        f32 curX;
-        f32 curZ;
-        if (RF3Current_At(!sRF3Portable, play->sceneNum, sLurePos.x, sLurePos.z, &curX, &curZ)) {
-            f32 share = RF3Lure_DriftScale() * (RF3_SUBSTEPS / 60.0f);
-            driftX = curX * share;
-            driftZ = curZ * share;
-            this->actor.world.pos.x += driftX;
-            this->actor.world.pos.z += driftZ;
-        }
+    // Step 71b: the drift the lure really got (it slides along walls and banks), this frame's or, if the lure hasn't
+    // moved yet this frame, the last one's.
+    if (RF3Lure_IsActive() && (sRodCastState == 3) && ((play->gameplayFrames - sRF3LureDriftFrame) <= 1)) {
+        driftX = sRF3LureDriftX;
+        driftZ = sRF3LureDriftZ;
+        this->actor.world.pos.x += driftX;
+        this->actor.world.pos.z += driftZ;
     }
     // 29h-4: the lure's own speed (reeling, twitches), without the current the fish already shares. Measured once per
     // game frame; a jump (a new cast) or a gap in frames counts as still.
@@ -8063,6 +8243,7 @@ static s32 Fishing_RF3FreeSwim(Fishing* this, PlayState* play, Input* input) {
     sRF3MoveFish = this;
     sRF3SwimSlot = slot;
     RF3FishSwim_SetPushOff(CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.FishPushOff"), 1)); // step 47e
+    RF3FishSwim_SetBigTurn(CVarGetFloat(CVAR_ENHANCEMENT("ReelFishing3.BigFishTurn"), 0.0f)); // step 70e
     RF3FishSwim_Step(&in, &out);
     sRF3SwimFrame[slot] = play->gameplayFrames + 1;
     sRF3SwimYaw[slot] = (s16)(out.yaw * (32768.0f / M_PI));
