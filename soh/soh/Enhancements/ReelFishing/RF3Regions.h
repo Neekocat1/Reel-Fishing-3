@@ -6,6 +6,7 @@
 // SoH fork. See docs/DESIGN.md step 16.
 
 #include <cmath>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,8 @@ struct RegionCondition {
     RegionAge age = RegionAge::Both;
 };
 
+constexpr int kMaxSpawnWeight = 100; // step 73: a record's spawn weight is 1..100
+
 // Step 46a: a region's shape is an outline of world points with holes (RF3Shape.h). minX..maxZ are then the outline's
 // bounding box and angle is 0. (Before: a box on the water, minX..maxX / minZ..maxZ in its own frame, turned by
 // `angle` (degrees, seen from above) about its centre (step 16i); older files are turned into 4-point outlines on
@@ -53,6 +56,20 @@ struct FishRegion {
     float surfaceY = 0.0f; // the water surface, read from the water box when placed
     int fishCount = 6;
     std::vector<int> records; // fishdata.fdt records that may spawn here
+    // Step 73: spawn weights (record -> 1..kMaxSpawnWeight); a record not in the map weighs 1. A record's chance is
+    // its weight / TotalWeight().
+    std::map<int, int> weights;
+    int WeightOf(int record) const {
+        auto it = weights.find(record);
+        return (it != weights.end()) ? it->second : 1;
+    }
+    int TotalWeight() const {
+        int total = 0;
+        for (int record : records) {
+            total += WeightOf(record);
+        }
+        return total;
+    }
     // Step 20c-3a: the water current, which drifts a resting fly (RF3-MECHANICS 2.9). Direction as an OoT
     // yaw in degrees (0 = +Z, 90 = +X, Link's facing); speed in m/s. Not set: the box's long axis at
     // kDefaultCurrentSpeed.
@@ -212,8 +229,8 @@ std::string FishRegionsPath();
 bool LoadFishRegions(std::string* error);
 // Write the file. Returns false and sets error if it can't be written.
 bool SaveFishRegions(std::string* error);
-// Records a region may list: the juvenile, normal and big records of the 22 species (not the
-// legendary or Red/Black Carp records, which are for later).
+// Records a region may list: every fishdata record (0-49) in RF3FishTable.h, the legendaries and Red/Black Carp
+// included (step 66b); not OoT's pond fish (50-52).
 bool IsRegionRecord(int record);
 // Step 16d (RF3RegionFish.cpp): remove this scene's region fish and spawn them again from the regions
 // as they are now (saved or not). Returns the count, or -1 (status says why).

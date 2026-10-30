@@ -44,9 +44,10 @@ bool WaterSurfaceAt(PlayState* play, float x, float z, float* surfaceY) {
     return WaterBox_GetSurface1(play, &play->colCtx, x, z, surfaceY, &waterBox) != 0;
 }
 
-// The species list: one row per species, a checkbox per allowed size class (s / n / b).
+// The species list: one row per species, a checkbox per allowed size class (s / n / b / l). Step 66b: every species
+// with a region record (Red and Black Carp 22-23, the legendaries 31-32 too), not only 0-21.
 void DrawRecordChoices(rf3::FishRegion& r) {
-    for (int species = 0; species <= 21; species++) {
+    for (int species = 0; species < 64; species++) {
         const char* speciesName = nullptr;
         for (const rf3::FishRecord& rec : rf3::kFishRecords) {
             if ((rec.species == species) && rf3::IsRegionRecord(rec.record)) {
@@ -73,8 +74,31 @@ void DrawRecordChoices(rf3::FishRegion& r) {
                     r.records.push_back(rec.record);
                 } else {
                     r.records.erase(it);
+                    r.weights.erase(rec.record); // step 73: ticked again, it starts at 1
                 }
                 rf3::RegionsDirty() = true;
+            }
+            if (on) {
+                // Step 73: its spawn weight (1-100) and its chance among the region's ticked fish
+                int weight = r.WeightOf(rec.record);
+                char weightId[32];
+                std::snprintf(weightId, sizeof(weightId), "##weight%d", rec.record);
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(45.0f);
+                if (ImGui::DragInt(weightId, &weight, 0.2f, 1, rf3::kMaxSpawnWeight, "%d",
+                                   ImGuiSliderFlags_AlwaysClamp)) {
+                    if (weight == 1) {
+                        r.weights.erase(rec.record);
+                    } else {
+                        r.weights[rec.record] = weight;
+                    }
+                    rf3::RegionsDirty() = true;
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Spawn weight (1-100): this fish's chance is its weight / the region's total");
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("%.0f%%", 100.0f * r.WeightOf(rec.record) / std::max(1, r.TotalWeight()));
             }
         }
     }

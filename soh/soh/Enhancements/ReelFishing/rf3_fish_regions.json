@@ -69,19 +69,23 @@
       "records": [
         {
           "name": "Bluegill n",
-          "record": 20
+          "record": 20,
+          "weight": 4
         },
         {
           "name": "Char n",
-          "record": 1
+          "record": 1,
+          "weight": 7
         },
         {
           "name": "Yamame Trout n",
-          "record": 5
+          "record": 5,
+          "weight": 3
         },
         {
           "name": "Largemouth Bass n",
-          "record": 15
+          "record": 15,
+          "weight": 12
         },
         {
           "name": "Florida Bass n",
@@ -89,7 +93,8 @@
         },
         {
           "name": "Rainbow Trout n",
-          "record": 22
+          "record": 22,
+          "weight": 2
         }
       ],
       "scene": 87,
@@ -2269,10 +2274,10 @@
       "currentYaw": 0.0,
       "fishCount": 3,
       "holes": [],
-      "maxX": 1036.4154052734375,
-      "maxZ": 2472.645263671875,
-      "minX": 592.025390625,
-      "minZ": 1973.6871337890625,
+      "maxX": 1036.4000244140625,
+      "maxZ": 2472.60009765625,
+      "minX": 592.0,
+      "minZ": 1973.699951171875,
       "name": "Scene 92 region 1",
       "outline": [
         [

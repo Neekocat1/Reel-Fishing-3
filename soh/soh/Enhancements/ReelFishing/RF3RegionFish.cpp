@@ -111,6 +111,15 @@ float OotLengthFor(int species, float mm) {
     float minMm, maxMm;
     rf3::SpeciesAdultRangeMm(species, &minMm, &maxMm);
     if (maxMm <= minMm) {
+        // Step 66b: a species with no random-pool record (Red/Black Carp, the legendaries): all its records
+        for (const rf3::FishRecord& r : rf3::kFishRecords) {
+            if (r.species == species) {
+                minMm = std::min(minMm, static_cast<float>(r.params.lengthMinMm));
+                maxMm = std::max(maxMm, static_cast<float>(r.params.lengthMaxMm));
+            }
+        }
+    }
+    if (maxMm <= minMm) {
         return 40.0f;
     }
     float oot = rf3::kOotLengthMin + (mm - minMm) * (rf3::kOotLengthMax - rf3::kOotLengthMin) / (maxMm - minMm);
@@ -201,8 +210,18 @@ bool RegionActive(PlayState* play, const rf3::FishRegion& r, std::string* why) {
 // Rolls one fish of region ri (species, season-skewed length, spot) into the free slot and spawns it. Returns true if
 // it was spawned. Step 60a: also used to replace a caught fish.
 bool SpawnInSlot(PlayState* play, size_t ri, const rf3::FishRegion& r, int slot) {
-    char line[256];
-    int record = r.records[static_cast<size_t>(Rand01() * r.records.size()) % r.records.size()];
+    char line[320];
+    // Step 73: a weighted pick (every weight 1 = the even pick it was)
+    const int total = r.TotalWeight();
+    int roll = std::min(static_cast<int>(Rand01() * total), total - 1);
+    int record = r.records.back();
+    for (int candidate : r.records) {
+        roll -= r.WeightOf(candidate);
+        if (roll < 0) {
+            record = candidate;
+            break;
+        }
+    }
     const rf3::FishRecord* rec = FindRecord(record);
     Vec3f pos;
     if ((rec == nullptr) || !FindSpot(play, r, &pos)) {
@@ -239,9 +258,10 @@ bool SpawnInSlot(PlayState* play, size_t ri, const rf3::FishRegion& r, int slot)
                                static_cast<s16>(Rand01() * 0x10000), 0, kFishParamBase + slot);
     std::snprintf(line, sizeof(line),
                   "scene %d region %d (%s) slot %d: record %d (%s %c) %.0f mm, oot %.1f at %.0f %.0f %.0f "
-                  "season=%d k=%.2f%s",
+                  "season=%d k=%.2f weight=%d/%d%s",
                   play->sceneNum, (int)ri, r.name.c_str(), slot, record, rec->speciesName, rec->sizeClass,
-                  s.info.mm, s.info.ootLength, pos.x, pos.y, pos.z, season, lengthK, actor ? "" : "  SPAWN FAILED");
+                  s.info.mm, s.info.ootLength, pos.x, pos.y, pos.z, season, lengthK, r.WeightOf(record), total,
+                  actor ? "" : "  SPAWN FAILED");
     Log(line);
     if (actor == nullptr) {
         s = {};

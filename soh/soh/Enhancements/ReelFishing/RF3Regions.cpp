@@ -61,10 +61,12 @@ std::string FishRegionsPath() {
     return Ship::Context::GetPathRelativeToAppDirectory("rf3_fish_regions.json");
 }
 
+// Step 66b (user, 2026-10-30: "Make it so I can add the remaining fish to regions."): every fishdata record (0-49) in
+// the table, so the legendaries (3, 27) and Red/Black Carp (41, 42) too; was species 0-21, sizes s/n/b. OoT's pond
+// fish (50-52) stay out.
 bool IsRegionRecord(int record) {
     const FishRecord* r = FindRecord(record);
-    return (r != nullptr) && (r->species >= 0) && (r->species <= 21) &&
-           ((r->sizeClass == 's') || (r->sizeClass == 'n') || (r->sizeClass == 'b'));
+    return (r != nullptr) && (r->record >= 0) && (r->record < 50);
 }
 
 const char* RegionAgeName(RegionAge age) {
@@ -138,6 +140,11 @@ bool LoadFishRegions(std::string* error) {
                 int index = rec.is_object() ? rec.at("record").get<int>() : rec.get<int>();
                 if (IsRegionRecord(index) && (std::find(r.records.begin(), r.records.end(), index) == r.records.end())) {
                     r.records.push_back(index);
+                    // step 73: the spawn weight, 1 when missing
+                    int weight = rec.is_object() ? std::clamp(rec.value("weight", 1), 1, kMaxSpawnWeight) : 1;
+                    if (weight != 1) {
+                        r.weights[index] = weight;
+                    }
                 }
             }
             loaded.push_back(r);
@@ -197,7 +204,11 @@ bool SaveFishRegions(std::string* error) {
         }
         j["records"] = nlohmann::json::array();
         for (int record : r.records) {
-            j["records"].push_back({ { "record", record }, { "name", RecordLabel(record) } });
+            nlohmann::json entry = { { "record", record }, { "name", RecordLabel(record) } };
+            if (r.WeightOf(record) != 1) {
+                entry["weight"] = r.WeightOf(record); // step 73: only when not the default
+            }
+            j["records"].push_back(entry);
         }
         root["regions"].push_back(j);
     }
