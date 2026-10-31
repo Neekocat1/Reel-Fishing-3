@@ -17,6 +17,7 @@ void Anchor::SendPacket_RF3Catch(const rf3::UnlockCatch& k) {
     }
 
     nlohmann::json c;
+    c["record"] = k.record; // step 74
     c["species"] = k.species;
     c["sizeClass"] = static_cast<int>(k.sizeClass);
     c["lengthMm"] = k.lengthMm;
@@ -51,6 +52,7 @@ void Anchor::HandlePacket_RF3Catch(nlohmann::json payload) {
 
     const nlohmann::json& c = payload.at("catch");
     rf3::UnlockCatch k;
+    k.record = c.value("record", -1); // step 74; -1 from an older build: it counts toward no record filter
     k.species = c.value("species", -1);
     k.sizeClass = static_cast<char>(c.value("sizeClass", static_cast<int>('n')));
     k.lengthMm = c.value("lengthMm", 0.0f);

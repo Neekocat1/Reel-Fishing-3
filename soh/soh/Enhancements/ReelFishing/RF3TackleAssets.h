@@ -159,6 +159,9 @@ struct Assets {
 const Assets& Get();
 // "textures/rf3tackle/<name>", as the archives hold it (drawing needs the "__OTR__" prefix).
 std::string TexturePath(const std::string& name);
+// Step 76: one of RF3's texts from tackle.json (the player's disc), trimmed; the fallback (the mod's own wording) when
+// the archive or the text is missing. Returns a string that lives as long as the program.
+const char* Text(const std::string& key, const char* fallback);
 
 // Lookups in a box; nullptr if absent.
 const Item* FindLine(const Box& box, int32_t index);

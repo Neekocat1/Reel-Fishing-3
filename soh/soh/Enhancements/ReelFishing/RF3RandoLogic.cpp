@@ -416,6 +416,9 @@ bool SourceMatches(const rf3::LureCondition& c, const Source& s) {
     if (c.species != 0 && (s.species < 0 || s.species >= 64 || !((c.species >> s.species) & 1))) {
         return false;
     }
+    if (c.records != 0 && (s.record < 0 || s.record >= 64 || !((c.records >> s.record) & 1))) { // step 74
+        return false;
+    }
     if (s.lengthMaxMm < c.minMm || s.weightMaxG < static_cast<float>(c.minWeightG)) {
         return false;
     }
@@ -528,6 +531,7 @@ bool SlotLogic(int slot) {
     }
     bool any = false;
     uint64_t species = 0;
+    uint64_t records = 0; // step 74: RecordsAll
     uint64_t scenesLo = 0;
     uint64_t scenesHi = 0;
     for (const Source& s : sSources) {
@@ -544,6 +548,9 @@ bool SlotLogic(int slot) {
         any = true;
         if (s.species >= 0 && s.species < 64) {
             species |= uint64_t{ 1 } << s.species;
+        }
+        if (s.record >= 0 && s.record < 64) {
+            records |= uint64_t{ 1 } << s.record;
         }
         if (s.scene >= 0 && s.scene < 64) {
             scenesLo |= uint64_t{ 1 } << s.scene;
@@ -563,6 +570,8 @@ bool SlotLogic(int slot) {
             return pop(species) >= c->n;
         case rf3::UnlockGoal::SpeciesAll:
             return (species & c->species) == c->species;
+        case rf3::UnlockGoal::RecordsAll: // step 74: every region's own fish, each from a reachable region
+            return (records & c->records) == c->records;
         case rf3::UnlockGoal::Places:
             return pop(scenesLo) + pop(scenesHi) >= c->n;
         default:

@@ -1,4 +1,5 @@
 #include "RF3Sim.h"
+#include "RF3FishTable.h" // step 74: a record's species and size class for the tracker sentences
 
 #include <algorithm>
 #include <cmath>
@@ -653,108 +654,117 @@ LureCondition Kg(LureCondition c, int grams) {
     c.minWeightG = static_cast<uint32_t>(grams);
     return c;
 }
+// Step 74: named records (a species in one size class: "a Pink Salmon s").
+LureCondition Rec(LureCondition c, uint64_t records) {
+    c.records = records;
+    return c;
+}
+// Step 74: each region's own fish, the records only one region lists (rf3_fish_regions.json, 2026-10-30; docs/
+// UNLOCK-REWORK.md section 4). Kept by hand: tools/rf3_regions.py unlocks says when the regions no longer match.
+constexpr uint64_t kOwnRecords = Sp({ 0,  2,  3,  4,  5,  6,  7,  8,  10, 11, 12, 13, 15, 16, 17, 18, 20, 21,
+                                      23, 24, 25, 26, 27, 28, 29, 31, 33, 34, 35, 36, 37, 38, 40, 41, 42 });
 
 using G = UnlockGoal;
 
-// docs/LURE-UNLOCK-CHOICES.md, in its order. Sizes in mm (the file gives inches first).
+// Step 74 (user, 2026-10-30: "Build it as is"): docs/UNLOCK-DRAFT.md, in its order (it replaced
+// docs/LURE-UNLOCK-CHOICES.md and docs/FLY-BAIT-FLOAT-UNLOCK-CHOICES.md). Sizes in mm.
 const LureCondition* Table(int* count) {
     static LureCondition t[kUnlockSlots];
     static int n = 0;
     if (n == 0) {
         auto add = [](LureCondition c) { t[n++] = c; };
         // Tackle Box Bass (48 comes with Lure Rod/Bass)
-        add(C(36, G::Count, 1));
-        add(C(45, G::Count, 3));
-        add(Sp1(C(54, G::Count, 2), kGill));
+        add(C(36, G::Count, 3));
+        add(Sp1(C(45, G::Count, 3), kGill));
+        add(Rec(C(54, G::Count, 1), Sp({ 20 })));
         add(With(C(49, G::Count, 5), Lu({ 48 })));
         add(C(39, G::Count, 10));
         add(C(40, G::Species, 3));
-        { LureCondition c = C(73, G::Count, 1); c.outsidePond = true; add(c); }
+        add(C(73, G::Places, 2));
         add(Sp1(C(57, G::Count, 5), kLmb));
         add(With(C(37, G::Count, 5), Lu({ 36 })));
-        add(With(Sp1(C(38, G::Count, 1), kRainbow), kFloatMinnow));
-        add(C(46, G::Streak, 3));
-        add(With(Mm(Sp1(C(47, G::Count, 1), kLmb), 305), kFVib));
+        add(Rec(C(38, G::Count, 1), Sp({ 21 })));
+        add(C(46, G::Streak, 5));
+        add(With(Sp1(C(47, G::Count, 3), kLmb), kFVib));
         add(Mm(Sp1(C(55, G::Count, 1), kGill), 229));
         add(With(C(56, G::Count, 10), kShallowRunner));
-        add(C(74, G::Places, 3));
+        add(C(74, G::Places, 4));
         add(With(C(50, G::Count, 10), kSuspVib));
-        add(Mm(Sp1(C(41, G::Count, 1), kLmb), 254));
-        add(At(C(58, G::Count, 1), kNight));
-        add(C(59, G::Visit, 5));
+        add(Rec(C(41, G::Count, 1), Sp({ 15 })));
+        add(At(C(58, G::Count, 3), kNight));
+        add(C(59, G::Visit, 6));
         add(C(69, G::Count, 15));
-        add(At(C(70, G::Count, 1), kDawnDusk));
-        add(C(71, G::Streak, 5));
+        add(At(C(70, G::Count, 3), kDawnDusk));
+        add(C(71, G::Streak, 8));
         add(With(C(72, G::Count, 15), kSpinnerBait));
-        add(Sp1(C(81, G::Count, 1), kFla));
-        add(Mm(Sp1(C(82, G::Count, 1), kFla), 406));
-        { LureCondition c = C(26, G::Count, 1); c.biteWithin = 5.0f; add(c); }
-        add(C(30, G::Count, 20));
-        add(Mm(Sp1(C(31, G::Count, 1), kGill), 254));
-        add(Rod(C(33, G::Species, 4), 0));
+        add(Rec(C(81, G::Count, 1), Sp({ 17 })));
+        add(Rec(C(82, G::Count, 1), Sp({ 18 })));
+        { LureCondition c = C(26, G::Count, 3); c.biteWithin = 5.0f; add(c); }
+        add(C(30, G::Count, 25));
+        add(Sp1(C(31, G::Count, 10), kGill));
+        add(Rod(C(33, G::Species, 6), 0));
         add(With(C(27, G::Count, 5), Lu({ 26 })));
         add(With(Mm(Sp1(C(28, G::Count, 1), kLmb), 381), kPopper));
         add(With(Sp1(C(29, G::Streak, 3), kLmb), kPopper));
         add(At(Type(C(32, G::Count, 5), 0), kNight));
-        add(Sp1(C(34, G::Count, 1), kBrown));
+        add(Rec(C(34, G::Count, 1), Sp({ 24 })));
         add(Type(Mm(Sp1(C(35, G::Count, 1), kRainbow), 305), 0));
-        add(Big(C(42, G::Count, 1)));
+        { LureCondition c = Big(C(42, G::Count, 3)); c.outsidePond = true; add(c); }
         add(Type(C(43, G::Count, 5), 3));
-        add(Big(Sp1(C(44, G::Count, 1), kRainbow)));
-        add(C(51, G::Count, 30));
-        add(Big(Sp1(C(52, G::Count, 1), kLmb)));
-        add(C(53, G::Streak, 8));
-        add(Mm(Sp1(C(60, G::Count, 1), kBrown), 508));
+        add(Rec(C(44, G::Count, 1), Sp({ 23 })));
+        add(C(51, G::Count, 40));
+        add(Rec(C(52, G::Count, 1), Sp({ 16 })));
+        add(C(53, G::Streak, 10));
+        add(Rec(C(60, G::Count, 1), Sp({ 25 })));
         add(Type(C(61, G::Count, 10), 3));
-        add(Sp1(C(75, G::Count, 20), kLmb));
-        add(Kg(C(79, G::Count, 1), 2000));
-        add(Mm(Sp1(C(62, G::Count, 1), kLmb), 508));
-        add(Big(C(76, G::Count, 5)));
+        add(Rec(C(75, G::Count, 1), Sp({ 11 })));
+        add(Rec(C(79, G::Count, 1), Sp({ 38 })));
+        add(Mm(Sp1(C(62, G::Count, 1), kLmb), 560));
+        { LureCondition c = Big(C(76, G::Count, 1)); c.landWithin = 30.0f; add(c); }
         { LureCondition c = Kg(C(80, G::Count, 1), 1000); c.thinLine = true; add(c); }
-        add(C(63, G::Count, 50));
+        add(Rec(C(63, G::Count, 1), Sp({ 36 })));
         add(Type(C(64, G::Count, 5), 4));
-        add(Big(Sp1(C(66, G::Count, 1), kFla)));
+        add(Mm(Sp1(C(66, G::Count, 1), kFla), 600));
         add(Sp1(C(67, G::Count, 10), kFla));
-        { LureCondition c = Big(C(77, G::Count, 1)); c.landWithin = 30.0f; add(c); }
-        add(C(65, G::Streak, 10));
-        add(Mm(Sp1(C(68, G::Count, 1), kFla), 610));
-        { LureCondition c = C(78, G::WeightTotal, 1); c.totalG = 20000; add(c); }
-        add(C(83, G::Count, 75));
-        add(Sp1(C(84, G::SpeciesAll, 5), kBassRodFish));
-        add(Big(Sp1(C(85, G::Count, 1), kBrown)));
-        add(Big(C(86, G::Visit, 3)));
-        add(Mm(Sp1(C(87, G::Count, 1), kLmb), 610));
-        add(C(88, G::Count, 100));
+        add(Rec(C(77, G::Count, 1), Sp({ 41 })));
+        add(Rec(C(65, G::Count, 1), Sp({ 37 })));
+        add(Mm(Sp1(C(68, G::Count, 1), kFla), 700));
+        { LureCondition c = C(78, G::WeightTotal, 1); c.totalG = 150000; add(c); }
+        add(C(83, G::Count, 100));
+        add(C(84, G::Species, 10));
+        add(Mm(Sp1(C(85, G::Count, 1), kBrown), 800));
+        add(Rec(C(86, G::Count, 1), Sp({ 42 })));
+        add(Mm(Sp1(C(87, G::Count, 1), kLmb), 650));
+        add(Rec(C(88, G::RecordsAll, 1), kOwnRecords));
         // Tackle Box Trout (0 comes with Lure Rod/Trout)
         add(Rod(C(1, G::Count, 5), 1));
-        add(Sp1(C(7, G::Count, 1), Sp({ 1 })));
-        add(Sp1(C(8, G::Count, 1), Sp({ 0 })));
-        add(Sp1(C(9, G::Count, 1), Sp({ 2 })));
+        add(Rec(C(7, G::Count, 1), Sp({ 4 })));
+        add(Rec(C(8, G::Count, 1), Sp({ 0 })));
+        add(Rec(C(9, G::Count, 1), Sp({ 6 })));
         add(Sp1(C(2, G::Species, 3), kTroutSix));
-        add(Sp1(C(10, G::Count, 1), Sp({ 15 })));
+        add(Rec(C(10, G::Count, 1), Sp({ 5 })));
         add(Sp1(C(3, G::Count, 15), kTrout));
-        add(Sp1(C(5, G::Streak, 5), kTrout));
-        add(Big(Sp1(C(4, G::Count, 1), Sp({ 0 }))));
-        add(Sp1(C(6, G::SpeciesAll, 6), kTroutSix));
+        add(Rec(C(5, G::Count, 1), Sp({ 7 })));
+        add(Rec(C(4, G::Count, 1), Sp({ 2 })));
+        add(Rec(C(6, G::Count, 1), Sp({ 3 })));
         // Tackle Box Salmon (11 comes with Lure Rod/Salmon)
         add(Sp1(C(12, G::Count, 3), Sp({ 13, 14 })));
         add(Rod(Sp1(C(23, G::Count, 1), Sp({ 15 })), 2));
-        add(At(Sp1(C(20, G::Count, 1), kSalmon), kDawnDusk));
-        add(Mm(Sp1(C(13, G::Count, 1), Sp({ 14 })), 762));
-        add(Sp1(C(17, G::Count, 1), Sp({ 13 })));
+        add(Rec(C(20, G::Count, 1), Sp({ 28 })));
+        add(Rec(C(13, G::Count, 1), Sp({ 29 })));
+        add(Rec(C(17, G::Count, 1), Sp({ 26 })));
         add(Sp1(C(24, G::Visit, 3), kSalmon));
         add(With(C(21, G::Count, 5), Lu({ 20 })));
         add(Sp1(C(14, G::Count, 10), kSalmon));
         add(Rod(C(25, G::Streak, 5), 2));
-        add(Mm(Sp1(C(18, G::Count, 1), Sp({ 13 })), 1016));
-        add(Big(Sp1(C(19, G::Count, 1), Sp({ 15 }))));
-        add(Kg(C(15, G::Count, 1), 8000));
-        add(Mm(Sp1(C(16, G::Count, 1), Sp({ 13 })), 1270));
+        add(Mm(Sp1(C(18, G::Count, 1), Sp({ 13 })), 1300));
+        add(Rec(C(19, G::Count, 1), Sp({ 31 })));
+        add(Kg(Sp1(C(15, G::Count, 1), kSalmon), 8000));
+        add(Rec(C(16, G::Count, 1), Sp({ 27 })));
         add(Sp1(C(22, G::Count, 25), kSalmon));
-        // Fishing Pole (91 comes with it): the user's sinking lure, a Hylian Bass in the top 10 % of its range
-        // (251-700 mm, RF3SizeMap.h): 655 mm or more.
+        // Fishing Pole (91 comes with it): a Hylian Bass in the top 10 % of its range (251-700 mm): 655 mm or more.
         add(Mm(Sp1(C(92, G::Count, 1), Sp({ 33 })), 655));
-        // Step 44a: docs/FLY-BAIT-FLOAT-UNLOCK-CHOICES.md, in its order. Flies (0 comes with the Fly Rod).
+        // Flies (0 comes with the Fly Rod).
         add(FlyT(F(13, G::Count, 3), kFlyDry));
         add(FlyT(Sp1(F(31, G::Count, 1), kRainbow), kFlyDry));
         add(FlyT(Sp1(F(2, G::Count, 1), kGill), kAnyFly));
@@ -762,15 +772,15 @@ const LureCondition* Table(int* count) {
         add(FlyT(Sp1(F(26, G::Count, 1), Sp({ 1 })), kAnyFly));
         add(FlyT(Sp1(F(3, G::Count, 1), Sp({ 0 })), kAnyFly));
         add(FlyT(Sp1(F(4, G::Count, 1), Sp({ 2 })), kAnyFly));
-        add(FlyT(Sp1(F(12, G::Count, 1), Sp({ 6 })), kAnyFly));
-        add(At(FlyT(F(10, G::Count, 1), kAnyFly), kDawnDusk));
-        add(At(FlyT(F(21, G::Count, 1), kFlyDry), kNight));
+        add(FlyT(Rec(F(12, G::Count, 1), Sp({ 12 })), kAnyFly));
+        add(FlyT(At(F(10, G::Count, 3), kDawnDusk), kAnyFly));
+        add(FlyT(At(F(21, G::Count, 3), kNight), kFlyDry));
         add(FlyT(Mm(Sp1(F(24, G::Count, 1), kGill), 229), kFlyDry));
         add(FlyT(Sp1(F(38, G::Count, 1), kLmb), kFlyDry));
         add(FlyT(Sp1(F(16, G::Count, 1), kBrown), kAnyFly));
         add(Rod(F(34, G::Count, 10), 3));
         add(Flies(F(8, G::Count, 3), { 9 }));
-        add(FlyT(Sp1(F(5, G::Count, 1), Sp({ 4 })), kAnyFly));
+        add(FlyT(Rec(F(5, G::Count, 1), Sp({ 8 })), kAnyFly));
         add(FlyT(Sp1(F(1, G::Count, 1), Sp({ 14 })), kAnyFly));
         add(FlyT(F(14, G::Count, 3), kSunkenFly));
         add(Flies(F(7, G::Count, 3), { 8 }));
@@ -787,26 +797,26 @@ const LureCondition* Table(int* count) {
         add(FlyT(Mm(Sp1(F(29, G::Count, 1), kLmb), 381), kAnyFly));
         add(FlyT(F(32, G::Count, 5), kFlyStreamer));
         add(Rod(F(28, G::Count, 5), 4));
-        add(FlyT(Sp1(F(37, G::Count, 1), Sp({ 13 })), kAnyFly));
-        add(Big(Flies(Sp1(F(17, G::Count, 1), kTrout), { 6 })));
-        add(FlyT(Mm(Sp1(F(27, G::Count, 1), kBrown), 508), kAnyFly));
-        add(Big(FlyT(F(33, G::Count, 1), kAnyFly)));
-        add(Big(FlyT(Sp1(F(36, G::Count, 1), Sp({ 15 })), kAnyFly))); // "32 in or more" read as the Lunker size
+        add(Rec(F(37, G::Count, 1), Sp({ 33 })));
+        add(Flies(Big(Sp1(F(17, G::Count, 1), kTrout)), { 6 }));
+        add(FlyT(Mm(Sp1(F(27, G::Count, 1), kBrown), 700), kAnyFly));
+        add(FlyT(Big(F(33, G::Count, 1)), kAnyFly));
+        add(FlyT(Big(Sp1(F(36, G::Count, 1), Sp({ 15 }))), kAnyFly));
         add(Rod(Mm(Sp1(F(23, G::Count, 1), Sp({ 13 })), 1016), 4));
-        add(FlyT(Sp1(F(11, G::Count, 10), kSalmon), kAnyFly));
+        add(Rec(F(11, G::Count, 1), Sp({ 34 })));
         // Baits (0, 6, 8, 7 come with Stream Pole S, the Crucian Carp Rod, All-Purpose Rod L, the Bitterling Rod).
-        add(Baits(B(1, G::Count, 5), { 0 }));
+        add(Baits(B(1, G::Count, 8), { 0 }));
         add(Rods(Sp1(B(2, G::Count, 1), Sp({ 1 })), kStreamPoles));
         add(Rods(B(3, G::Species, 3), kStreamPoles));
         add(Rods(Sp1(B(5, G::Count, 1), kLmb), kStreamPoles));
         add(Rods(Sp1(B(4, G::Count, 1), Sp({ 16 })), kStreamPoles));
         add(Sp1(B(11, G::Count, 3), Sp({ 7 })));
-        add(Sp1(B(9, G::Count, 1), Sp({ 21 })));
-        add(Sp1(B(10, G::Count, 1), Sp({ 17 })));
+        add(Rec(B(9, G::Count, 1), Sp({ 40 })));
+        add(Rec(B(10, G::Count, 1), Sp({ 35 })));
         // Floats (2, 0, 4 come with Stream Pole S or the Bitterling Rod, the Crucian Carp Rod, All-Purpose Rod L).
-        add(Floats(Fl(3, G::Count, 5), { 2 }));
-        add(Rods(Fl(5, G::Streak, 3), kStreamPoles));
-        add(Rod(Sp1(Fl(1, G::Count, 1), Sp({ 5 })), 7));
+        add(Floats(Fl(3, G::Count, 12), { 2 }));
+        add(Rods(Fl(5, G::Streak, 5), kStreamPoles));
+        add(Rec(Fl(1, G::Count, 1), Sp({ 10 })));
     }
     *count = n;
     return t;
@@ -855,6 +865,9 @@ int LureConditionCount() {
 
 bool UnlockMatches(const LureCondition& c, const UnlockCatch& k) {
     if (c.species != 0 && (k.species < 0 || k.species >= 64 || !((c.species >> k.species) & 1))) {
+        return false;
+    }
+    if (c.records != 0 && (k.record < 0 || k.record >= 64 || !((c.records >> k.record) & 1))) { // step 74
         return false;
     }
     if (k.lengthMm < c.minMm || static_cast<uint32_t>(std::max(0, k.weightG)) < c.minWeightG) {
@@ -931,6 +944,9 @@ void UnlockAddCatch(UnlockProgress& p, const UnlockCatch& k, bool remote) {
         if ((c.goal == UnlockGoal::Species || c.goal == UnlockGoal::SpeciesAll) && k.species >= 0 && k.species < 64) {
             p.setLo[l] |= uint64_t{ 1 } << k.species;
         }
+        if (c.goal == UnlockGoal::RecordsAll && k.record >= 0 && k.record < 64) { // step 74
+            p.setLo[l] |= uint64_t{ 1 } << k.record;
+        }
         if (c.goal == UnlockGoal::Places && k.scene >= 0 && k.scene < 128) {
             if (k.scene < 64) {
                 p.setLo[l] |= uint64_t{ 1 } << k.scene;
@@ -983,6 +999,8 @@ bool UnlockMet(const UnlockProgress& p, int slot) {
             return (p.setLo[l] & c->species) == c->species;
         case UnlockGoal::WeightTotal:
             return p.sumG[l] >= c->totalG;
+        case UnlockGoal::RecordsAll: // step 74
+            return (p.setLo[l] & c->records) == c->records;
     }
     return false;
 }
@@ -1161,8 +1179,35 @@ std::string FishWord(uint64_t species, const ConditionNames& names, std::string*
     return "fish of " + std::to_string(ids.size()) + " species";
 }
 
+// Step 74: one record as words: its species in its size class ("a small Yamame Trout", "a Lunker Brown Trout"). A
+// species with one record (Bullhead, Red Carp; a legendary) is named alone.
+std::string RecordWord(int record, const ConditionNames& names) {
+    for (const FishRecord& r : kFishRecords) {
+        if (r.record == record) {
+            int sizes = 0;
+            for (const FishRecord& o : kFishRecords) {
+                sizes += (o.species == r.species && o.record < 50) ? 1 : 0; // RF3's records; 50+ are OoT's fish
+            }
+            const char* size = sizes <= 1          ? ""
+                               : r.sizeClass == 's' ? "small "
+                               : r.sizeClass == 'n' ? "normal-size "
+                               : r.sizeClass == 'b' ? "Lunker "
+                                                    : "";
+            return size + names.species(r.species);
+        }
+    }
+    return "fish " + std::to_string(record);
+}
+
 // Rules 2-3: "a fish", "5 Largemouth Bass", "a Lunker Char", "5 Lunkers of any species".
 std::string CountedFish(const LureCondition& c, int n, const ConditionNames& names) {
+    if (c.records != 0) { // step 74: named records ("a small Yamame Trout", "a Red Carp or a Black Carp")
+        std::vector<std::string> v;
+        for (int id : Bits(c.records)) {
+            v.push_back(RecordWord(id, names));
+        }
+        return n == 1 ? WithArticle(Join(v, "or")) : std::to_string(n) + " " + Join(v, "or");
+    }
     if (c.lunker && c.species == 0) {
         return n == 1 ? "a Lunker of any species" : std::to_string(n) + " Lunkers of any species";
     }
@@ -1288,6 +1333,8 @@ std::string DescribeCondition(const LureCondition& c, const ConditionNames& name
         }
         case UnlockGoal::WeightTotal:
             return "Catch " + Weight(c.totalG) + " of " + FishWord(c.species, names, nullptr) + tail + " in total";
+        case UnlockGoal::RecordsAll: // step 74: the final item, every region's own fish
+            return "Catch each region's own fish (" + std::to_string(Bits(c.records).size()) + " kinds)" + tail;
     }
     return "";
 }

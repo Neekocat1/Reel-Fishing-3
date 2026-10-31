@@ -1832,6 +1832,12 @@ void SohMenu::AddMenuEnhancements() {
         .WindowName("Reel Fishing III Debug")
         .Options(WindowButtonOptions().Tooltip(
             "Live view of the Reel Fishing III fight: state, tension, hook, stamina, distance and inputs."));
+    AddWidget(path, "Reel Fishing III Disc Setup", WIDGET_WINDOW_BUTTON)
+        .CVar(CVAR_WINDOW("ReelFishing3DiscSetup"))
+        .WindowName("Reel Fishing III Disc Setup")
+        .Options(WindowButtonOptions().Tooltip(
+            "Builds the mod's Reel Fishing III files from your own copy of the game (a .bin or .iso image of "
+            "Reel Fishing III, USA)."));
     AddWidget(path, "Reel Fishing III Fish Regions", WIDGET_WINDOW_BUTTON)
         .CVar(CVAR_WINDOW("ReelFishing3Regions"))
         .WindowName("Reel Fishing III Fish Regions")

@@ -556,6 +556,7 @@ bool SlotOpen(int32_t slot, bool rando) {
 static rf3::UnlockCatch BuildCatch(int32_t record, int32_t species, float lengthMm, int32_t weightG,
                                    const RF3TackleChoice& tackle) {
     rf3::UnlockCatch k;
+    k.record = record; // step 74: the own-fish conditions name records
     k.species = species;
     k.sizeClass = SizeClassOf(record);
     k.lengthMm = lengthMm;
@@ -591,9 +592,9 @@ static void CountConditions(const rf3::UnlockCatch& k, bool rando, bool remote) 
     rf3::UnlockAddCatch(sUnlock, k, remote);
     char why[256];
     std::snprintf(why, sizeof(why),
-                  "species=%d class=%c mm=%.1f g=%d rod=%d lure=%d type=%d fly=%d flytype=%d bait=%d float=%d scene=%d "
-                  "pond=%d hours=%.2f line=%d bite_s=%.2f land_s=%.2f remote=%d",
-                  k.species, k.sizeClass, k.lengthMm, k.weightG, k.rod, k.lure, k.lureType, k.fly, k.flyType, k.bait,
+                  "record=%d species=%d class=%c mm=%.1f g=%d rod=%d lure=%d type=%d fly=%d flytype=%d bait=%d float=%d "
+                  "scene=%d pond=%d hours=%.2f line=%d bite_s=%.2f land_s=%.2f remote=%d",
+                  k.record, k.species, k.sizeClass, k.lengthMm, k.weightG, k.rod, k.lure, k.lureType, k.fly, k.flyType, k.bait,
                   k.floatIdx, k.scene, k.pond ? 1 : 0, k.dayHours, k.lineCell, k.biteSeconds, k.landSeconds,
                   remote ? 1 : 0);
     Log("unlock-progress", -1, -1, why);

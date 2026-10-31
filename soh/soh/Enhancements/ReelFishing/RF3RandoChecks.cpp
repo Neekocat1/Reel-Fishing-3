@@ -51,10 +51,6 @@ static_assert(RAND_INF_RF3_FLY_0 - RAND_INF_RF3_LURE_0 == rf3::kFlySlot0 &&
                   RAND_INF_RF3_FLOAT_5 - RAND_INF_RF3_LURE_0 + 1 == rf3::kUnlockSlots,
               "condition flags");
 
-const char* const kRodNames[10] = { "Lure Rod/Bass",     "Lure Rod/Trout",   "Lure Rod/Salmon", "Fly Rod",
-                                    "Big Game Fly Rod",  "Stream Pole S",    "Stream Pole L",   "Crucian Carp Rod",
-                                    "All-Purpose Rod L", "Bitterling Rod" };
-
 // Which number catch a check is (1..147), 0 if it isn't a catch check.
 int32_t CatchNumber(RandomizerCheck rc) {
     return (rc >= RC_RF3_CATCH_1 && rc <= RC_RF3_CATCH_147) ? static_cast<int32_t>(rc - RC_RF3_CATCH_1) + 1 : 0;
@@ -79,7 +75,7 @@ void Rando::StaticData::RegisterRF3Locations() {
     registered = true;
     for (int32_t r = 0; r < 10; r++) {
         Add(static_cast<RandomizerCheck>(RC_RF3_ROD_CONDITION_0 + r),
-            static_cast<RandomizerInf>(RAND_INF_RF3_ROD_CONDITION_0 + r), std::string("RF3 ") + kRodNames[r],
+            static_cast<RandomizerInf>(RAND_INF_RF3_ROD_CONDITION_0 + r), "RF3 Rod Condition " + std::to_string(r),
             static_cast<RandomizerGet>(RG_RF3_ROD_0 + r));
     }
     Add(RC_RF3_FIRST_LOACH, RAND_INF_RF3_FIRST_LOACH, "RF3 First Hylian Loach", RG_RF3_LURE_92);

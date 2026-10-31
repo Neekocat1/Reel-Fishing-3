@@ -33,6 +33,8 @@
 #include "Enhancements/controls/SohInputEditorWindow.h"
 #include "Enhancements/audio/AudioCollection.h"
 #include "Enhancements/ReelFishing/RF3Sound.h" // Reel Fishing III mod (step 63b)
+#include "Enhancements/ReelFishing/RF3Extract.h"        // Reel Fishing III mod (step 76b)
+#include "Enhancements/ReelFishing/RF3ExtractStartup.h" // Reel Fishing III mod (step 77c)
 #include "Enhancements/debugconsole.h"
 #include "Enhancements/randomizer/randomizer.h"
 #include "Enhancements/randomizer/randomizer_entrance_tracker.h"
@@ -341,6 +343,7 @@ typedef enum ExtractSteps {
     ES_EXTRACT_ARGS,
     ES_EXTRACT,
     ES_VERIFY,
+    ES_RF3, // Reel Fishing III mod (step 77c): its archives, before any archive or mod is loaded
 } ExtractSteps;
 
 typedef enum PromptSteps {
@@ -477,6 +480,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
 
 #if not defined(__SWITCH__) && not defined(__WIIU__)
     CheckAndCreateModFolder();
+    rf3extract::ApplyPendingArchives(); // Reel Fishing III mod (step 76b): archives built while the game had them open
 #endif
 
     while (!extractDone) {
@@ -721,9 +725,27 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                     SohGui::RegisterPopup("No ROM Archives",
                                           "No ROM O2R files detected. Please generate a ROM O2R and relaunch.", "OK",
                                           "", [&]() { exit(0); });
+                    extractDone = true;
+                } else {
+#if !defined(__SWITCH__) && !defined(__WIIU__)
+                    extractStep = ES_RF3;
+#else
+                    extractDone = true;
+#endif
                 }
+                continue;
+            }
+            case ES_RF3: {
+#if !defined(__SWITCH__) && !defined(__WIIU__)
+                if (rf3extract::StartupFinished()) {
+                    extractDone = true;
+                    continue;
+                }
+                break; // draw its modal
+#else
                 extractDone = true;
                 continue;
+#endif
             }
             default:
                 break;
@@ -747,6 +769,11 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
         gui->StartDraw();
         sohFast3dWindow->StartFrame();
         sohFast3dWindow->RunGuiOnly();
+#if !defined(__SWITCH__) && !defined(__WIIU__)
+        if (extractStep == ES_RF3) {
+            rf3extract::StartupDraw();
+        }
+#endif
         if (extractionTask.has_value()) {
             auto status = extractionTask->wait_for(std::chrono::milliseconds(0));
             if (status == std::future_status::ready) {

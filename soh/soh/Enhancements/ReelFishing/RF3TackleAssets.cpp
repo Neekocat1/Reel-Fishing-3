@@ -406,6 +406,23 @@ const Assets& Get() {
     return sAssets;
 }
 
+const char* Text(const std::string& key, const char* fallback) {
+    static std::map<std::string, std::string> trimmed; // the assets never reload, so these stay valid
+    const Assets& a = Get();
+    auto it = a.texts.find(key);
+    if (!a.loaded || it == a.texts.end()) {
+        return fallback;
+    }
+    auto t = trimmed.find(key);
+    if (t == trimmed.end()) {
+        const std::string& s = it->second;
+        const size_t b = s.find_first_not_of(' ');
+        const size_t e = s.find_last_not_of(' ');
+        t = trimmed.emplace(key, b == std::string::npos ? std::string() : s.substr(b, e - b + 1)).first;
+    }
+    return t->second.empty() ? fallback : t->second.c_str();
+}
+
 std::string TexturePath(const std::string& name) {
     return std::string(kTexturePrefix) + name;
 }

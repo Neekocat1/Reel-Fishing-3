@@ -26,6 +26,7 @@
 #include "soh/Enhancements/randomizer/randomizer.h" // RG_RF3_*, IS_RANDO
 #include "soh/OTRGlobals.h"
 #include "RF3SizeMap.h"
+#include "RF3TackleAssets.h" // step 76: RF3's texts from the disc
 
 extern "C" {
 #include "functions.h"
@@ -194,7 +195,7 @@ static void BuildRF3SizeMessages(uint16_t* textId, bool* loadFromMessageTable) {
 static std::string sNotReady;
 
 extern "C" void RF3Tackle_ShowNotReady(const char* reason) {
-    sNotReady = reason != nullptr ? reason : "Tackle is not ready.";
+    sNotReady = reason != nullptr ? reason : rf3tackle::Text("not_ready", "Your tackle isn't ready."); // step 76
 }
 
 static void BuildRF3EscapeMessage(uint16_t* textId, bool* loadFromMessageTable) {

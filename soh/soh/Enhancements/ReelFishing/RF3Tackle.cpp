@@ -422,20 +422,23 @@ extern "C" int32_t RF3Tackle_ItemOwned(int32_t box, int32_t rowKind, int32_t ind
 }
 
 // Step 21d: can Link cast? The rod must be owned, and the box needs an owned lure/fly, or a bait (and a
-// float if the set has floats). RF3 says so with its own texts (system.trf 0x15E, 0x21E-0x220).
+// float if the set has floats). RF3 says so with its own texts (system.trf 0x15E, 0x21E-0x220). Step 76: read from
+// tackle.json (the player's disc); the mod's own wording without it.
 extern "C" int32_t RF3Tackle_Ready(const char** reason) {
     const rf3tackle::Box* b = AssetBox(sBox);
     const char* why = nullptr;
+    const char* notReady = rf3tackle::Text("not_ready", "Your tackle isn't ready.");
     if (!BoxOwned(sBox)) {
-        why = "Tackle is not ready.";
+        why = notReady;
     } else if (b != nullptr && b->kind == "bait") {
         if (sBait[sBox] == kNoBait || !Have(RF3_STOCK_BAIT, sBait[sBox])) {
-            why = "Bait not selected.";
+            why = rf3tackle::Text("bait_not_selected", "Choose a bait first.");
         } else if (!b->floats.empty() && (sFloat[sBox] == kUnset || !Have(RF3_STOCK_FLOAT, sFloat[sBox]))) {
-            why = "Tackle is not ready.";
+            why = notReady;
         }
     } else if (b != nullptr && (sLure[sBox] == kUnset || !Have(ItemKind(*b), sLure[sBox]))) {
-        why = b->kind == "fly" ? "Fly not selected." : "Lure not selected.";
+        why = b->kind == "fly" ? rf3tackle::Text("fly_not_selected", "Choose a fly first.")
+                               : rf3tackle::Text("lure_not_selected", "Choose a lure first.");
     }
     if (reason != nullptr) {
         *reason = why;

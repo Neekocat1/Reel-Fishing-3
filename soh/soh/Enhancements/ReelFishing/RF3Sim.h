@@ -466,7 +466,8 @@ enum class UnlockGoal : uint8_t {
     Species,    // n different species among matching catches
     Places,     // n different scenes among matching catches (the pond is one)
     SpeciesAll, // every species of the filter's species set
-    WeightTotal // matching catches weighing totalG grams together
+    WeightTotal, // matching catches weighing totalG grams together
+    RecordsAll  // step 74: every record of the filter's record set (each region's own fish)
 };
 enum UnlockTime : uint8_t { kAnyTime = 0, kNight = 1, kDawnDusk = 2 };
 struct LureCondition {
@@ -475,6 +476,7 @@ struct LureCondition {
     uint16_t n = 1;
     uint32_t totalG = 0;      // WeightTotal
     uint64_t species = 0;     // bit per species; 0 = any
+    uint64_t records = 0;     // step 74: bit per fishdata record (0-52: a species in one size class); 0 = any
     uint16_t minMm = 0;
     uint32_t minWeightG = 0;
     bool lunker = false;      // size class big or legendary
@@ -494,6 +496,7 @@ struct LureCondition {
 };
 // The catch, as the conditions see it.
 struct UnlockCatch {
+    int record = -1; // step 74: the fishdata record (-1 unknown: matches no record filter)
     int species = -1;
     char sizeClass = 'n';
     float lengthMm = 0.0f;
@@ -514,7 +517,7 @@ struct UnlockCatch {
 };
 struct UnlockProgress { // per slot
     uint16_t count[kUnlockSlots] = {};
-    uint64_t setLo[kUnlockSlots] = {}; // species seen (bits 0-63), or scenes 0-63
+    uint64_t setLo[kUnlockSlots] = {}; // species seen (bits 0-63), scenes 0-63, or records (step 74, RecordsAll)
     uint64_t setHi[kUnlockSlots] = {}; // scenes 64-127
     uint32_t sumG[kUnlockSlots] = {};
 };
