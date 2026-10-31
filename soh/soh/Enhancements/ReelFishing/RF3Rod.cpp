@@ -63,7 +63,7 @@ void RestoreBAfterLoad() {
 void RegisterRF3Rod() {
     // The rod's D-pad button. Player has already read the item (ITEM_NONE where the scene disables
     // items, as the pond does), so look at the button's own item.
-    COND_VB_SHOULD(VB_OVERRIDE_BUTTON_ITEM_USED, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 0), {
+    COND_VB_SHOULD(VB_OVERRIDE_BUTTON_ITEM_USED, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 1), {
         s32* button = va_arg(args, s32*);
         va_arg(args, Player*);
         s32* item = va_arg(args, s32*);
@@ -105,7 +105,7 @@ void RegisterRF3Rod() {
 
     // The cast check: the vanilla test refuses z > 1300 (the pond's dock). Outside the pond only the
     // rest of it applies: Link must stand on the ground with room above the rod.
-    COND_VB_SHOULD(VB_NOT_CAST_FISHING, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 0), {
+    COND_VB_SHOULD(VB_NOT_CAST_FISHING, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 1), {
         Vec3f* rodCheckPos = va_arg(args, Vec3f*);
         if ((gPlayState != nullptr) && !InPond(gPlayState)) {
             Player* player = GET_PLAYER(gPlayState);
@@ -114,12 +114,12 @@ void RegisterRF3Rod() {
         }
     });
 
-    COND_HOOK(OnLoadGame, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 0),
+    COND_HOOK(OnLoadGame, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 1),
               [](int32_t fileNum) { RestoreBAfterLoad(); });
 
     // Link holds the rod outside the pond (after a scene change, or the instance ended): run the
     // portable instance.
-    COND_HOOK(OnPlayerUpdate, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 0), []() {
+    COND_HOOK(OnPlayerUpdate, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 1), []() {
         if ((gPlayState == nullptr) || InPond(gPlayState)) {
             return;
         }

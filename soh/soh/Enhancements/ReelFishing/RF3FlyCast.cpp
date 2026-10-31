@@ -15,6 +15,7 @@
 #include "soh/cvar_prefixes.h"
 #include "RF3Sim.h"
 #include "RF3TackleAssets.h"
+#include "RF3DevTools.h"
 
 // Step 20c-3c/d: RF3's fly cast (RF3-MECHANICS 2.9, 3.1). While the rod button is held with a fly box the throw
 // waits and Link false-casts (z_player.c swings the throw animation between two frames); on release the fly is
@@ -46,7 +47,7 @@ void LogLine(const char* line) {
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_records.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));

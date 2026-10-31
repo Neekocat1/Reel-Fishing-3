@@ -22,6 +22,7 @@
 #include "RF3Bridge.h"
 #include "RF3Sound.h" // step 63d
 #include "RF3TackleScreen.h"
+#include "RF3DevTools.h"
 
 extern "C" {
 #include "z64.h"
@@ -69,7 +70,7 @@ void LogEquip(int buttonIndex) {
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_records.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));

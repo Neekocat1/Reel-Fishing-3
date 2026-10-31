@@ -20,6 +20,7 @@
 #include "RF3TackleAssets.h"
 #include "RF3Vibration.h" // step 62c
 #include "RF3SoundFx.h"   // step 63c
+#include "RF3DevTools.h"
 
 namespace {
 
@@ -177,7 +178,7 @@ float StickToRf3(float oStick) {
 } // namespace
 
 extern "C" int RF3_IsEnabled(void) {
-    return CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 0) != 0;
+    return CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 1) != 0;
 }
 
 extern "C" int RF3Fight_IsActive(void) {
@@ -353,7 +354,7 @@ void LogApproach(const char* what, int32_t fishIndex, int32_t record, const rf3t
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_records.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
@@ -588,7 +589,7 @@ extern "C" void RF3Species_RollAll(int32_t fishCount) {
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_species.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_species.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));

@@ -27,6 +27,7 @@
 #include "soh/OTRGlobals.h"
 #include "RF3SizeMap.h"
 #include "RF3TackleAssets.h" // step 76: RF3's texts from the disc
+#include "RF3DevTools.h"
 
 extern "C" {
 #include "functions.h"
@@ -74,7 +75,7 @@ static void DumpPondTextOnce(uint16_t textId, const std::string& raw) {
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_pond_texts.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_pond_texts.txt"); // step 78b: nothing while the logs are off
     char head[16];
     std::snprintf(head, sizeof(head), "0x%04X: ", textId);
     out << head;
@@ -279,13 +280,13 @@ static void BuildRF3NoRodPondMessage(uint16_t* textId, bool* loadFromMessageTabl
 }
 
 static void RegisterRF3Messages() {
-    COND_ID_HOOK(OnOpenText, kFishGotAwayText, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 0),
+    COND_ID_HOOK(OnOpenText, kFishGotAwayText, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 1),
                  BuildRF3EscapeMessage);
     COND_ID_HOOK(OnOpenText, TEXT_RANDOMIZER_CUSTOM_ITEM, !IS_RANDO, BuildRF3ItemGetMessage); // step 22b
     COND_ID_HOOK(OnOpenText, TEXT_FISHING_POND_START, IS_RANDO, BuildRF3NoRodPondMessage);     // step 55c
     COND_ID_HOOK(OnOpenText, TEXT_FISHING_POND_START_MET, IS_RANDO, BuildRF3NoRodPondMessage); // step 55c
     // Step 12b: one general hook for the catch texts and the pond's weigh-in texts.
-    COND_HOOK(OnOpenText, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 0), BuildRF3SizeMessages);
+    COND_HOOK(OnOpenText, CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Enabled"), 1), BuildRF3SizeMessages);
 }
 
 static RegisterShipInitFunc initRF3Messages(RegisterRF3Messages, { CVAR_ENHANCEMENT("ReelFishing3.Enabled"), "IS_RANDO" });

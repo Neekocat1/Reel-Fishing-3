@@ -23,6 +23,7 @@
 #include "RF3SizeMap.h" // step 23d: kSpeciesHylianLoach
 #include "RF3TackleAssets.h"
 #include "RF3FishTable.h" // step 43a: size classes
+#include "RF3DevTools.h"
 
 extern "C" {
 #include "z64.h"
@@ -210,7 +211,7 @@ void Log(const char* what, int32_t kind, int32_t index, const char* why) {
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_records.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));

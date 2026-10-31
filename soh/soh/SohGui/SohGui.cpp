@@ -37,6 +37,7 @@
 #include "soh/Enhancements/ReelFishing/RF3TensionGauge.h"
 #include "soh/Enhancements/ReelFishing/RF3RegionWindow.h"
 #include "soh/Enhancements/ReelFishing/RF3ExtractWindow.h" // step 76b
+#include "soh/Enhancements/ReelFishing/RF3DevTools.h"      // step 78a
 #include "soh/Enhancements/debugger/valueViewer.h"
 #include "soh/Enhancements/gameplaystatswindow.h"
 #include "soh/Enhancements/randomizer/randomizer_check_tracker.h"
@@ -201,14 +202,18 @@ void SetupGuiElements() {
     mStatsWindow = std::make_shared<SohStatsWindow>(CVAR_WINDOW("SohStats"), "Stats##Soh", ImVec2(400, 100));
     gui->AddGuiWindow(mStatsWindow);
 
+#if RF3_DEV_TOOLS // step 78a: Debug builds only
     mRF3DebugWindow = std::make_shared<RF3DebugWindow>(CVAR_WINDOW("ReelFishing3Debug"), "Reel Fishing III Debug",
                                                        ImVec2(460, 360));
     gui->AddGuiWindow(mRF3DebugWindow);
+#endif
     mRF3TensionGauge = std::make_shared<RF3TensionGauge>(CVAR_WINDOW("ReelFishing3Gauge"), "Reel Fishing III Gauge");
     gui->AddGuiWindow(mRF3TensionGauge);
+#if RF3_DEV_TOOLS
     mRF3RegionWindow = std::make_shared<RF3RegionWindow>(CVAR_WINDOW("ReelFishing3Regions"),
                                                          "Reel Fishing III Fish Regions", ImVec2(560, 520));
     gui->AddGuiWindow(mRF3RegionWindow);
+#endif
     mRF3ExtractWindow = std::make_shared<RF3ExtractWindow>(CVAR_WINDOW("ReelFishing3DiscSetup"),
                                                            "Reel Fishing III Disc Setup", ImVec2(520, 380));
     gui->AddGuiWindow(mRF3ExtractWindow);

@@ -34,6 +34,7 @@
 #include "RF3Regions.h"
 #include "RF3Sim.h" // step 43b: the lure conditions
 #include "RF3TackleAssets.h"
+#include "RF3DevTools.h"
 
 namespace {
 
@@ -592,7 +593,7 @@ void LogTables() {
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_rando.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_rando.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
@@ -712,7 +713,7 @@ void RF3Rando_ApplyItemNames() {
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_rando.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_rando.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));

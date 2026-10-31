@@ -27,6 +27,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "RF3Bridge.h"
 #include "RF3Sim.h" // step 43b: which lures have a condition
+#include "RF3DevTools.h"
 
 extern "C" {
 #include "z64.h"
@@ -133,7 +134,7 @@ void LogTrackerArea() {
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_rando.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_rando.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
@@ -177,9 +178,9 @@ bool RF3Rando_CheckIncludedBySeed(RandomizerCheck rc) {
 }
 
 bool RF3Rando_CheckIncludedByCVars(RandomizerCheck rc) {
-    return RF3Rando_CheckIncluded(rc, CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3TackleShuffle"), 0) != 0,
+    return RF3Rando_CheckIncluded(rc, CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3TackleShuffle"), 1) != 0,
                                   CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3CatchChecks"), 20),
-                                  CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3CheckMode"), 0) == 1);
+                                  CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3CheckMode"), 1) == 1);
 }
 
 // RF3Rando_AddRegionLocations: RF3RandoLogic.cpp (step 24c).

@@ -16,6 +16,7 @@
 #include "RF3Bridge.h"
 #include "RF3RandoChecks.h" // step 55a: RF3Rando_Active
 #include "RF3SizeMap.h"
+#include "RF3DevTools.h"
 
 namespace {
 
@@ -78,7 +79,7 @@ void LogIdentity(const char* what, const FishIdentity& id, float ootLength) {
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_records.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
@@ -253,7 +254,7 @@ extern "C" int32_t RF3Rod_IsOwned(void) {
         std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
-        std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+        std::ofstream out = RF3OpenLog(dir + "/rf3_records.txt"); // step 78b: nothing while the logs are off
         char stamp[32];
         std::time_t now = std::time(nullptr);
         std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
@@ -311,7 +312,7 @@ extern "C" int32_t RF3Records_SubmitCatch(int32_t record, int32_t species, float
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_records.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));

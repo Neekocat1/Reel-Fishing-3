@@ -11,6 +11,7 @@
 
 #include "RF3Sim.h"
 #include "RF3TackleAssets.h"
+#include "RF3DevTools.h"
 
 // Step 20a-5: the lure's depth below the surface (rf3::LureSim, RF3-MECHANICS 3.2) for z_fishing.c.
 // Step 20b-5: bait rigs too (rf3::BaitSim, RF3-MECHANICS 2.9). See docs/DESIGN.md "20a-5 refined plan" and
@@ -34,7 +35,7 @@ void LogLine(const char* line) {
     std::string dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/rf3_records.txt", std::ios::app);
+    std::ofstream out = RF3OpenLog(dir + "/rf3_records.txt"); // step 78b: nothing while the logs are off
     char stamp[32];
     std::time_t now = std::time(nullptr);
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));

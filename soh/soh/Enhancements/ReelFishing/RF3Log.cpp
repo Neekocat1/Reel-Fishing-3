@@ -4,12 +4,15 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <ship/Context.h>
 
+#include "soh/ShipInit.hpp"
 #include "soh/cvar_prefixes.h"
 #include "RF3Bridge.h"
+#include "RF3DevTools.h"
 
 // One CSV file per logging session. A session starts on the first frame logged
 // after the "Log Fishing Data (CSV)" option is switched on, and ends when it is
@@ -61,7 +64,8 @@ static bool OpenLog() {
 }
 
 extern "C" int RF3Log_IsEnabled(void) {
-    bool enabled = CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Log"), 0) != 0;
+    // Step 78a: the CSV log is a developer tool; a Release build never writes it.
+    bool enabled = RF3_DEV_TOOLS && (CVarGetInteger(CVAR_ENHANCEMENT("ReelFishing3.Log"), 0) != 0);
     if (!enabled) {
         CloseLog();
     }
@@ -125,3 +129,48 @@ extern "C" void RF3Log_OwnerFrame(const RF3OwnerFrame* f) {
         sRowsSinceFlush = 0;
     }
 }
+
+// Step 78b (docs/DESIGN.md "Step 78 design"): the switch for the mod's text logs, and their size limit.
+bool RF3LogsOn() {
+    return CVarGetInteger(CVAR_RF3_WRITE_LOGS, RF3_DEV_TOOLS) != 0;
+}
+
+std::ofstream RF3OpenLog(const std::string& path) {
+    if (!RF3LogsOn()) {
+        return std::ofstream();
+    }
+    return std::ofstream(path, std::ios::app);
+}
+
+// At startup, a log over 5 MB moves to <name>.old.txt (replacing the older one), so each stays under about 10 MB.
+static void TrimLogs() {
+    static bool sDone = false;
+    if (sDone) {
+        return;
+    }
+    sDone = true;
+    const std::uintmax_t kMaxBytes = 5u * 1024u * 1024u;
+    std::error_code ec;
+    std::filesystem::path dir = Ship::Context::GetPathRelativeToAppDirectory("logs");
+    std::filesystem::directory_iterator it(dir, ec);
+    if (ec) {
+        return;
+    }
+    std::vector<std::filesystem::path> big;
+    for (const std::filesystem::directory_entry& e : it) {
+        const std::string name = e.path().filename().string();
+        const bool ours = (name.rfind("rf3_", 0) == 0) && (e.path().extension() == ".txt") &&
+                          (name.find(".old.txt") == std::string::npos);
+        if (ours && e.is_regular_file(ec) && (e.file_size(ec) > kMaxBytes)) {
+            big.push_back(e.path());
+        }
+    }
+    for (const std::filesystem::path& p : big) {
+        std::filesystem::path old = p;
+        old.replace_extension(".old.txt");
+        std::filesystem::remove(old, ec);
+        std::filesystem::rename(p, old, ec);
+    }
+}
+
+static RegisterShipInitFunc initRF3TrimLogs(TrimLogs);

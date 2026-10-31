@@ -1104,11 +1104,13 @@ void Settings::CreateOptions() {
     OPT_U8(RSK_FISHSANITY_POND_COUNT, {NumOpts(0,17,1)}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("FishsanityPondCount"), WIDGET_CVAR_SLIDER_INT, 0, true, nullptr, IMFLAG_NONE);
     OPT_BOOL(RSK_FISHSANITY_AGE_SPLIT, CVAR_RANDOMIZER_SETTING("FishsanityAgeSplit"));
     // Reel Fishing III mod (step 24b): RF3 tackle checks (RF3RandoChecks.cpp).
-    OPT_BOOL(RSK_RF3_TACKLE_SHUFFLE, CVAR_RANDOMIZER_SETTING("RF3TackleShuffle"));
+    // Step 78c (user): on by default.
+    OPT_BOOL(RSK_RF3_TACKLE_SHUFFLE, CVAR_RANDOMIZER_SETTING("RF3TackleShuffle"), IMFLAG_SEPARATOR_BOTTOM,
+             WIDGET_CVAR_CHECKBOX, true);
     OPT_CALLBACK(RSK_RF3_TACKLE_SHUFFLE, {
         // Step 52 (user, 2026-10-17): RF3's own rods and pond shop take over the pole, so SoH's pole shuffle is off
         // (and greyed out) while RF3 tackle is shuffled. Its hint goes with it.
-        if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3TackleShuffle"), RO_GENERIC_OFF)) {
+        if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3TackleShuffle"), RO_GENERIC_ON)) {
             CVarSetInteger(CVAR_RANDOMIZER_SETTING("ShuffleFishingPole"), RO_GENERIC_OFF);
             mOptions[RSK_SHUFFLE_FISHING_POLE].Disable("Disabled because Shuffle RF3 Tackle is on.");
             mOptions[RSK_FISHING_POLE_HINT].Disable("This option is disabled since the fishing pole is not shuffled.");
@@ -1118,10 +1120,10 @@ void Settings::CreateOptions() {
     });
     OPT_U8(RSK_RF3_CATCH_CHECKS, {NumOpts(0,147,1)}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("RF3CatchChecks"), WIDGET_CVAR_SLIDER_INT, 20, false, nullptr, IMFLAG_NONE);
     // Reel Fishing III mod (step 43b): which RF3 checks: catch #1..#N (simple) or one per lure condition (advanced).
-    OPT_U8(RSK_RF3_CHECK_MODE, {"Simple", "Advanced"}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("RF3CheckMode"), WIDGET_CVAR_COMBOBOX, 0);
+    OPT_U8(RSK_RF3_CHECK_MODE, {"Simple", "Advanced"}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("RF3CheckMode"), WIDGET_CVAR_COMBOBOX, 1); // step 78c: Advanced by default
     OPT_CALLBACK(RSK_RF3_CHECK_MODE, {
         // Step 44c (user): "RF3 Catch Checks" is only used, and only shown, in the simple mode.
-        if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3CheckMode"), 0) == 0) {
+        if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("RF3CheckMode"), 1) == 0) {
             mOptions[RSK_RF3_CATCH_CHECKS].Unhide();
         } else {
             mOptions[RSK_RF3_CATCH_CHECKS].Hide();

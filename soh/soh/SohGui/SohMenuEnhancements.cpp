@@ -14,6 +14,7 @@
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <soh/ResourceManagerHelpers.h>
 #include "soh/ShipInit.hpp"
+#include "soh/Enhancements/ReelFishing/RF3DevTools.h" // step 78a
 
 extern "C" {
 #include "functions.h"
@@ -1812,7 +1813,7 @@ void SohMenu::AddMenuEnhancements() {
                                            "fixing a vanilla bug. Always enabled in randomizer."));
     AddWidget(path, "Reel Fishing III Mechanics", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("ReelFishing3.Enabled"))
-        .Options(CheckboxOptions().Tooltip(
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip( // step 78c: on by default
             "Replace the Fishing Pond mechanics with Reel Fishing III's.\n\n"
             "Work in progress: the cast, the approach, the hook set and the fight use Reel Fishing III's rules.\n"
             "Cast: hold B through the swing for a full cast; let go early for a shorter one.\n"
@@ -1827,17 +1828,26 @@ void SohMenu::AddMenuEnhancements() {
         .Options(CheckboxOptions().Tooltip(
             "Show an on-screen line tension gauge during a Reel Fishing III fight. Reel Fishing III itself has no "
             "gauge; without it, tension shows through the rod bend, rumble and the reel's warning sound."));
+#if RF3_DEV_TOOLS // step 78a: Debug builds only
     AddWidget(path, "Reel Fishing III Debug Window", WIDGET_WINDOW_BUTTON)
         .CVar(CVAR_WINDOW("ReelFishing3Debug"))
         .WindowName("Reel Fishing III Debug")
         .Options(WindowButtonOptions().Tooltip(
             "Live view of the Reel Fishing III fight: state, tension, hook, stamina, distance and inputs."));
+#endif
     AddWidget(path, "Reel Fishing III Disc Setup", WIDGET_WINDOW_BUTTON)
         .CVar(CVAR_WINDOW("ReelFishing3DiscSetup"))
         .WindowName("Reel Fishing III Disc Setup")
         .Options(WindowButtonOptions().Tooltip(
             "Builds the mod's Reel Fishing III files from your own copy of the game (a .bin or .iso image of "
             "Reel Fishing III, USA)."));
+    AddWidget(path, "Write Reel Fishing III logs (for bug reports)", WIDGET_CVAR_CHECKBOX) // step 78b
+        .CVar(CVAR_RF3_WRITE_LOGS)
+        .Options(CheckboxOptions().DefaultValue(RF3_DEV_TOOLS != 0).Tooltip(
+            "Write what the Reel Fishing III mod does (fights, catches, tackle, models, fish regions) to "
+            "logs/rf3_*.txt next to the game. Send these files with a bug report. Big logs are moved to "
+            "rf3_*.old.txt at startup."));
+#if RF3_DEV_TOOLS
     AddWidget(path, "Reel Fishing III Fish Regions", WIDGET_WINDOW_BUTTON)
         .CVar(CVAR_WINDOW("ReelFishing3Regions"))
         .WindowName("Reel Fishing III Fish Regions")
@@ -1848,6 +1858,7 @@ void SohMenu::AddMenuEnhancements() {
         .CVar(CVAR_ENHANCEMENT("ReelFishing3.Log"))
         .Options(CheckboxOptions().Tooltip("Write the Fishing Pond state to logs/rf3_fishing_<date>.csv next to "
                                            "the game, one row per frame while the line is out."));
+#endif
 
     AddWidget(path, "Multiple Prizes", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Dampe's Race", WIDGET_CVAR_CHECKBOX)
